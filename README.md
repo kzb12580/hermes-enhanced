@@ -1,4 +1,4 @@
-# Hermes 2.0 — Claude Code 架构精华移植到 Hermes Agent
+# Hermes 增强版 — Claude Code 架构精华移植到 Hermes Agent
 
 > 基于 Claude Code 源码分析，将核心架构能力移植到 Hermes Agent 的 Python 生态
 
@@ -16,7 +16,7 @@
 ## 📁 仓库结构
 
 ```
-claude-code-study/
+hermes-enhanced/
 ├── analysis/                    # Claude Code 深度架构分析
 │   ├── 01-agent-loop.md        # Agent 循环核心架构
 │   ├── 02-tools-system.md      # 工具系统设计
@@ -25,7 +25,7 @@ claude-code-study/
 ├── source-study/                # 源码研究版
 ├── iteration/                   # 迭代实现
 │   ├── upgrade-plan.md          # 升级方案
-│   └── hermes_upgrades/         # ← Hermes 2.0 核心代码
+│   └── hermes_upgrades/         # ← Hermes 增强版 核心代码
 │       ├── hermes2_adapter.py   # 主引擎 (Hermes2Engine)
 │       ├── integration.py       # 集成桥接模块
 │       ├── tool_orchestrator.py # 8路并发工具编排
@@ -57,8 +57,8 @@ claude-code-study/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/kzb12580/claude-code-study.git
-cd claude-code-study
+git clone https://github.com/kzb12580/hermes-enhanced.git
+cd hermes-enhanced
 
 # 2. 复制 hermes2 模块到 Hermes Agent
 cp -r iteration/hermes_upgrades /usr/local/lib/hermes-agent/agent/hermes2/
@@ -94,7 +94,7 @@ print(json.dumps(get_stats(), indent=2, ensure_ascii=False))
 
 ## ⚙️ 模型配置
 
-Hermes 2.0 对模型无特殊要求，但推荐使用付费模型以获得最佳效果。
+Hermes 增强版 对模型无特殊要求，但推荐使用付费模型以获得最佳效果。
 
 ### 推荐配置：DeepSeek V4 Flash（付费）
 
@@ -128,7 +128,7 @@ model:
 
 ## 🔌 集成架构
 
-Hermes 2.0 通过 4 个微创注入点集成到 `run_agent.py`（16000 行）：
+Hermes 增强版 通过 4 个微创注入点集成到 `run_agent.py`（16000 行）：
 
 ```
 注入点 1: AIAgent.__init__ (line ~2500)
@@ -165,7 +165,7 @@ Hermes 2.0 通过 4 个微创注入点集成到 `run_agent.py`（16000 行）：
 
 ## 🔍 与 Claude Code 对比
 
-| 维度 | Claude Code | Hermes 2.0 |
+| 维度 | Claude Code | Hermes 增强版 |
 |------|------------|------------|
 | 语言 | TypeScript | Python |
 | Agent循环 | AsyncGenerator流水线 | 同步+异步混合 |
