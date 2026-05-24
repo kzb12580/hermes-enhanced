@@ -1,8 +1,8 @@
 """
 Tests for the MCP Transport Enhancement module.
 
-Uses pytest with pytest-asyncio for async tests. Network-dependent transports
-are tested via mock/fake HTTP clients.
+Uses pytest with asyncio.run() for async tests (no pytest-asyncio dependency).
+Network-dependent transports are tested via mock/fake HTTP clients.
 """
 
 from __future__ import annotations
@@ -227,58 +227,67 @@ class TestCreateTransport:
 
 
 class TestHttpTransport:
-    @pytest.mark.asyncio
-    async def test_connect_and_list_tools(
+    def test_connect_and_list_tools(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        transport = HttpTransport(http_config, http_client=fake_client)
-        assert not transport.is_connected
+        async def _inner():
+            transport = HttpTransport(http_config, http_client=fake_client)
+            assert not transport.is_connected
 
-        await transport.connect()
-        assert transport.is_connected
-        assert transport._session_id == "sess-123"
-
-        tools = await transport.list_tools()
-        assert len(tools) == 2
-        assert tools[0].name == "echo"
-        assert tools[0].server_name == "test-http"
-        assert tools[1].name == "add"
-
-    @pytest.mark.asyncio
-    async def test_call_tool(
-        self, http_config: McpServerConfig, fake_client: FakeHttpClient,
-    ) -> None:
-        transport = HttpTransport(http_config, http_client=fake_client)
-        await transport.connect()
-        result = await transport.call_tool("echo", {"text": "hello"})
-        assert result == {"content": [{"type": "text", "text": "ok"}]}
-
-    @pytest.mark.asyncio
-    async def test_disconnect(
-        self, http_config: McpServerConfig, fake_client: FakeHttpClient,
-    ) -> None:
-        transport = HttpTransport(http_config, http_client=fake_client)
-        await transport.connect()
-        await transport.disconnect()
-        assert not transport.is_connected
-        assert transport._session_id is None
-
-    @pytest.mark.asyncio
-    async def test_connect_without_client(self, http_config: McpServerConfig) -> None:
-        transport = HttpTransport(http_config)
-        with pytest.raises(ConnectionError, match="No HTTP client"):
             await transport.connect()
+            assert transport.is_connected
+            assert transport._session_id == "sess-123"
 
-    @pytest.mark.asyncio
-    async def test_post_sends_correct_url(
+            tools = await transport.list_tools()
+            assert len(tools) == 2
+            assert tools[0].name == "echo"
+            assert tools[0].server_name == "test-http"
+            assert tools[1].name == "add"
+
+        asyncio.run(_inner())
+
+    def test_call_tool(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        transport = HttpTransport(http_config, http_client=fake_client)
-        await transport.connect()
-        assert any("/mcp" in url for url, _ in fake_client.posts)
+        async def _inner():
+            transport = HttpTransport(http_config, http_client=fake_client)
+            await transport.connect()
+            result = await transport.call_tool("echo", {"text": "hello"})
+            assert result == {"content": [{"type": "text", "text": "ok"}]}
 
-    @pytest.mark.asyncio
-    async def test_base_url_trailing_slash(
+        asyncio.run(_inner())
+
+    def test_disconnect(
+        self, http_config: McpServerConfig, fake_client: FakeHttpClient,
+    ) -> None:
+        async def _inner():
+            transport = HttpTransport(http_config, http_client=fake_client)
+            await transport.connect()
+            await transport.disconnect()
+            assert not transport.is_connected
+            assert transport._session_id is None
+
+        asyncio.run(_inner())
+
+    def test_connect_without_client(self, http_config: McpServerConfig) -> None:
+        async def _inner():
+            transport = HttpTransport(http_config)
+            with pytest.raises(ConnectionError, match="No HTTP client"):
+                await transport.connect()
+
+        asyncio.run(_inner())
+
+    def test_post_sends_correct_url(
+        self, http_config: McpServerConfig, fake_client: FakeHttpClient,
+    ) -> None:
+        async def _inner():
+            transport = HttpTransport(http_config, http_client=fake_client)
+            await transport.connect()
+            assert any("/mcp" in url for url, _ in fake_client.posts)
+
+        asyncio.run(_inner())
+
+    def test_base_url_trailing_slash(
         self, fake_client: FakeHttpClient,
     ) -> None:
         cfg = McpServerConfig(
@@ -299,89 +308,106 @@ class TestMcpManager:
         status = manager.get_server_status()
         assert status == {"test-stdio": "disconnected", "test-http": "disconnected"}
 
-    @pytest.mark.asyncio
-    async def test_connect_all_http(
+    def test_connect_all_http(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        results = await manager.connect_all()
-        assert results == {"test-http": True}
-        assert manager.get_server_status() == {"test-http": "connected"}
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            results = await manager.connect_all()
+            assert results == {"test-http": True}
+            assert manager.get_server_status() == {"test-http": "connected"}
 
-    @pytest.mark.asyncio
-    async def test_connect_all_skips_disabled(
+        asyncio.run(_inner())
+
+    def test_connect_all_skips_disabled(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        disabled = McpServerConfig(
-            name="off", transport=TransportType.HTTP, url="http://x", enabled=False,
-        )
-        manager = McpManager([http_config, disabled], http_client=fake_client)
-        results = await manager.connect_all()
-        assert results == {"test-http": True, "off": False}
-        status = manager.get_server_status()
-        assert status["off"] == "disabled"
+        async def _inner():
+            disabled = McpServerConfig(
+                name="off", transport=TransportType.HTTP, url="http://x", enabled=False,
+            )
+            manager = McpManager([http_config, disabled], http_client=fake_client)
+            results = await manager.connect_all()
+            assert results == {"test-http": True, "off": False}
+            status = manager.get_server_status()
+            assert status["off"] == "disabled"
 
-    @pytest.mark.asyncio
-    async def test_call_tool(
+        asyncio.run(_inner())
+
+    def test_call_tool(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        await manager.connect_all()
-        result = await manager.call_tool("test-http", "echo", {"text": "hi"})
-        assert result == {"content": [{"type": "text", "text": "ok"}]}
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            await manager.connect_all()
+            result = await manager.call_tool("test-http", "echo", {"text": "hi"})
+            assert result == {"content": [{"type": "text", "text": "ok"}]}
 
-    @pytest.mark.asyncio
-    async def test_call_tool_unknown_server(
+        asyncio.run(_inner())
+
+    def test_call_tool_unknown_server(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        await manager.connect_all()
-        with pytest.raises(KeyError, match="not connected"):
-            await manager.call_tool("nonexistent", "echo", {})
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            await manager.connect_all()
+            with pytest.raises(KeyError, match="not connected"):
+                await manager.call_tool("nonexistent", "echo", {})
 
-    @pytest.mark.asyncio
-    async def test_get_all_tools(
+        asyncio.run(_inner())
+
+    def test_get_all_tools(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        await manager.connect_all()
-        tools = manager.get_all_tools()
-        assert len(tools) == 2
-        assert all(isinstance(t, McpToolSchema) for t in tools)
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            await manager.connect_all()
+            tools = manager.get_all_tools()
+            assert len(tools) == 2
+            assert all(isinstance(t, McpToolSchema) for t in tools)
 
-    @pytest.mark.asyncio
-    async def test_disconnect_all(
+        asyncio.run(_inner())
+
+    def test_disconnect_all(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        await manager.connect_all()
-        await manager.disconnect_all()
-        assert manager.get_server_status() == {"test-http": "disconnected"}
-        assert manager.get_all_tools() == []
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            await manager.connect_all()
+            await manager.disconnect_all()
+            assert manager.get_server_status() == {"test-http": "disconnected"}
+            assert manager.get_all_tools() == []
 
-    @pytest.mark.asyncio
-    async def test_connect_failure(
+        asyncio.run(_inner())
+
+    def test_connect_failure(
         self, fake_client: FakeHttpClient,
     ) -> None:
         """Server that fails during connect should report False."""
-        cfg = McpServerConfig(name="bad", transport=TransportType.HTTP, url="http://fail")
 
-        class FailClient(FakeHttpClient):
-            async def post(self, url: str, json: dict = None) -> dict:
-                raise ConnectionError("refused")
+        async def _inner():
+            cfg = McpServerConfig(name="bad", transport=TransportType.HTTP, url="http://fail")
 
-        manager = McpManager([cfg], http_client=FailClient())
-        results = await manager.connect_all()
-        assert results == {"bad": False}
+            class FailClient(FakeHttpClient):
+                async def post(self, url: str, json: dict = None) -> dict:
+                    raise ConnectionError("refused")
 
-    @pytest.mark.asyncio
-    async def test_get_transport(
+            manager = McpManager([cfg], http_client=FailClient())
+            results = await manager.connect_all()
+            assert results == {"bad": False}
+
+        asyncio.run(_inner())
+
+    def test_get_transport(
         self, http_config: McpServerConfig, fake_client: FakeHttpClient,
     ) -> None:
-        manager = McpManager([http_config], http_client=fake_client)
-        assert manager.get_transport("test-http") is None
-        await manager.connect_all()
-        assert manager.get_transport("test-http") is not None
+        async def _inner():
+            manager = McpManager([http_config], http_client=fake_client)
+            assert manager.get_transport("test-http") is None
+            await manager.connect_all()
+            assert manager.get_transport("test-http") is not None
+
+        asyncio.run(_inner())
 
 
 # ====================================================================
