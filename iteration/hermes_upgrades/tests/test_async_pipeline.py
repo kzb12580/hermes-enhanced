@@ -4,6 +4,8 @@ import asyncio
 import sys
 import os
 
+import pytest
+
 # Ensure the package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -282,11 +284,8 @@ def test_context_window_auto_compact_custom_compressor():
 # ── BackPressureController ───────────────────────────────────────────────
 
 def test_backpressure_init_validation():
-    try:
+    with pytest.raises(ValueError):
         BackPressureController(high_water=0.3, low_water=0.7)
-        assert False, "Should have raised"
-    except ValueError:
-        pass
 
 
 def test_backpressure_pause_resume():

@@ -17,12 +17,16 @@ Modules integrated:
 from __future__ import annotations
 
 import asyncio
+import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+_log = logging.getLogger(__name__)
+
 from .tool_orchestrator import ToolCall, ToolOrchestrator
 from .tool_result_manager import ProcessedResult, ToolResultManager
-from .permission_pipeline import PermissionPipeline, PermissionRule
+from .permission_pipeline import PermissionLevel, PermissionPipeline, PermissionRule
 from .context_compressor_v2 import ContextCompressorV2
 from .memory_system import MemoryEntry, MemoryExtractor, MemoryInjector, MemoryStore
 from .post_turn_hooks import (
@@ -34,8 +38,26 @@ from .post_turn_hooks import (
     PromptSuggestionHook,
     ContextHealthHook,
 )
-from .auto_dream import AutoDreamer, DreamReport, SessionSummary
+from .auto_dream import AutoDreamer, DreamReport, DreamTrigger, SessionSummary
 from .coordinator import Coordinator
+from .memory_system import MemoryType
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _coerce_non_dict_items(items: list) -> tuple[list[dict], list[int]]:
+    """Separate dict items from non-dict, returning (dicts, bad_indices)."""
+    dicts = []
+    bad = []
+    for i, item in enumerate(items):
+        if isinstance(item, dict):
+            dicts.append(item)
+        else:
+            bad.append(i)
+    return dicts, bad
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +78,7 @@ class Hermes2Config:
     auto_dream_threshold: int = 5
     enable_hooks: bool = True
     enable_auto_dream: bool = True
+    on_permission_prompt: Optional[Callable[[str, dict[str, Any], str], bool]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +88,17 @@ class Hermes2Config:
 
 class Hermes2Engine:
     """Central engine that processes tool calls and manages turn lifecycle.
+
+    Quick start::
+
+        engine = Hermes2Engine()
+        results = engine.process_tool_calls(
+            [{"name": "read_file", "args": {"path": "/etc/hostname"}}],
+            executor_fn=lambda tc: open(tc.args["path"]).read(),
+        )
+
+    To allow write operations, set ``on_permission_prompt`` in config or
+    call :meth:`allow_tool` to auto-approve specific tools.
 
     Parameters
     ----------
@@ -101,9 +135,6 @@ class Hermes2Engine:
                 model_token_limit=self.config.max_context_tokens,
             ))
 
-        # Auto-dreamer
-        from .auto_dream import DreamTrigger
-
         self.auto_dreamer = AutoDreamer(
             memory_store=self.memory,
             trigger=DreamTrigger(
@@ -132,24 +163,67 @@ class Hermes2Engine:
 
         Returns
         -------
-        dict mapping tool id → processed result dict.
+        dict with keys:
+          - ``processed``: mapping of tool id → processed result dict.
+          - ``denied``: list of dicts with ``name`` and ``reason`` for denied tools.
+          - ``needs_prompt``: list of dicts for tools needing confirmation.
+          - ``warnings``: list of warning strings.
         """
-        if not tool_calls:
-            return {}
+        result: dict[str, Any] = {
+            "processed": {},
+            "denied": [],
+            "needs_prompt": [],
+            "warnings": [],
+        }
 
-        # 1. Permission check → filter denied
+        if not tool_calls:
+            return result
+
+        # 0. Filter non-dict items with warning
+        dicts, bad_indices = _coerce_non_dict_items(tool_calls)
+        if bad_indices:
+            msg = f"Non-dict tool_calls at indices {bad_indices} — skipped"
+            _log.warning(msg)
+            result["warnings"].append(msg)
+
+        if not dicts:
+            return result
+
+        # 1. Permission check → filter denied, handle PROMPT
         allowed_calls: list[dict] = []
-        for tc in tool_calls:
-            if not isinstance(tc, dict):
-                continue
+        for tc in dicts:
             name = tc.get("name", "")
             args = tc.get("args", {})
             decision = self.permissions.check(name, args)
             if decision.allowed:
                 allowed_calls.append(tc)
+            elif decision.needs_prompt:
+                # Check if caller provided a confirmation callback
+                if self.config.on_permission_prompt:
+                    try:
+                        approved = self.config.on_permission_prompt(
+                            name, args, decision.reason
+                        )
+                    except Exception as exc:
+                        _log.warning("Permission callback error for %s: %s", name, exc)
+                        approved = False
+                    if approved:
+                        allowed_calls.append(tc)
+                    else:
+                        result["needs_prompt"].append({
+                            "name": name, "reason": decision.reason
+                        })
+                else:
+                    result["needs_prompt"].append({
+                        "name": name, "reason": decision.reason
+                    })
+            else:
+                result["denied"].append({
+                    "name": name, "reason": decision.reason
+                })
 
         if not allowed_calls:
-            return {}
+            return result
 
         # 2. Convert to ToolCall objects
         call_objects = [
@@ -164,13 +238,12 @@ class Hermes2Engine:
         batch_results = self.orchestrator.execute(batches, executor_fn)
 
         # 5. Process each result through result manager
-        processed: dict[str, Any] = {}
         for tool_call in call_objects:
             br = batch_results.get(tool_call.id)
             if br is None:
                 continue
             if br.error:
-                processed[tool_call.id] = {
+                result["processed"][tool_call.id] = {
                     "error": br.error,
                     "tool_name": tool_call.name,
                 }
@@ -179,14 +252,14 @@ class Hermes2Engine:
                     tool_name=tool_call.name,
                     content=str(br.result),
                 )
-                processed[tool_call.id] = {
+                result["processed"][tool_call.id] = {
                     "content": pr.content,
                     "was_truncated": pr.was_truncated,
                     "was_deduped": pr.was_deduped,
                     "token_count": pr.token_count,
                 }
 
-        return processed
+        return result
 
     def process_turn(
         self,
@@ -299,6 +372,56 @@ class Hermes2Engine:
             },
         }
 
+    # ── Convenience methods ──────────────────────────────────────────────
+
+    @property
+    def pressure(self) -> float:
+        """Current context-window pressure as a float in [0.0, 1.0]."""
+        return self.compressor.monitor.current
+
+    def allow_tool(self, tool_name: str) -> None:
+        """Auto-approve a tool by adding an AUTO permission rule.
+
+        This inserts the rule at position 0 so it's checked first.
+        Useful for allowing write operations without a prompt callback::
+
+            engine.allow_tool("write_file")
+            engine.allow_tool("terminal")
+        """
+        self.permissions.add_rule(
+            PermissionRule(tool_name, PermissionLevel.AUTO, f"Auto-approved: {tool_name}"),
+            index=0,
+        )
+
+    def add_memory(
+        self,
+        content: str,
+        type: str = "memory",
+        tags: Optional[list[str]] = None,
+    ) -> str:
+        """Add a memory entry. Returns the entry ID.
+
+        Parameters
+        ----------
+        content : str
+            The memory content.
+        type : str
+            One of "user", "memory", "procedural", "episodic".
+        tags : list[str] | None
+            Optional tags for search boosting.
+        """
+        entry = MemoryEntry(
+            type=MemoryType(type),
+            content=content,
+            tags=tags or [],
+            source="api",
+        )
+        return self.memory.add(entry)
+
+    def search_memories(self, query: str, limit: int = 10) -> list[MemoryEntry]:
+        """Search memories by query string."""
+        return self.memory.search(query, limit=limit)
+
     # ── Internal helpers ─────────────────────────────────────────────────
 
     def _run_hooks_sync(self, ctx: HookContext) -> list[dict]:
@@ -334,8 +457,6 @@ class Hermes2Engine:
         for hr in hooks_results:
             if hr.get("hook_name") == "memory_extraction" and hr.get("success"):
                 for item in hr.get("data", {}).get("entries", []):
-                    from .memory_system import MemoryType
-
                     try:
                         mtype = MemoryType(item.get("type", "memory"))
                     except ValueError:
@@ -361,10 +482,17 @@ class Hermes2Engine:
 def from_config(config_dict: dict[str, Any]) -> Hermes2Engine:
     """Construct a :class:`Hermes2Engine` from a plain dict.
 
-    Unknown keys are silently ignored so that config files can carry extra
-    metadata without breaking deserialization.
+    Unknown keys trigger a warning (via :mod:`logging`) so that typos
+    in config files are not silently swallowed.
     """
     valid_keys = {f.name for f in Hermes2Config.__dataclass_fields__.values()}
+    unknown = set(config_dict.keys()) - valid_keys
+    if unknown:
+        _log.warning(
+            "from_config: ignoring unknown keys %s. Valid keys: %s",
+            sorted(unknown),
+            sorted(valid_keys),
+        )
     filtered = {k: v for k, v in config_dict.items() if k in valid_keys}
     config = Hermes2Config(**filtered)
     return Hermes2Engine(config)

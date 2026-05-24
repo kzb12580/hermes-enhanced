@@ -131,6 +131,13 @@ class TranscriptAnalyzer:
             content = msg.get("content", "")
             role = msg.get("role", "")
 
+            # Handle OpenAI-style multipart content (list of parts)
+            if isinstance(content, list):
+                content = " ".join(
+                    part.get("text", "") for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+
             if not content:
                 continue
 

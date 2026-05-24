@@ -882,7 +882,7 @@ class TestHermes2AdapterGaps:
         engine = Hermes2Engine()
         calls = [{"name": "read_file"}]
         result = engine.process_tool_calls(calls, lambda tc: "ok")
-        assert len(result) == 1
+        assert len(result["processed"]) == 1
 
     def test_context_messages_empty(self):
         engine = Hermes2Engine()

@@ -137,8 +137,8 @@ class TestProcessToolCalls:
 
         result = engine.process_tool_calls(calls, executor)
 
-        assert len(result) == 2
-        for tid, entry in result.items():
+        assert len(result["processed"]) == 2
+        for tid, entry in result["processed"].items():
             assert "content" in entry
             assert "token_count" in entry
 
@@ -172,12 +172,12 @@ class TestProcessToolCalls:
         calls = [{"name": "read_file", "args": {}}]
         executor = _make_executor()
         result = engine.process_tool_calls(calls, executor)
-        assert result == {}
+        assert result["processed"] == {}
 
     def test_empty_calls(self):
         engine = Hermes2Engine()
         result = engine.process_tool_calls([], _make_executor())
-        assert result == {}
+        assert result["processed"] == {}
 
     def test_reads_are_batched(self):
         """Read-only tools should be batched (parallel)."""
@@ -188,7 +188,7 @@ class TestProcessToolCalls:
         ]
         executor = _make_executor({"read_file": "content"})
         result = engine.process_tool_calls(calls, executor)
-        assert len(result) == 5
+        assert len(result["processed"]) == 5
 
     def test_writes_are_serialized(self):
         """Write tools produce individual batches."""
@@ -205,7 +205,7 @@ class TestProcessToolCalls:
         ]
         executor = _make_executor({"write_file": "written"})
         result = engine.process_tool_calls(calls, executor)
-        assert len(result) == 2
+        assert len(result["processed"]) == 2
 
     def test_error_handling(self):
         """Errors in executor_fn are captured, not raised."""
@@ -217,8 +217,8 @@ class TestProcessToolCalls:
         calls = [{"name": "read_file", "args": {"path": "/tmp/x.txt"}}]
         result = engine.process_tool_calls(calls, failing_executor)
 
-        assert len(result) == 1
-        entry = list(result.values())[0]
+        assert len(result["processed"]) == 1
+        entry = list(result["processed"].values())[0]
         assert "error" in entry
         assert "boom" in entry["error"]
 
@@ -520,8 +520,8 @@ class TestEdgeCases:
         executor = _make_executor({"read_file": "identical content"})
         result = engine.process_tool_calls(calls, executor)
 
-        assert len(result) == 2
-        entries = list(result.values())
+        assert len(result["processed"]) == 2
+        entries = list(result["processed"].values())
         # First should not be deduped, second should be
         assert entries[0]["was_deduped"] is False
         assert entries[1]["was_deduped"] is True

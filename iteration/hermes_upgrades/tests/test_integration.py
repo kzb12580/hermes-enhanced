@@ -601,17 +601,13 @@ class TestEdgeCases:
         assert len(result.hash) == 64
 
     def test_none_content_handled_gracefully(self):
-        """None content should not crash — converted or handled."""
+        """None content should not crash — converted to empty string."""
         rm = ToolResultManager()
-        # The process method expects a string; if None is passed,
-        # it should either handle it or we verify the expected behavior
-        try:
-            result = rm.process("read_file", None)
-            # If it doesn't crash, verify basics
-            assert result is not None
-        except (TypeError, AttributeError):
-            # Expected — None is not a valid string input
-            pass
+        result = rm.process("read_file", None)
+        # The implementation converts None → '' internally
+        assert result is not None
+        assert result.content == ""
+        assert result.token_count == 0
 
     def test_executor_returns_none_captured(self):
         """Executor returning None is stored as None in BatchResult."""
