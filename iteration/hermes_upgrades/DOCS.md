@@ -1,6 +1,6 @@
 # Hermes 2.0 开发文档
 
-> **版本:** v1.0 | **日期:** 2026-05-24 | **源码:** 4,953行 / 12模块 | **测试:** 717个全通过
+> **版本:** v2.0 | **日期:** 2026-05-25 | **源码:** 18 模块 / 零外部依赖 | **测试:** 934 单元 + 50 集成全通过
 
 ---
 
@@ -14,7 +14,7 @@
        ▼          ▼          ▼          ▼          ▼
   ┌─────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
   │ToolOrch.│ │ToolRes.│ │PermPipe│ │CtxComp.│ │Memory  │
-  │(分批执行)│ │(去重截断)│ │(权限检查)│ │(三级压缩)│ │(TF-IDF)│
+  │(8路并发) │ │(去重截断)│ │(权限检查)│ │(三级压缩)│ │(TF-IDF)│
   └─────────┘ └───┬────┘ └────────┘ └────────┘ └───┬────┘
               ┌───┴───┐                        ┌───┴────┐
               │Smart  │                        │Auto    │
@@ -35,53 +35,125 @@
 
 ---
 
-## 2. 快速开始
+## 2. 安装部署
 
-```python
-from hermes_upgrades.hermes2_adapter import Hermes2Engine, Hermes2Config
+### 2.1 环境要求
 
-# 创建引擎
-engine = Hermes2Engine()
+- Python 3.11+（推荐 3.14）
+- Hermes Agent 已安装
+- 无外部依赖（纯 stdlib）
 
-# 处理工具调用
-result = engine.process_tool_calls(
-    tool_calls=[
-        {"name": "read_file", "args": {"path": "/etc/hostname"}},
-        {"name": "search_files", "args": {"pattern": "*.py"}},
-    ],
-    executor_fn=lambda tc: run_tool(tc.name, tc.args),
-)
+### 2.2 安装步骤
 
-# 查看结果
-for tid, info in result["processed"].items():
-    print(f"{tid}: {info['token_count']} tokens, 截断={info['was_truncated']}")
+```bash
+# 克隆仓库
+git clone https://github.com/kzb12580/claude-code-study.git
+cd claude-code-study
+
+# 复制到 Hermes Agent 目录
+cp -r iteration/hermes_upgrades /usr/local/lib/hermes-agent/agent/hermes2/
+
+# 确保 __init__.py 存在
+touch /usr/local/lib/hermes-agent/agent/hermes2/__init__.py
+
+# 重启网关
+hermes gateway restart
 ```
 
-**启用写操作：**
+### 2.3 验证安装
 
-```python
-engine = Hermes2Engine()
-engine.allow_tool("write_file")     # 方式1: 直接允许
-engine.allow_tool("terminal")
+```bash
+python3 -c "
+import sys
+sys.path.insert(0, '/usr/local/lib/hermes-agent')
+from agent.hermes2.integration import get_engine, get_stats
+import json
 
-# 方式2: 确认回调
-config = Hermes2Config(on_permission_prompt=lambda name, args, reason: True)
-engine = Hermes2Engine(config)
+engine = get_engine()
+print('✅ Engine ready' if engine else '❌ Engine failed')
+
+stats = get_stats()
+print(f'Turn count: {stats.get(\"turn_count\", 0)}')
+print(f'Hooks: {len([h for h in stats.get(\"hooks\", []) if h.get(\"enabled\")])}')
+print(f'Memory entries: {stats.get(\"memory\", {}).get(\"total_entries\", 0)}')
+"
 ```
 
-**回合后处理：**
+### 2.4 模型配置
 
-```python
-turn = engine.process_turn(messages, tool_calls, tool_results)
-if turn["compression_applied"]:
-    messages = turn["compressed_messages"]
+在 `~/.hermes/config.yaml` 中配置模型：
+
+```yaml
+# DeepSeek V4 Flash（推荐，性价比高）
+model:
+  default: deepseek-v4-flash
+  provider: custom
+  base_url: https://api.deepseek.com
+  api_key: sk-your-api-key
+
+# 或通过 CLIProxyAPI 代理池
+model:
+  default: ds-flash
+  provider: custom
+  base_url: http://localhost:8317/v1
+  api-key: your-proxy-key
 ```
 
 ---
 
-## 3. 模块详解
+## 3. 集成指南
 
-### 3.1 tool_orchestrator.py — 工具编排器
+### 3.1 集成点说明
+
+Hermes 2.0 通过 `integration.py` 桥接模块注入 `run_agent.py`：
+
+| 注入点 | 位置 | 功能 |
+|--------|------|------|
+| 1. 初始化 | `AIAgent.__init__` | 创建 Hermes2Engine 单例 |
+| 2. 工具增强 | `_execute_tool_calls` | 智能编排：分批+去重+权限 |
+| 3. 后置钩子 | `_execute_tool_calls` 末尾 | Post-Turn Hooks 自动执行 |
+| 4. 记忆整合 | `run_conversation` 返回前 | AutoDream 后台检查 |
+
+### 3.2 集成代码示例
+
+```python
+# 在 AIAgent.__init__ 中
+from agent.hermes2.integration import get_engine
+self._hermes2_engine = get_engine()
+self._hermes2_enabled = self._hermes2_engine is not None
+
+# 在 _execute_tool_calls 中
+from agent.hermes2.integration import enhance_tool_execution
+if self._hermes2_enabled:
+    result = enhance_tool_execution(tool_calls, executor_fn)
+    # 使用 result["results"] 替代原始结果
+
+# 在回合结束后
+from agent.hermes2.integration import process_turn
+if self._hermes2_enabled:
+    turn = process_turn(messages, tool_calls, tool_results)
+    if turn["compression_applied"]:
+        messages = turn["compressed_messages"]
+
+# 在会话结束时
+from agent.hermes2.integration import check_and_dream
+check_and_dream()
+```
+
+### 3.3 回退方式
+
+在 `AIAgent.__init__` 中注释掉启用代码：
+
+```python
+# self._hermes2_enabled = True  # ← 注释这行
+self._hermes2_enabled = False    # ← 改为 False
+```
+
+---
+
+## 4. 模块详解
+
+### 4.1 tool_orchestrator.py — 工具编排器
 
 自动分类工具并发安全性，检测文件路径冲突，分批并行执行。
 
@@ -89,187 +161,125 @@ if turn["compression_applied"]:
 - `ToolConcurrencyClassifier` — 分为 READ_ONLY / WRITE_SERIAL / AMBIGUOUS
 - `FileConflictDetector` — 同路径工具强制串行
 
-```python
-orch = ToolOrchestrator(max_workers=8)
-batches = orch.partition(tool_calls)
-results = orch.execute(batches, executor_fn)
-```
+### 4.2 tool_result_manager.py — 工具结果管理器
 
-### 3.2 tool_result_manager.py — 工具结果管理器
-
-Token 估算（~4字符/token）、SHA-256 去重（LRU 1000）、智能截断（头30%+尾20%）、大结果磁盘持久化（原子写入）。
-
-```python
-mgr = ToolResultManager(max_tokens=80000, disk_dir="/tmp/hermes-results")
-processed = mgr.process(tool_name="read_file", content=raw_output)
-```
+Token 估算（~4字符/token）、SHA-256 去重（LRU 1000）、智能截断（头30%+尾20%）、大结果磁盘持久化。
 
 默认预算: read_file=15K, terminal=10K, search_files=8K, web_extract=12K tokens。
 
-### 3.3 context_compressor_v2.py — 上下文压缩器 V2
+### 4.3 context_compressor_v2.py — 上下文压缩器 V2
 
-三级压缩: **Microcompact**（裁剪旧工具结果，无LLM）→ **Reactive**（截断+合并，无LLM）→ **Full**（LLM摘要接口）。
+三级压缩:
+- **Microcompact** — 裁剪旧工具结果，无 LLM
+- **Reactive** — 截断+合并，无 LLM
+- **Full** — LLM 摘要接口
 
 配置: `aggressive`(阈值60%) / `balanced`(75%) / `gentle`(85%)
 
-```python
-comp = ContextCompressorV2(model_token_limit=200_000, profile="balanced")
-should, reason = comp.should_compress(messages)
-if should:
-    result = comp.compress(messages, level="auto")
-```
-
-### 3.4 memory_system.py — 记忆系统
+### 4.4 memory_system.py — 记忆系统
 
 TF-IDF 搜索 + 标签/时间/频率评分，规则提取，JSON 持久化。
 
 记忆类型: USER > PROCEDURAL > MEMORY > EPISODIC（按注入优先级）
 
-```python
-store = MemoryStore(storage_path="./memories.json", max_entries=500)
-store.add(MemoryEntry(type=MemoryType.USER, content="用户偏好Python", tags=["python"]))
-results = store.search("编程", limit=5)
-```
+### 4.5 permission_pipeline.py — 权限管线
 
-- `MemoryExtractor` — 从对话提取记忆（"remember that", "I prefer" 等模式）
-- `MemoryInjector` — 按优先级格式化为系统提示文本（2000 token 预算）
-
-### 3.5 permission_pipeline.py — 权限管线
-
-glob 模式匹配，首个规则生效。支持 Pre-Hook / Post-Hook。
+glob 模式匹配，首个规则生效。
 
 - `AUTO` — read_file, search_files, web_search 等
 - `PROMPT` — write_file, patch, terminal, send_message
 - `DENY` — 终端危险命令自动拒绝（30+ 正则模式）
 
-```python
-pipeline = PermissionPipeline()
-decision = pipeline.check("terminal", {"command": "ls -la"})
-pipeline.add_rule(PermissionRule("my_tool", PermissionLevel.AUTO))
-```
+### 4.6 mcp_transport.py — MCP 传输层
 
-### 3.6 mcp_transport.py — MCP 传输层
+STDIO / HTTP / SSE / WebSocket。兼容 Claude Code mcpServers 格式。
 
-STDIO（子进程+JSON-RPC）/ HTTP / SSE / WebSocket。兼容 Claude Code mcpServers 格式。
-
-```python
-configs = from_dict({"mcpServers": {"srv": {"command": "node", "args": ["s.js"]}}})
-manager = McpManager(configs)
-await manager.connect_all()
-result = await manager.call_tool("srv", "search", {"q": "test"})
-await manager.disconnect_all()
-```
-
-安全: 内置命令拒绝列表 + shell 元字符检测。
-
-### 3.7 coordinator.py — 多 Agent 协调器
+### 4.7 coordinator.py — 多 Agent 协调器
 
 目标分解 → 任务调度 → 执行 → 审查 → 聚合。
 
-```python
-coord = Coordinator()
-result = coord.run_full_cycle(
-    objective="实现登录功能; 编写测试; 审查代码",
-    executor_fn=lambda task: {"done": True},
-)
-```
+Agent 角色: ORCHESTRATOR / WORKER / REVIEWER。
 
-Agent 角色: ORCHESTRATOR / WORKER / REVIEWER。按关键词推断能力需求（code/research/test/deploy/review/design/data）。
+### 4.8 auto_dream.py — 自动梦境记忆整合
 
-### 3.8 auto_dream.py — 自动梦境记忆整合
+每 5 个会话或 24 小时触发，分析会话 → 提取关键决策/错误/偏好 → 合并相似记忆。
 
-每 5 个会话或 24 小时触发，分析会话 → 提取关键决策/错误/偏好 → 合并相似记忆 → 提升/降级记忆。
-
-```python
-dreamer = AutoDreamer(memory_store=store)
-if dreamer.should_dream():
-    report = dreamer.dream()
-```
-
-### 3.9 post_turn_hooks.py — 回合后钩子
+### 4.9 post_turn_hooks.py — 回合后钩子
 
 按优先级执行: MemoryExtraction(10) → UsageTracking(20) → PromptSuggestion(30) → ContextHealth(40)
 
-```python
-pipeline = HookPipeline()
-pipeline.register(MemoryExtractionHook())
-results = await pipeline.run_all(HookContext(messages=msgs))
-```
-
-### 3.10 async_pipeline.py — 异步管线
-
-`Pipeline`（map/filter/flat_map）、`StreamingToolExecutor`（按完成顺序产出）、`ContextWindow`（Token缓冲）、`BackPressureController`（迟滞流控）。
-
-### 3.11 tool_result_summarizer.py — 智能摘要
-
-结构感知: CODE_FILE（提取签名/导入）、TERMINAL（提取错误/退出码）、SEARCH（提取路径）、JSON（提取键结构）。
-
-### 3.12 smart_retry.py — 智能重试
+### 4.10 smart_retry.py — 智能重试
 
 错误分类（TRANSIENT/PERMANENT/RATE_LIMITED）+ 指数退避 + 熔断器（连续5次失败→打开→60秒后半开）。
 
-```python
-retry_mgr = SmartRetryManager()
-result = retry_mgr.execute_with_retry(tool_call=ToolCall(name="web_extract", args={...}), executor_fn=fn)
-```
+### 4.11 async_pipeline.py — 异步管线
 
-### 3.13 token_budget_manager.py — 会话级 Token 预算
+`Pipeline`（map/filter/flat_map）、`StreamingToolExecutor`、`ContextWindow`、`BackPressureController`。
 
-压力区域: GREEN(<50%) → YELLOW(50-70%, 减20%) → ORANGE(70-85%, 减50%) → RED(85-95%, 减75%) → EXCEEDED(>95%)
+### 4.12 token_budget_manager.py — 会话级 Token 预算
 
-```python
-budget = TokenBudgetManager(session_budget=160_000)
-budget.begin_turn(1)
-alloc = budget.allocate("read_file", requested_tokens=15000)
-budget.record_usage("read_file", actual_tokens=12000)
-budget.end_turn()
-```
+压力区域: GREEN(<50%) → YELLOW(50-70%) → ORANGE(70-85%) → RED(85-95%) → EXCEEDED(>95%)
 
 ---
 
-## 4. 配置指南 — Hermes2Config
+## 5. 故障排查
 
-```python
-Hermes2Config(
-    max_workers=8,                    # 最大并发数
-    max_context_tokens=200_000,       # 上下文窗口 Token 上限
-    compression_profile="balanced",   # "aggressive" | "balanced" | "gentle"
-    memory_storage_path=None,         # 记忆持久化路径（None=仅内存）
-    disk_result_dir=None,             # 大结果磁盘目录（None=不持久化）
-    permission_rules=None,            # 自定义权限规则（None=内置规则）
-    auto_dream_threshold=5,           # 梦境触发会话数
-    enable_hooks=True,                # 启用回合后钩子
-    enable_auto_dream=True,           # 启用自动梦境
-    on_permission_prompt=None,        # 确认回调 (name, args, reason) -> bool
-)
+### 5.1 Telegram 重启后无响应
+
+**症状：** 网关重启后，Telegram bot 不响应消息
+
+**原因：** Telegram long-polling offset 卡在旧位置
+
+**解决：**
+```bash
+# 停止网关
+systemctl --user stop hermes-gateway
+
+# 清空 polling offset
+curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getUpdates?offset=-1" > /dev/null
+
+# 重启网关
+systemctl --user start hermes-gateway
 ```
 
-从字典创建（未知键会警告）:
-```python
-engine = Hermes2Engine.from_config({"max_workers": 4, "compression_profile": "aggressive"})
+### 5.2 Gemini API 429 错误
+
+**症状：** `HTTP 429: You exceeded your current quota`
+
+**原因：** Gemini API 额度用完或区域封控
+
+**解决：** 切换到 DeepSeek 或其他付费模型
+
+### 5.3 Hermes2Engine 未初始化
+
+**症状：** `turn_count` 始终为 0
+
+**排查：**
+```bash
+# 检查模块路径
+ls -la /usr/local/lib/hermes-agent/agent/hermes2/
+
+# 检查导入
+python3 -c "from agent.hermes2.integration import get_engine; print(get_engine())"
+
+# 检查日志
+journalctl --user -u hermes-gateway | grep -i hermes2
 ```
 
----
+### 5.4 YAML 配置解析错误
 
-## 5. 集成指南
+**症状：** `Failed to parse /root/.hermes/config.yaml`
 
-```python
-from hermes_upgrades.hermes2_adapter import Hermes2Engine
+**原因：** YAML 语法错误（缩进、特殊字符）
 
-engine = Hermes2Engine()
+**解决：**
+```bash
+# 验证 YAML
+python3 -c "import yaml; yaml.safe_load(open('/root/.hermes/config.yaml')); print('OK')"
 
-# 1. 构建 LLM 请求前注入记忆
-messages = engine.get_context_messages(messages)
-
-# 2. LLM 返回后处理工具调用
-if response.tool_calls:
-    results = engine.process_tool_calls(response.tool_calls, executor_fn=execute_tool)
-
-# 3. 回合结束后
-turn = engine.process_turn(messages, tool_calls, tool_results)
+# 检查缩进（必须用空格，不能用 Tab）
+cat -A ~/.hermes/config.yaml | grep $'\t'
 ```
-
-**步骤:** 将 `hermes_upgrades/` 放入项目 → 导入 `Hermes2Engine` → 在工具执行前调 `process_tool_calls()` → 回合后调 `process_turn()` → 构建请求前调 `get_context_messages()`。
 
 ---
 
@@ -283,43 +293,13 @@ turn = engine.process_turn(messages, tool_calls, tool_results)
 - Microcompact 压缩: <1ms
 - 权限检查: <50μs/次
 - 磁盘写入: temp + os.replace() 原子操作
-- 正则全部预编译
-- 记忆合并: O(n log n) + 长度预过滤
 
 ---
 
 ## 7. 安全模型
 
-**权限管线流程:** Pre-Hook → 规则匹配（首个生效）→ 条件评估 → Post-Hook → 决策
+**权限管线流程:** Pre-Hook → 规则匹配 → 条件评估 → Post-Hook → 决策
 
-**默认规则:** read_file/search_files/web_search=AUTO; write_file/patch/terminal/send_message=PROMPT
+**危险命令检测:** `rm -rf`, `sudo`, `curl|sh`, 反弹shell, `chmod 777`, `cat /etc/shadow` 等 30+ 模式
 
-**危险命令检测（terminal）:** `rm -rf`, `sudo`, `curl|sh`, 反弹shell, `chmod 777`, `cat /etc/shadow` 等 30+ 模式
-
-**MCP 安全:** 命令拒绝列表（rm/sudo/curl/python/bash 等）+ shell 元字符注入检测
-
----
-
-## 8. 常见问题
-
-**Q: 调整工具 Token 预算？**
-```python
-ToolResultManager(per_tool_budgets={"read_file": 20000})
-TokenBudgetManager(tool_budgets={"read_file": 20000})
-```
-
-**Q: 禁用记忆提取？** `enable_hooks=False` 或 `engine.hooks.set_enabled("memory_extraction", False)`
-
-**Q: 手动触发梦境？** `engine.dream()`
-
-**Q: 查看统计？** `engine.get_stats()` / `engine.pressure`
-
-**Q: 自定义权限？**
-```python
-engine.permissions.add_rule(PermissionRule("my_tool", PermissionLevel.AUTO), index=0)
-engine.permissions.add_rule(PermissionRule("dangerous_*", PermissionLevel.DENY))
-```
-
-**Q: 压缩级别选择？** aggressive=长会话/紧张预算; balanced=推荐默认; gentle=需保留上下文
-
-**Q: 异步使用？** `process_tool_calls`/`process_turn` 为同步；`StreamingToolExecutor` 可独立异步使用
+**MCP 安全:** 命令拒绝列表 + shell 元字符注入检测
