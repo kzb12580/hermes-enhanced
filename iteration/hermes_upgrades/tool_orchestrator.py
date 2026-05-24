@@ -210,7 +210,7 @@ class ToolOrchestrator:
         self.classifier = ToolConcurrencyClassifier(tool_overrides)
         self.detector = FileConflictDetector()
         from concurrent.futures import ThreadPoolExecutor
-        self._async_executor = ThreadPoolExecutor(max_workers=1)
+        self._async_executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self._closed = False
 
     def __enter__(self):

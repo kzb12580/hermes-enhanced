@@ -81,9 +81,9 @@ _DANGEROUS_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bcurl\b.*\|\s*fish\b"),
     re.compile(r"\bwget\b.*\|\s*fish\b"),
     # Reverse shells / network backdoors (bare + full paths)
-    re.compile(r"(?:.*/)?nc\s+-[a-zA-Z]*l"),
-    re.compile(r"(?:.*/)?ncat\b"),
-    re.compile(r"(?:.*/)?netcat\b"),
+    re.compile(r"(?:^|.*[/\s])nc\s+-[a-zA-Z]*l"),
+    re.compile(r"(?:^|.*[/\s])ncat\b"),
+    re.compile(r"(?:^|.*[/\s])netcat\b"),
     re.compile(r"\bsocat\b"),
     # Dangerous permission changes (octal, symbolic, world-writable)
     re.compile(r"\bchmod\s+(?:0?777|666|a\+rwx)\b"),

@@ -432,6 +432,12 @@ class HookPipeline:
                     success=False,
                     error=f"Hook '{hook.name}' timed out after {hook_timeout}s",
                 )
+            except Exception as exc:
+                result = HookResult(
+                    hook_name=hook.name,
+                    success=False,
+                    error=f"Hook '{hook.name}' failed: {exc}",
+                )
             results.append(result)
         return results
 
@@ -451,7 +457,14 @@ class HookPipeline:
         results: list[HookResult] = []
         for hook in self._hooks:
             if hook.name in name_set and hook.enabled:
-                result = await hook.execute(ctx)
+                try:
+                    result = await hook.execute(ctx)
+                except Exception as exc:
+                    result = HookResult(
+                        hook_name=hook.name,
+                        success=False,
+                        error=f"Hook '{hook.name}' failed: {exc}",
+                    )
                 results.append(result)
         return results
 

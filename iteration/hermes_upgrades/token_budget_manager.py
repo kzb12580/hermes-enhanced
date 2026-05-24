@@ -197,8 +197,9 @@ class TokenBudgetManager:
         available = int(base_budget * factor)
         available = min(available, remaining, requested)
 
-        # Never allocate less than 200 tokens (minimum useful result)
+        # Never allocate less than 200 tokens (minimum useful result) or more than requested
         available = max(200, available) if remaining >= 200 else remaining
+        available = min(available, requested)
 
         reason = f"Pressure zone {zone.value}: allocated {available}/{requested} tokens"
         if available < requested:

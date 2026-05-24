@@ -261,7 +261,10 @@ class MemoryStore:
                 if key not in self._UPDATABLE_FIELDS:
                     continue
                 if key == "type" and isinstance(value, str):
-                    value = MemoryType(value)
+                    try:
+                        value = MemoryType(value)
+                    except ValueError:
+                        continue  # Skip invalid type values
                 setattr(entry, key, value)
             self._auto_save()
             return True

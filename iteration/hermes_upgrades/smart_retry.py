@@ -247,6 +247,7 @@ class CircuitBreaker:
             self.last_failure_time = time.time()
             if self.consecutive_failures >= self.failure_threshold:
                 self.state = CircuitState.OPEN
+                self._probe_sent = False  # Reset for next HALF_OPEN cycle
 
     def allow_request(self) -> bool:
         """Check if a request should be allowed through.

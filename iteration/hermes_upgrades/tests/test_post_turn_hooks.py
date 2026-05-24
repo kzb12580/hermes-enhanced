@@ -349,17 +349,17 @@ def test_pipeline_continues_on_hook_error():
     pipeline.register(_BrokenHook())
     pipeline.register(_SimpleHook("good", priority=10))
     ctx = HookContext()
-    # The broken hook raises, so the pipeline itself propagates.
-    # But each built-in hook catches its own exceptions internally.
-    # For _BrokenHook, the pipeline will propagate the error.
-    # We test that the built-in hooks handle errors gracefully instead.
-    # Let's verify built-in hook error handling directly:
-    hook = MemoryExtractionHook()
-    # Force an error by passing something that breaks extract_from_conversation
-    # Actually, MemoryExtractionHook catches exceptions and returns success=False.
-    # Let's just verify the pipeline propagates unhandled exceptions.
-    with pytest.raises(RuntimeError, match="hook exploded"):
-        asyncio.run(pipeline.run_all(ctx))
+    # After the fix, broken hooks return a failure result instead of propagating
+    results = asyncio.run(pipeline.run_all(ctx))
+    # Both hooks should have results
+    assert len(results) == 2
+    # The broken hook should have a failure result
+    broken_result = [r for r in results if r.hook_name == "broken"][0]
+    assert not broken_result.success
+    assert "hook exploded" in broken_result.error
+    # The good hook should succeed
+    good_result = [r for r in results if r.hook_name == "good"][0]
+    assert good_result.success
 
 
 def test_builtin_hook_error_returns_failure_result():
