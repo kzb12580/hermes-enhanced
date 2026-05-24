@@ -32,7 +32,7 @@ CHARS_PER_TOKEN: int = 4  # rough heuristic
 
 def _estimate_tokens(text: str) -> int:
     """Estimate token count from string length (~4 chars per token)."""
-    return max(1, len(text) // CHARS_PER_TOKEN)
+    return len(text) // CHARS_PER_TOKEN
 
 
 def _message_tokens(msg: dict) -> int:
@@ -460,7 +460,7 @@ class ContextCompressorV2:
         self, messages: list[dict]
     ) -> tuple[str, list[dict]]:
         """Try micro → reactive → full, return first that meets threshold."""
-        target = 1.0 - self.profile.pressure_threshold + 0.3  # heuristic target ratio
+        target = self.profile.pressure_threshold - 0.3  # lower target = more aggressive compression
 
         # Micro
         result = MicrocompactLevel.prune_old_tool_results(

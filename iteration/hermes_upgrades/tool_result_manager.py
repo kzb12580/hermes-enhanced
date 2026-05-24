@@ -10,7 +10,7 @@ import hashlib
 import json
 import os
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -247,7 +247,7 @@ class ToolResultManager:
             self._stats["dedup_saves"] += 1
             cached = self._cache.get(result_hash)
             if cached is not None:
-                return cached
+                return replace(cached, was_deduped=True)
             # Hash collision path – fall through to re-process
 
         # --- truncate ---
@@ -311,7 +311,8 @@ class ToolResultManager:
         file_path: str | None,
     ) -> None:
         """Persist large raw content to disk as JSON."""
-        assert self._disk_dir is not None
+        if self._disk_dir is None:
+            raise RuntimeError("_save_to_disk called but disk_dir is not configured")
         safe_name = result_hash[:16]
         out = self._disk_dir / f"{tool_name}_{safe_name}.json"
         payload = {

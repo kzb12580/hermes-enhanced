@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Optional
@@ -23,7 +25,7 @@ class ToolCall:
     """Represents a single tool invocation."""
     name: str
     args: dict[str, Any] = field(default_factory=dict)
-    id: str = ""
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
 @dataclass
@@ -97,7 +99,7 @@ class FileConflictDetector:
         for key in self._path_keys:
             val = tool_call.args.get(key)
             if isinstance(val, str) and val:
-                paths.add(val)
+                paths.add(os.path.normpath(val))
         return paths
 
     def has_write_conflict(
@@ -151,19 +153,9 @@ def partition(
         else:
             write_batches.append([tc])
 
-    # Second pass – pull conflicting reads out of the shared batch.
-    final_read: list[ToolCall] = []
-    for tc in read_batch:
-        conflicts = False
-        for existing in final_read:
-            if detector.has_write_conflict(tc, existing, classifier):
-                conflicts = True
-                break
-        if conflicts:
-            # Move to its own serial batch.
-            write_batches.append([tc])
-        else:
-            final_read.append(tc)
+    # Note: read-vs-read conflict check was removed — two READ_ONLY tools
+    # can never trigger a write conflict, so the loop was dead code.
+    final_read: list[ToolCall] = list(read_batch)
 
     # Check reads against writes for conflicts too.
     # (A read that conflicts with a write that already appears later
@@ -275,11 +267,26 @@ class ToolOrchestrator:
             if inspect.isawaitable(result):
                 # Type-narrow to coroutine for run_until_complete
                 coro = result  # type: ignore[assignment]
-                loop = asyncio.new_event_loop()
                 try:
-                    result = loop.run_until_complete(coro)
-                finally:
-                    loop.close()
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    # No running loop — create a new one
+                    loop = asyncio.new_event_loop()
+                    try:
+                        result = loop.run_until_complete(coro)
+                    finally:
+                        loop.close()
+                else:
+                    # Running loop exists — execute in a new thread
+                    from concurrent.futures import ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=1) as _pool:
+                        def _run_in_new_loop():
+                            new_loop = asyncio.new_event_loop()
+                            try:
+                                return new_loop.run_until_complete(coro)
+                            finally:
+                                new_loop.close()
+                        result = _pool.submit(_run_in_new_loop).result()
             elapsed = time.monotonic() - t0
             if on_progress:
                 on_progress(tc.name, "completed", elapsed)
@@ -301,9 +308,17 @@ class ToolOrchestrator:
         """Run a batch of tool calls concurrently."""
         # Detect async executor.
         if inspect.iscoroutinefunction(executor_fn):
-            return asyncio.run(
-                self._run_concurrent_async(batch, executor_fn, on_progress)
-            )
+            coro = self._run_concurrent_async(batch, executor_fn, on_progress)
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop — safe to use asyncio.run()
+                return asyncio.run(coro)
+            else:
+                # Running loop exists — execute in a new thread with its own loop
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=1) as _pool:
+                    return _pool.submit(asyncio.run, coro).result()
 
         # Sync executor – use threads.
         from concurrent.futures import ThreadPoolExecutor, as_completed
