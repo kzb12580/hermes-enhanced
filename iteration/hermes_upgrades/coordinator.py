@@ -115,6 +115,8 @@ def _infer_capabilities(text: str) -> list[str]:
 
 def _split_sentences(text: str) -> list[str]:
     """Split objective into sub-task sentences."""
+    if not isinstance(text, str):
+        return []
     parts = re.split(r'[.;]\s*|\band\s+then\s+|\bthen\s+|\balso\s+', text)
     return [p.strip() for p in parts if p.strip()]
 

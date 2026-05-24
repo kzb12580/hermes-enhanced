@@ -140,6 +140,8 @@ class Hermes2Engine:
         # 1. Permission check → filter denied
         allowed_calls: list[dict] = []
         for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
             name = tc.get("name", "")
             args = tc.get("args", {})
             decision = self.permissions.check(name, args)
@@ -215,16 +217,17 @@ class Hermes2Engine:
         # 3. Context pressure / compression
         should, reason = self.compressor.should_compress(messages)
         compression_applied = False
+        compressed_messages = None
         if should:
-            self.compressor.compress(messages, level="auto")
+            compressed = self.compressor.compress(messages, level="auto")
             compression_applied = True
-
+            compressed_messages = compressed.messages
         pressure = self.compressor.monitor.current
-
         return {
             "hooks_results": hooks_results,
             "memories_extracted": memories_extracted,
             "compression_applied": compression_applied,
+            "compressed_messages": compressed_messages,
             "pressure": pressure,
             "pressure_reason": reason,
         }
@@ -252,6 +255,14 @@ class Hermes2Engine:
         if result and result[0].get("role") == "system":
             result[0] = dict(result[0])
             existing = result[0].get("content", "")
+            # Coerce non-string content (e.g. OpenAI list format) to string
+            if isinstance(existing, list):
+                existing = " ".join(
+                    p.get("text", "") if isinstance(p, dict) else str(p)
+                    for p in existing
+                )
+            elif not isinstance(existing, str):
+                existing = str(existing)
             result[0]["content"] = context_str + "\n\n" + existing
         else:
             result.insert(0, {"role": "system", "content": context_str})

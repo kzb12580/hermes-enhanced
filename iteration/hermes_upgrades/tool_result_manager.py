@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -68,7 +70,9 @@ class ResultDeduplicator:
     @staticmethod
     def hash_result(content: str) -> str:
         """Return SHA-256 hex digest of *content*."""
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if content is None:
+            content = ""
+        return hashlib.sha256(str(content).encode("utf-8")).hexdigest()
 
     def is_duplicate(self, content: str) -> bool:
         """Return True if *content* was previously registered."""
@@ -138,6 +142,21 @@ class SmartTruncator:
 
         lines = text.splitlines(keepends=True)
         total_lines = len(lines)
+
+        # Single-line or very short text: character-based truncation
+        if total_lines <= 2:
+            char_budget = max_tokens * 4  # ~4 chars per token
+            if char_budget < 1:
+                return "[...truncated...]"
+            head_chars = max(1, int(char_budget * 0.6))
+            tail_chars = max(1, int(char_budget * 0.3))
+            if head_chars + tail_chars >= len(text):
+                return text[:char_budget]
+            return (
+                text[:head_chars]
+                + f"\n[...truncated {len(text) - head_chars - tail_chars} chars...]\n"
+                + text[-tail_chars:]
+            )
 
         head_lines = max(1, int(total_lines * keep_head))
         tail_lines = max(1, int(total_lines * keep_tail))
@@ -243,6 +262,8 @@ class ToolResultManager:
         -------
         ProcessedResult with final (possibly shortened) content.
         """
+        if content is None:
+            content = ""
         self._stats["total_processed"] += 1
         result_hash = ResultDeduplicator.hash_result(content)
 
@@ -351,4 +372,19 @@ class ToolResultManager:
             "char_count": len(content),
             "content": content,
         }
-        out.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        # Atomic write: temp file + os.replace() for crash safety
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(self._disk_dir), suffix=".tmp"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(out))
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise

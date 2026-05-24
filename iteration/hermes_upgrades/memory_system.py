@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import tempfile
 import uuid
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -98,6 +100,8 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 def _tokenize(text: str) -> list[str]:
     """Lowercase alphanumeric tokens, excluding stop words."""
+    if not isinstance(text, str):
+        return []
     tokens = _TOKEN_RE.findall(text.lower())
     return [t for t in tokens if t not in STOP_WORDS and len(t) > 1]
 
@@ -287,15 +291,40 @@ class MemoryStore:
             return
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         data = [e.to_dict() for e in self._entries.values()]
-        self.storage_path.write_text(json.dumps(data, indent=2))
+        # Atomic write: write to temp file first, then os.replace() for crash safety
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(self.storage_path.parent), suffix=".tmp"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(self.storage_path))
+        except BaseException:
+            # Clean up temp file on any failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         self._dirty = False
 
     def load(self) -> None:
         """Load entries from JSON file."""
         if not self.storage_path or not self.storage_path.exists():
             return
-        data = json.loads(self.storage_path.read_text())
-        self._entries = {d["id"]: MemoryEntry.from_dict(d) for d in data}
+        try:
+            raw = self.storage_path.read_text()
+            if not raw.strip():
+                return
+            data = json.loads(raw)
+            if not isinstance(data, list):
+                return
+            self._entries = {d["id"]: MemoryEntry.from_dict(d) for d in data}
+        except (json.JSONDecodeError, KeyError, ValueError):
+            # Corrupt or incompatible file — start fresh
+            self._entries = {}
 
     # -- Internal ------------------------------------------------------------
 
@@ -371,6 +400,17 @@ class MemoryExtractor:
             content = msg.get("content", "")
             role = msg.get("role", "user")
             if not content:
+                continue
+            # Coerce non-string content (int, list, etc.) or skip
+            if isinstance(content, list):
+                # OpenAI multi-part content — extract text parts
+                content = " ".join(
+                    p.get("text", "") if isinstance(p, dict) else str(p)
+                    for p in content
+                )
+            elif not isinstance(content, str):
+                content = str(content)
+            if not content.strip():
                 continue
 
             # Check USER patterns (prefer user-role messages)

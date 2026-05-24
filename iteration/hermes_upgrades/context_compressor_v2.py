@@ -114,7 +114,10 @@ class PressureMonitor:
             Pressure as float in [0.0, 1.0].
         """
         tokens = _total_tokens(messages)
-        pressure = min(1.0, tokens / self.model_token_limit)
+        if self.model_token_limit <= 0:
+            pressure = 1.0
+        else:
+            pressure = min(1.0, tokens / self.model_token_limit)
         self.history.append(pressure)
         return pressure
 
