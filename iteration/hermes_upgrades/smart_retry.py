@@ -230,6 +230,7 @@ class CircuitBreaker:
 
     def __post_init__(self) -> None:
         self._lock = threading.Lock()  # noqa: no-member
+        self._probe_sent: bool = False
 
     def record_success(self) -> None:
         """Record a successful execution — reset the circuit."""
@@ -237,6 +238,7 @@ class CircuitBreaker:
             self.consecutive_failures = 0
             self.state = CircuitState.CLOSED
             self.last_success_time = time.time()
+            self._probe_sent = False
 
     def record_failure(self) -> None:
         """Record a failed execution — may open the circuit."""
@@ -262,17 +264,22 @@ class CircuitBreaker:
                 elapsed = time.time() - self.last_failure_time
                 if elapsed >= self.recovery_timeout:
                     self.state = CircuitState.HALF_OPEN
+                    self._probe_sent = True  # This request IS the probe
                     return True
                 return False
 
-            # HALF_OPEN — allow one test request
-            return True
+            # HALF_OPEN — only allow one probe request
+            if not self._probe_sent:
+                self._probe_sent = True
+                return True
+            return False
 
     def reset(self) -> None:
         """Manually reset the circuit to closed state."""
         with self._lock:
             self.state = CircuitState.CLOSED
             self.consecutive_failures = 0
+            self._probe_sent = False
 
 
 # ---------------------------------------------------------------------------
@@ -527,4 +534,5 @@ class SmartRetryManager:
         # Add jitter
         jitter_range = delay * policy.jitter
         delay += random.uniform(-jitter_range, jitter_range)
-        return max(0, delay)
+        # Enforce minimum delay of 50ms
+        return max(0.05, delay)

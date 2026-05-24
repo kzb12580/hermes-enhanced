@@ -68,8 +68,9 @@ class TestMemorySystemGaps:
     def test_tf_basic(self):
         tokens = ["hello", "world", "hello"]
         result = _tf(tokens)
-        assert result["hello"] == 2
-        assert result["world"] == 1
+        # TF is now normalized by document length
+        assert abs(result["hello"] - 2/3) < 1e-9
+        assert abs(result["world"] - 1/3) < 1e-9
 
     def test_tf_empty(self):
         result = _tf([])

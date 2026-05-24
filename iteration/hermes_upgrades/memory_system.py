@@ -113,8 +113,12 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _tf(tokens: list[str]) -> Counter:
-    """Term frequency."""
-    return Counter(tokens)
+    """Term frequency, normalized by document length."""
+    if not tokens:
+        return Counter()
+    counts = Counter(tokens)
+    total = len(tokens)
+    return Counter({t: c / total for t, c in counts.items()})
 
 
 def _idf(doc_tokens: list[list[str]]) -> dict[str, float]:
