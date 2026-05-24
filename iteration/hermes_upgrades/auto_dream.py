@@ -9,6 +9,7 @@ Runs after *session_threshold* sessions or *time_threshold_hours* hours.
 from __future__ import annotations
 
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -91,6 +92,9 @@ class DreamTrigger:
     def should_run(self, session_count: int, last_run: datetime) -> bool:
         """Return ``True`` if either threshold has been exceeded."""
         self._session_count = session_count
+        # Guard against naive datetime
+        if last_run.tzinfo is None:
+            last_run = last_run.replace(tzinfo=timezone.utc)
         self._last_run = last_run
         sessions_met = session_count >= self.session_threshold
         now = datetime.now(timezone.utc)
@@ -203,7 +207,11 @@ class TranscriptAnalyzer:
         for msg in messages:
             ts = msg.get("timestamp")
             if isinstance(ts, datetime):
-                timestamps.append(ts)
+                # Normalize to timezone-aware UTC
+                if ts.tzinfo is None:
+                    timestamps.append(ts.replace(tzinfo=timezone.utc))
+                else:
+                    timestamps.append(ts.astimezone(timezone.utc))
             elif isinstance(ts, (int, float)):
                 timestamps.append(datetime.fromtimestamp(ts, tz=timezone.utc))
         if len(timestamps) >= 2:
@@ -332,20 +340,28 @@ class AutoDreamer:
         self._session_count: int = 0
         self._last_dream: datetime = datetime.fromtimestamp(0, tz=timezone.utc)
         self._history: list[DreamReport] = []
+        self._lock = threading.Lock()
 
     # -- Public API ---------------------------------------------------------
 
     def record_session(self, summary: SessionSummary) -> None:
         """Record a session summary for the next dream cycle."""
-        self._pending_summaries.append(summary)
-        self._session_count += 1
+        with self._lock:
+            self._pending_summaries.append(summary)
+            self._session_count += 1
 
     def should_dream(self) -> bool:
         """Check whether thresholds are met for a dream cycle."""
-        return self._trigger.should_run(self._session_count, self._last_dream)
+        with self._lock:
+            return self._trigger.should_run(self._session_count, self._last_dream)
 
     def dream(self) -> DreamReport:
         """Run a full dream cycle: analyse, consolidate, merge, report."""
+        with self._lock:
+            return self._dream_locked()
+
+    def _dream_locked(self) -> DreamReport:
+        """Internal dream implementation (must hold self._lock)."""
         if not self._pending_summaries:
             report = DreamReport(timestamp=datetime.now(timezone.utc))
             self._history.append(report)

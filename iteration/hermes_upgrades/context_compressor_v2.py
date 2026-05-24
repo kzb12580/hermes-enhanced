@@ -41,12 +41,17 @@ def _message_tokens(msg: dict) -> int:
     if isinstance(content, list):
         # multi-part content (e.g. tool results with images)
         parts: list[str] = []
+        image_overhead = 0
         for part in content:
             if isinstance(part, dict):
-                parts.append(str(part.get("text", "")))
+                if part.get("type") == "image" or "image" in str(part.get("type", "")):
+                    image_overhead += 1000  # heuristic for image token cost
+                else:
+                    parts.append(str(part.get("text", "")))
             else:
                 parts.append(str(part))
         content = " ".join(parts)
+        return _estimate_tokens(content) + 10 + image_overhead
     elif not isinstance(content, str):
         content = str(content)
     return _estimate_tokens(content) + 10  # small overhead for role/metadata
@@ -180,7 +185,7 @@ class MicrocompactLevel:
                 pruned["content"] = "[tool result pruned — context compression]"
                 result.append(pruned)
             else:
-                result.append(msg)
+                result.append(dict(msg))
         return result
 
 

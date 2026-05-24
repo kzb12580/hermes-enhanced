@@ -216,6 +216,24 @@ class ToolOrchestrator:
         self.detector = FileConflictDetector()
         from concurrent.futures import ThreadPoolExecutor
         self._async_executor = ThreadPoolExecutor(max_workers=1)
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown()
+        return False
+
+    def shutdown(self, wait: bool = True) -> None:
+        """Shut down internal thread pools.
+
+        Call this when the orchestrator is no longer needed to release
+        resources.  Safe to call multiple times.
+        """
+        if not self._closed:
+            self._async_executor.shutdown(wait=wait)
+            self._closed = True
 
     # ── public API ───────────────────────────────────────────────────────
 
