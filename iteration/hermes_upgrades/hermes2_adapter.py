@@ -355,6 +355,13 @@ class Hermes2Engine:
         1. Build :class:`HookContext` and run hooks.
         2. Extract and store memories.
         3. Check context pressure; compress if needed.
+
+        .. warning::
+            If compression is applied, the returned dict will contain a
+            ``compressed_messages`` key with the compressed list.
+            **The caller is responsible for replacing their local messages
+            reference with this value.**  See :meth:`apply_turn_result`
+            for a convenience wrapper that does this automatically.
         """
         self._turn_count += 1
 
@@ -387,6 +394,34 @@ class Hermes2Engine:
             "pressure": pressure,
             "pressure_reason": reason,
         }
+
+    def apply_turn_result(
+        self,
+        messages: list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Convenience wrapper around :meth:`process_turn`.
+
+        Calls ``process_turn`` and, if compression was applied, returns
+        the compressed messages as the first element.  Otherwise returns
+        the original *messages* unchanged.
+
+        Returns
+        -------
+        tuple of (messages, turn_result_dict)
+            ``messages`` is either the original or the compressed version.
+            ``turn_result_dict`` is the full result from :meth:`process_turn`.
+
+        Example::
+
+            messages, result = engine.apply_turn_result(messages, calls, results)
+            # messages is now safe to use for the next turn
+        """
+        result = self.process_turn(messages, tool_calls, tool_results)
+        if result.get("compression_applied") and result.get("compressed_messages") is not None:
+            return result["compressed_messages"], result
+        return messages, result
 
     def get_context_messages(self, messages: list[dict[str, Any]]) -> list[dict]:
         """Return *messages* with memory context injected into the system prompt.

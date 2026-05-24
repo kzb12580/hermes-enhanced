@@ -360,18 +360,10 @@ class AutoDreamer:
         now = datetime.now(timezone.utc)
 
         # Apply promoted/demoted changes back to the store
-        for i, mem in enumerate(self._store.entries):
-            # Find matching promoted entry by content + original access count
-            for pm in result.promoted:
-                if pm.content == mem.content and pm.access_count == mem.access_count:
-                    self._store.entries[i].relevance_score = pm.relevance_score
-                    break
-            else:
-                # Only check demoted if not already promoted
-                for dm in result.demoted:
-                    if dm.content == mem.content and dm.access_count == mem.access_count:
-                        self._store.entries[i].relevance_score = dm.relevance_score
-                        break
+        for pm in result.promoted:
+            self._store.update(pm.id, relevance_score=pm.relevance_score)
+        for dm in result.demoted:
+            self._store.update(dm.id, relevance_score=dm.relevance_score)
 
         promote_count = len(result.promoted)
         demote_count = len(result.demoted)

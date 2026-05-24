@@ -386,7 +386,13 @@ class ToolResultManager:
             dir=str(self._disk_dir), suffix=".tmp"
         )
         try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            try:
+                f = os.fdopen(tmp_fd, "w", encoding="utf-8")
+            except BaseException:
+                # fdopen failed — close the raw fd to prevent leak
+                os.close(tmp_fd)
+                raise
+            with f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())

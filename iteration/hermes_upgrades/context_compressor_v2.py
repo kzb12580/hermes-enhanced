@@ -203,6 +203,7 @@ class ReactiveLevel:
     def compress(
         messages: list[dict],
         target_ratio: float = 0.6,
+        keep_last_n: int = 5,
     ) -> list[dict]:
         """Compress until estimated tokens ≤ *target_ratio* × model limit.
 
@@ -223,7 +224,7 @@ class ReactiveLevel:
         result = list(messages)
 
         # Step 1: microcompact
-        result = MicrocompactLevel.prune_old_tool_results(result, keep_last_n=5)
+        result = MicrocompactLevel.prune_old_tool_results(result, keep_last_n=keep_last_n)
         if _total_tokens(result) <= target_tokens:
             return result
 
@@ -426,11 +427,11 @@ class ContextCompressorV2:
             )
         elif level == "reactive":
             level_used = "reactive"
-            result = ReactiveLevel.compress(messages, target_ratio=0.6)
+            result = ReactiveLevel.compress(messages, target_ratio=0.6, keep_last_n=self.profile.keep_last_n)
         elif level == "full":
             # Full requires external LLM — fall back to reactive for now
             level_used = "reactive"
-            result = ReactiveLevel.compress(messages, target_ratio=0.5)
+            result = ReactiveLevel.compress(messages, target_ratio=0.5, keep_last_n=self.profile.keep_last_n)
         else:
             raise ValueError(f"Unknown compression level: {level!r}")
 
@@ -477,12 +478,12 @@ class ContextCompressorV2:
             return "micro", result
 
         # Reactive
-        result = ReactiveLevel.compress(messages, target_ratio=target)
+        result = ReactiveLevel.compress(messages, target_ratio=target, keep_last_n=self.profile.keep_last_n)
         if self._improvement_ok(messages, result, original_tokens):
             return "reactive", result
 
         # Full (best-effort without LLM — aggressive reactive)
-        result = ReactiveLevel.compress(messages, target_ratio=0.4)
+        result = ReactiveLevel.compress(messages, target_ratio=0.4, keep_last_n=self.profile.keep_last_n)
         return "full", result
 
     @staticmethod

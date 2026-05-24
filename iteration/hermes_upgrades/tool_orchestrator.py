@@ -214,6 +214,8 @@ class ToolOrchestrator:
         self.max_workers = max_workers
         self.classifier = ToolConcurrencyClassifier(tool_overrides)
         self.detector = FileConflictDetector()
+        from concurrent.futures import ThreadPoolExecutor
+        self._async_executor = ThreadPoolExecutor(max_workers=1)
 
     # ── public API ───────────────────────────────────────────────────────
 
@@ -278,15 +280,13 @@ class ToolOrchestrator:
                         loop.close()
                 else:
                     # Running loop exists — execute in a new thread
-                    from concurrent.futures import ThreadPoolExecutor
-                    with ThreadPoolExecutor(max_workers=1) as _pool:
-                        def _run_in_new_loop():
-                            new_loop = asyncio.new_event_loop()
-                            try:
-                                return new_loop.run_until_complete(coro)
-                            finally:
-                                new_loop.close()
-                        result = _pool.submit(_run_in_new_loop).result()
+                    def _run_in_new_loop():
+                        new_loop = asyncio.new_event_loop()
+                        try:
+                            return new_loop.run_until_complete(coro)
+                        finally:
+                            new_loop.close()
+                    result = self._async_executor.submit(_run_in_new_loop).result()
             elapsed = time.monotonic() - t0
             if on_progress:
                 on_progress(tc.name, "completed", elapsed)
@@ -316,9 +316,7 @@ class ToolOrchestrator:
                 return asyncio.run(coro)
             else:
                 # Running loop exists — execute in a new thread with its own loop
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=1) as _pool:
-                    return _pool.submit(asyncio.run, coro).result()
+                return self._async_executor.submit(asyncio.run, coro).result()
 
         # Sync executor – use threads.
         from concurrent.futures import ThreadPoolExecutor, as_completed

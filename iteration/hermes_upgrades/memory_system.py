@@ -12,6 +12,7 @@ import os
 import re
 import tempfile
 import threading
+import copy as _copy
 import uuid
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -164,7 +165,10 @@ class MemorySearch:
         tag_score = len(q_set & t_set) / max(len(q_set), 1)
 
         # Recency bonus (0..1, 1 = just created)
-        age_hours = max((datetime.now(timezone.utc) - entry.created_at).total_seconds() / 3600, 0)
+        created = entry.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age_hours = max((datetime.now(timezone.utc) - created).total_seconds() / 3600, 0)
         recency_score = 1.0 / (1.0 + age_hours / 24.0)  # half-life ~1 day
 
         # Frequency bonus
@@ -214,7 +218,7 @@ class MemoryStore:
                 entry.access_count += 1
                 entry.accessed_at = datetime.now(timezone.utc)
                 self._auto_save()  # dirty flag only — access stats are non-critical
-            return entry
+            return _copy.deepcopy(entry) if entry is not None else None
 
     def search(self, query: str, type: Optional[MemoryType] = None,
                limit: int = 10) -> list[MemoryEntry]:
@@ -335,7 +339,7 @@ class MemoryStore:
             return
         with self._lock:
             try:
-                raw = self.storage_path.read_text()
+                raw = self.storage_path.read_text(encoding="utf-8")
                 if not raw.strip():
                     return
                 data = json.loads(raw)
