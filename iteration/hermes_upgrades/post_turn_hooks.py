@@ -21,11 +21,21 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .context_compressor_v2 import (
-    PressureMonitor,
-    _total_tokens,
-)
-from .memory_system import MemoryExtractor, MemoryEntry
+try:
+    from .context_compressor_v2 import (
+        PressureMonitor,
+        _total_tokens,
+    )
+except ImportError:
+    from context_compressor_v2 import (
+        PressureMonitor,
+        _total_tokens,
+    )
+
+try:
+    from .memory_system import MemoryExtractor, MemoryEntry
+except ImportError:
+    from memory_system import MemoryExtractor, MemoryEntry
 
 
 # ---------------------------------------------------------------------------

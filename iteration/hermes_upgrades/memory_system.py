@@ -11,6 +11,7 @@ import math
 import os
 import re
 import tempfile
+import threading
 import uuid
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -18,6 +19,11 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+try:
+    from .token_utils import extract_text_from_content
+except ImportError:
+    from token_utils import extract_text_from_content
 
 
 class MemoryType(Enum):
@@ -181,6 +187,7 @@ class MemoryStore:
         self._entries: dict[str, MemoryEntry] = {}
         self._search = MemorySearch()
         self._dirty: bool = False
+        self._lock = threading.RLock()
         if self.storage_path and self.storage_path.exists():
             self.load()
 
@@ -188,25 +195,28 @@ class MemoryStore:
 
     def add(self, entry: MemoryEntry) -> str:
         """Add an entry; evicts oldest-lowest-relevance if full."""
-        if len(self._entries) >= self.max_entries:
-            self._evict()
-        self._entries[entry.id] = entry
-        self._auto_save_immediate()
-        return entry.id
+        with self._lock:
+            if len(self._entries) >= self.max_entries:
+                self._evict()
+            self._entries[entry.id] = entry
+            self._auto_save_immediate()
+            return entry.id
 
     def get(self, id: str) -> Optional[MemoryEntry]:
         """Retrieve by id and bump access stats."""
-        entry = self._entries.get(id)
-        if entry:
-            entry.access_count += 1
-            entry.accessed_at = datetime.now(timezone.utc)
-            self._auto_save()  # dirty flag only — access stats are non-critical
-        return entry
+        with self._lock:
+            entry = self._entries.get(id)
+            if entry:
+                entry.access_count += 1
+                entry.accessed_at = datetime.now(timezone.utc)
+                self._auto_save()  # dirty flag only — access stats are non-critical
+            return entry
 
     def search(self, query: str, type: Optional[MemoryType] = None,
                limit: int = 10) -> list[MemoryEntry]:
         """Search entries by query with optional type filter."""
-        candidates = list(self._entries.values())
+        with self._lock:
+            candidates = list(self._entries.values())
         if type is not None:
             candidates = [e for e in candidates if e.type == type]
         if not candidates:
@@ -235,46 +245,50 @@ class MemoryStore:
         source, access_count. Prevents modification of id, type, created_at,
         and accessed_at through this interface.
         """
-        entry = self._entries.get(id)
-        if not entry:
-            return False
-        for key, value in kwargs.items():
-            if key not in self._UPDATABLE_FIELDS:
-                continue
-            if key == "type" and isinstance(value, str):
-                value = MemoryType(value)
-            setattr(entry, key, value)
-        self._auto_save()
-        return True
+        with self._lock:
+            entry = self._entries.get(id)
+            if not entry:
+                return False
+            for key, value in kwargs.items():
+                if key not in self._UPDATABLE_FIELDS:
+                    continue
+                if key == "type" and isinstance(value, str):
+                    value = MemoryType(value)
+                setattr(entry, key, value)
+            self._auto_save()
+            return True
 
     def delete(self, id: str) -> bool:
         """Remove entry by id."""
-        if id in self._entries:
-            del self._entries[id]
-            self._auto_save_immediate()
-            return True
-        return False
+        with self._lock:
+            if id in self._entries:
+                del self._entries[id]
+                self._auto_save_immediate()
+                return True
+            return False
 
     def prune(self, max_age_days: int = 30, min_relevance: float = 0.1) -> int:
         """Remove entries older than *max_age_days* or below *min_relevance*."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-        to_remove = [
-            eid for eid, e in self._entries.items()
-            if e.created_at < cutoff or e.relevance_score < min_relevance
-        ]
-        for eid in to_remove:
-            del self._entries[eid]
-        self._auto_save()
-        return len(to_remove)
+        with self._lock:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+            to_remove = [
+                eid for eid, e in self._entries.items()
+                if e.created_at < cutoff or e.relevance_score < min_relevance
+            ]
+            for eid in to_remove:
+                del self._entries[eid]
+            self._auto_save()
+            return len(to_remove)
 
     def get_stats(self) -> dict:
         """Return summary statistics."""
-        type_counts = Counter(e.type.value for e in self._entries.values())
-        total = len(self._entries)
-        avg_relevance = (
-            sum(e.relevance_score for e in self._entries.values()) / total
-            if total else 0.0
-        )
+        with self._lock:
+            type_counts = Counter(e.type.value for e in self._entries.values())
+            total = len(self._entries)
+            avg_relevance = (
+                sum(e.relevance_score for e in self._entries.values()) / total
+                if total else 0.0
+            )
         return {
             "total_entries": total,
             "max_entries": self.max_entries,
@@ -289,42 +303,44 @@ class MemoryStore:
         """Write all entries to JSON file."""
         if not self.storage_path:
             return
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        data = [e.to_dict() for e in self._entries.values()]
-        # Atomic write: write to temp file first, then os.replace() for crash safety
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            dir=str(self.storage_path.parent), suffix=".tmp"
-        )
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, str(self.storage_path))
-        except BaseException:
-            # Clean up temp file on any failure
+        with self._lock:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            data = [e.to_dict() for e in self._entries.values()]
+            # Atomic write: write to temp file first, then os.replace() for crash safety
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=str(self.storage_path.parent), suffix=".tmp"
+            )
             try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
-        self._dirty = False
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, str(self.storage_path))
+            except BaseException:
+                # Clean up temp file on any failure
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            self._dirty = False
 
     def load(self) -> None:
         """Load entries from JSON file."""
         if not self.storage_path or not self.storage_path.exists():
             return
-        try:
-            raw = self.storage_path.read_text()
-            if not raw.strip():
-                return
-            data = json.loads(raw)
-            if not isinstance(data, list):
-                return
-            self._entries = {d["id"]: MemoryEntry.from_dict(d) for d in data}
-        except (json.JSONDecodeError, KeyError, ValueError):
-            # Corrupt or incompatible file — start fresh
-            self._entries = {}
+        with self._lock:
+            try:
+                raw = self.storage_path.read_text()
+                if not raw.strip():
+                    return
+                data = json.loads(raw)
+                if not isinstance(data, list):
+                    return
+                self._entries = {d["id"]: MemoryEntry.from_dict(d) for d in data}
+            except (json.JSONDecodeError, KeyError, ValueError):
+                # Corrupt or incompatible file — start fresh
+                self._entries = {}
 
     # -- Internal ------------------------------------------------------------
 
@@ -340,9 +356,10 @@ class MemoryStore:
 
     def flush(self) -> None:
         """Explicitly persist pending changes to disk."""
-        if self._dirty and self.storage_path:
-            self.save()
-            self._dirty = False
+        with self._lock:
+            if self._dirty and self.storage_path:
+                self.save()
+                self._dirty = False
 
     def _evict(self) -> None:
         """Remove lowest-relevance, oldest entry."""
@@ -356,7 +373,8 @@ class MemoryStore:
 
     @property
     def entries(self) -> list[MemoryEntry]:
-        return list(self._entries.values())
+        with self._lock:
+            return list(self._entries.values())
 
 
 # ---------------------------------------------------------------------------
@@ -402,14 +420,7 @@ class MemoryExtractor:
             if not content:
                 continue
             # Coerce non-string content (int, list, etc.) or skip
-            if isinstance(content, list):
-                # OpenAI multi-part content — extract text parts
-                content = " ".join(
-                    p.get("text", "") if isinstance(p, dict) else str(p)
-                    for p in content
-                )
-            elif not isinstance(content, str):
-                content = str(content)
+            content = extract_text_from_content(content)
             if not content.strip():
                 continue
 

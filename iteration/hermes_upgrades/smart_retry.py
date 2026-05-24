@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import random
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -227,18 +228,23 @@ class CircuitBreaker:
     last_failure_time: float = 0.0
     last_success_time: float = 0.0
 
+    def __post_init__(self) -> None:
+        self._lock = threading.Lock()  # noqa: no-member
+
     def record_success(self) -> None:
         """Record a successful execution — reset the circuit."""
-        self.consecutive_failures = 0
-        self.state = CircuitState.CLOSED
-        self.last_success_time = time.time()
+        with self._lock:
+            self.consecutive_failures = 0
+            self.state = CircuitState.CLOSED
+            self.last_success_time = time.time()
 
     def record_failure(self) -> None:
         """Record a failed execution — may open the circuit."""
-        self.consecutive_failures += 1
-        self.last_failure_time = time.time()
-        if self.consecutive_failures >= self.failure_threshold:
-            self.state = CircuitState.OPEN
+        with self._lock:
+            self.consecutive_failures += 1
+            self.last_failure_time = time.time()
+            if self.consecutive_failures >= self.failure_threshold:
+                self.state = CircuitState.OPEN
 
     def allow_request(self) -> bool:
         """Check if a request should be allowed through.
@@ -247,24 +253,26 @@ class CircuitBreaker:
         -------
         True if the request should proceed, False if circuit is open.
         """
-        if self.state == CircuitState.CLOSED:
-            return True
-
-        if self.state == CircuitState.OPEN:
-            # Check if recovery timeout has elapsed
-            elapsed = time.time() - self.last_failure_time
-            if elapsed >= self.recovery_timeout:
-                self.state = CircuitState.HALF_OPEN
+        with self._lock:
+            if self.state == CircuitState.CLOSED:
                 return True
-            return False
 
-        # HALF_OPEN — allow one test request
-        return True
+            if self.state == CircuitState.OPEN:
+                # Check if recovery timeout has elapsed
+                elapsed = time.time() - self.last_failure_time
+                if elapsed >= self.recovery_timeout:
+                    self.state = CircuitState.HALF_OPEN
+                    return True
+                return False
+
+            # HALF_OPEN — allow one test request
+            return True
 
     def reset(self) -> None:
         """Manually reset the circuit to closed state."""
-        self.state = CircuitState.CLOSED
-        self.consecutive_failures = 0
+        with self._lock:
+            self.state = CircuitState.CLOSED
+            self.consecutive_failures = 0
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +325,7 @@ class SmartRetryManager:
         self._time_fn = time_fn or time.time
         self._sleep_fn = sleep_fn or time.sleep
         self._circuits: dict[str, CircuitBreaker] = {}
+        self._circuit_lock = threading.Lock()
 
         # Stats
         self._stats = {
@@ -332,10 +341,19 @@ class SmartRetryManager:
         return self._policies.get(tool_name, self._policies.get("default", RetryPolicy()))
 
     def get_circuit(self, tool_name: str) -> CircuitBreaker:
-        """Get or create the circuit breaker for a tool."""
-        if tool_name not in self._circuits:
-            self._circuits[tool_name] = CircuitBreaker()
-        return self._circuits[tool_name]
+        """Get or create the circuit breaker for a tool.
+
+        Uses double-checked locking to avoid creating duplicate breakers
+        under concurrent access.
+        """
+        cb = self._circuits.get(tool_name)
+        if cb is None:
+            with self._circuit_lock:
+                cb = self._circuits.get(tool_name)
+                if cb is None:
+                    cb = CircuitBreaker()
+                    self._circuits[tool_name] = cb
+        return cb
 
     def execute_with_retry(
         self,

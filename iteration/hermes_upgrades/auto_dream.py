@@ -15,7 +15,15 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from typing import Optional
 
-from .memory_system import MemoryEntry, MemoryStore, MemoryType, STOP_WORDS
+try:
+    from .memory_system import MemoryEntry, MemoryStore, MemoryType, STOP_WORDS
+except ImportError:
+    from memory_system import MemoryEntry, MemoryStore, MemoryType, STOP_WORDS
+
+try:
+    from .token_utils import extract_text_from_content
+except ImportError:
+    from token_utils import extract_text_from_content
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -132,11 +140,7 @@ class TranscriptAnalyzer:
             role = msg.get("role", "")
 
             # Handle OpenAI-style multipart content (list of parts)
-            if isinstance(content, list):
-                content = " ".join(
-                    part.get("text", "") for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
-                )
+            content = extract_text_from_content(content)
 
             if not content:
                 continue

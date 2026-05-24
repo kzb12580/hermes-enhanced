@@ -18,29 +18,76 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 _log = logging.getLogger(__name__)
 
-from .tool_orchestrator import ToolCall, ToolOrchestrator
-from .tool_result_manager import ProcessedResult, ToolResultManager
-from .permission_pipeline import PermissionLevel, PermissionPipeline, PermissionRule
-from .context_compressor_v2 import ContextCompressorV2
-from .memory_system import MemoryEntry, MemoryExtractor, MemoryInjector, MemoryStore
-from .post_turn_hooks import (
-    HookContext,
-    HookPipeline,
-    HookResult,
-    MemoryExtractionHook,
-    UsageTrackingHook,
-    PromptSuggestionHook,
-    ContextHealthHook,
-)
-from .auto_dream import AutoDreamer, DreamReport, DreamTrigger, SessionSummary
-from .coordinator import Coordinator
-from .memory_system import MemoryType
+try:
+    from .tool_orchestrator import ToolCall, ToolOrchestrator
+except ImportError:
+    from tool_orchestrator import ToolCall, ToolOrchestrator
+
+try:
+    from .tool_result_manager import ProcessedResult, ToolResultManager
+except ImportError:
+    from tool_result_manager import ProcessedResult, ToolResultManager
+
+try:
+    from .permission_pipeline import PermissionLevel, PermissionPipeline, PermissionRule
+except ImportError:
+    from permission_pipeline import PermissionLevel, PermissionPipeline, PermissionRule
+
+try:
+    from .context_compressor_v2 import ContextCompressorV2
+except ImportError:
+    from context_compressor_v2 import ContextCompressorV2
+
+try:
+    from .memory_system import MemoryEntry, MemoryExtractor, MemoryInjector, MemoryStore
+except ImportError:
+    from memory_system import MemoryEntry, MemoryExtractor, MemoryInjector, MemoryStore
+
+try:
+    from .post_turn_hooks import (
+        HookContext,
+        HookPipeline,
+        HookResult,
+        MemoryExtractionHook,
+        UsageTrackingHook,
+        PromptSuggestionHook,
+        ContextHealthHook,
+    )
+except ImportError:
+    from post_turn_hooks import (
+        HookContext,
+        HookPipeline,
+        HookResult,
+        MemoryExtractionHook,
+        UsageTrackingHook,
+        PromptSuggestionHook,
+        ContextHealthHook,
+    )
+
+try:
+    from .auto_dream import AutoDreamer, DreamReport, DreamTrigger, SessionSummary
+except ImportError:
+    from auto_dream import AutoDreamer, DreamReport, DreamTrigger, SessionSummary
+
+try:
+    from .coordinator import Coordinator
+except ImportError:
+    from coordinator import Coordinator
+
+try:
+    from .memory_system import MemoryType
+except ImportError:
+    from memory_system import MemoryType
+
+try:
+    from .token_utils import extract_text_from_content
+except ImportError:
+    from token_utils import extract_text_from_content
 
 
 # ---------------------------------------------------------------------------
@@ -329,13 +376,7 @@ class Hermes2Engine:
             result[0] = dict(result[0])
             existing = result[0].get("content", "")
             # Coerce non-string content (e.g. OpenAI list format) to string
-            if isinstance(existing, list):
-                existing = " ".join(
-                    p.get("text", "") if isinstance(p, dict) else str(p)
-                    for p in existing
-                )
-            elif not isinstance(existing, str):
-                existing = str(existing)
+            existing = extract_text_from_content(existing)
             result[0]["content"] = context_str + "\n\n" + existing
         else:
             result.insert(0, {"role": "system", "content": context_str})

@@ -11,6 +11,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -64,6 +65,7 @@ class ResultDeduplicator:
     def __init__(self, max_seen: int = 1000) -> None:
         self.max_seen = max_seen
         self._seen: OrderedDict[str, None] = OrderedDict()
+        self._lock = threading.Lock()
 
     # -- public API ---------------------------------------------------------
 
@@ -81,25 +83,28 @@ class ResultDeduplicator:
 
     def is_duplicate_hash(self, h: str) -> bool:
         """Return True if *hash* was previously registered."""
-        if h in self._seen:
-            # Move to end (most-recently used)
-            self._seen.move_to_end(h)
-            return True
-        return False
+        with self._lock:
+            if h in self._seen:
+                # Move to end (most-recently used)
+                self._seen.move_to_end(h)
+                return True
+            return False
 
     def register(self, content: str) -> None:
         """Add *content* to the seen set, evicting oldest if at capacity."""
         h = self.hash_result(content)
-        if h in self._seen:
-            self._seen.move_to_end(h)
-            return
-        self._seen[h] = None
-        if len(self._seen) > self.max_seen:
-            self._seen.popitem(last=False)
+        with self._lock:
+            if h in self._seen:
+                self._seen.move_to_end(h)
+                return
+            self._seen[h] = None
+            if len(self._seen) > self.max_seen:
+                self._seen.popitem(last=False)
 
     def clear(self) -> None:
         """Reset deduplication state."""
-        self._seen.clear()
+        with self._lock:
+            self._seen.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +236,9 @@ class ToolResultManager:
         # Cache of processed results keyed by hash
         self._cache: OrderedDict[str, ProcessedResult] = OrderedDict()
 
+        # Thread-safety lock for process()
+        self._process_lock = threading.Lock()
+
         # Stats
         self._stats = {
             "total_processed": 0,
@@ -262,63 +270,64 @@ class ToolResultManager:
         -------
         ProcessedResult with final (possibly shortened) content.
         """
-        if content is None:
-            content = ""
-        self._stats["total_processed"] += 1
-        result_hash = ResultDeduplicator.hash_result(content)
+        with self._process_lock:
+            if content is None:
+                content = ""
+            self._stats["total_processed"] += 1
+            result_hash = ResultDeduplicator.hash_result(content)
 
-        # --- dedup ---
-        if self._dedup.is_duplicate_hash(result_hash):
-            self._stats["dedup_saves"] += 1
-            cached = self._cache.get(result_hash)
-            if cached is not None:
-                return replace(cached, was_deduped=True)
-            # Hash collision path – fall through to re-process
+            # --- dedup ---
+            if self._dedup.is_duplicate_hash(result_hash):
+                self._stats["dedup_saves"] += 1
+                cached = self._cache.get(result_hash)
+                if cached is not None:
+                    return replace(cached, was_deduped=True)
+                # Hash collision path – fall through to re-process
 
-        # --- truncate ---
-        was_truncated = False
-        processed = content
+            # --- truncate ---
+            was_truncated = False
+            processed = content
 
-        # First apply per-tool budget
-        tool_budgets = {**DEFAULT_TOOL_BUDGETS, **self.per_tool_budgets}
-        tool_budget = tool_budgets.get(tool_name, tool_budgets.get("default", 8000))
-        tokens = self._estimator.estimate_tokens(processed)
-        if tokens > tool_budget:
-            processed = self._truncator.truncate(processed, tool_budget)
-            was_truncated = True
+            # First apply per-tool budget
+            tool_budgets = {**DEFAULT_TOOL_BUDGETS, **self.per_tool_budgets}
+            tool_budget = tool_budgets.get(tool_name, tool_budgets.get("default", 8000))
+            tokens = self._estimator.estimate_tokens(processed)
+            if tokens > tool_budget:
+                processed = self._truncator.truncate(processed, tool_budget)
+                was_truncated = True
 
-        # Then apply global max
-        tokens = self._estimator.estimate_tokens(processed)
-        if tokens > self.max_tokens:
-            processed = self._truncator.truncate(processed, self.max_tokens)
-            was_truncated = True
+            # Then apply global max
+            tokens = self._estimator.estimate_tokens(processed)
+            if tokens > self.max_tokens:
+                processed = self._truncator.truncate(processed, self.max_tokens)
+                was_truncated = True
 
-        if was_truncated:
-            self._stats["truncations"] += 1
+            if was_truncated:
+                self._stats["truncations"] += 1
 
-        # --- disk persistence ---
-        was_disk_saved = False
-        if self._disk_dir and len(content) > self.disk_threshold:
-            self._save_to_disk(tool_name, result_hash, content, file_path)
-            was_disk_saved = True
-            self._stats["disk_saves"] += 1
+            # --- disk persistence ---
+            was_disk_saved = False
+            if self._disk_dir and len(content) > self.disk_threshold:
+                self._save_to_disk(tool_name, result_hash, content, file_path)
+                was_disk_saved = True
+                self._stats["disk_saves"] += 1
 
-        token_count = self._estimator.estimate_tokens(processed)
+            token_count = self._estimator.estimate_tokens(processed)
 
-        result = ProcessedResult(
-            content=processed,
-            was_truncated=was_truncated,
-            was_deduped=False,
-            was_disk_saved=was_disk_saved,
-            token_count=token_count,
-            hash=result_hash,
-        )
+            result = ProcessedResult(
+                content=processed,
+                was_truncated=was_truncated,
+                was_deduped=False,
+                was_disk_saved=was_disk_saved,
+                token_count=token_count,
+                hash=result_hash,
+            )
 
-        # Register and cache
-        self._dedup.register(content)
-        self._cache[result_hash] = result
-        if len(self._cache) > self._dedup.max_seen:
-            self._cache.popitem(last=False)
+            # Register and cache
+            self._dedup.register(content)
+            self._cache[result_hash] = result
+            if len(self._cache) > self._dedup.max_seen:
+                self._cache.popitem(last=False)
 
         return result
 
