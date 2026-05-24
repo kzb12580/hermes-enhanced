@@ -125,8 +125,6 @@ model:
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
 | Telegram 重启后无响应 | Polling offset 卡住 | 重启网关：`hermes gateway restart` |
-| Gemini API 429 错误 | 额度用完或封控 | 切换到 DeepSeek 或其他付费模型 |
-| 免费模型响应质量差 | 模型能力不足 | 使用付费模型（DS V4 Flash/Pro） |
 
 ## 🔌 集成架构
 
