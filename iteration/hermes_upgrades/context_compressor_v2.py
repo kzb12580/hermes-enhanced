@@ -109,6 +109,8 @@ class PressureMonitor:
     """
 
     def __init__(self, model_token_limit: int) -> None:
+        import threading
+        self._lock = threading.Lock()
         self.model_token_limit = model_token_limit
         self.history: list[float] = []
 
@@ -125,18 +127,21 @@ class PressureMonitor:
             )
         else:
             pressure = min(1.0, tokens / self.model_token_limit)
-        self.history.append(pressure)
+        with self._lock:
+            self.history.append(pressure)
         return pressure
 
     def should_compress(self, threshold: float) -> bool:
         """Return True if the latest pressure reading meets/exceeds *threshold*."""
-        if not self.history:
-            return False
-        return self.history[-1] >= threshold
+        with self._lock:
+            if not self.history:
+                return False
+            return self.history[-1] >= threshold
 
     @property
     def current(self) -> float:
-        return self.history[-1] if self.history else 0.0
+        with self._lock:
+            return self.history[-1] if self.history else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +390,8 @@ class ContextCompressorV2:
             profile = CompressionProfile(profile.lower())
         self.profile: CompressionProfile = profile
         self.monitor = PressureMonitor(model_token_limit)
+        import threading
+        self._stats_lock = threading.Lock()
         self._stats_compressions: int = 0
         self._stats_ratios: list[float] = []
         self._stats_tokens_saved: int = 0
@@ -444,9 +451,10 @@ class ContextCompressorV2:
         ratio = compressed_tokens / original_tokens if original_tokens > 0 else 1.0
 
         # Record stats
-        self._stats_compressions += 1
-        self._stats_ratios.append(ratio)
-        self._stats_tokens_saved += max(0, original_tokens - compressed_tokens)
+        with self._stats_lock:
+            self._stats_compressions += 1
+            self._stats_ratios.append(ratio)
+            self._stats_tokens_saved += max(0, original_tokens - compressed_tokens)
 
         return CompressedMessages(
             messages=result,
@@ -458,13 +466,14 @@ class ContextCompressorV2:
 
     def get_stats(self) -> dict:
         """Return compression statistics."""
-        return {
-            "compressions_count": self._stats_compressions,
-            "avg_ratio": (
-                statistics.mean(self._stats_ratios) if self._stats_ratios else 0.0
-            ),
-            "tokens_saved": self._stats_tokens_saved,
-        }
+        with self._stats_lock:
+            return {
+                "compressions_count": self._stats_compressions,
+                "avg_ratio": (
+                    statistics.mean(self._stats_ratios) if self._stats_ratios else 0.0
+                ),
+                "tokens_saved": self._stats_tokens_saved,
+            }
 
     # -- internals ----------------------------------------------------------
 

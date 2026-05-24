@@ -166,6 +166,8 @@ class UsageTrackingHook(PostTurnHook):
     priority = 20
 
     def __init__(self) -> None:
+        import threading
+        self._lock = threading.Lock()
         self.cumulative: dict = {
             "total_turns": 0,
             "total_tool_calls": 0,
@@ -189,12 +191,13 @@ class UsageTrackingHook(PostTurnHook):
                 content = str(tr.get("content", ""))
                 turn_tokens += len(content) // 4
 
-            self.cumulative["total_turns"] += 1
-            self.cumulative["total_tool_calls"] += tool_call_count
-            self.cumulative["total_tokens_est"] += turn_tokens
-
-            elapsed = (time.perf_counter() - t0) * 1000
-            self.cumulative["total_duration_ms"] += elapsed
+            with self._lock:
+                self.cumulative["total_turns"] += 1
+                self.cumulative["total_tool_calls"] += tool_call_count
+                self.cumulative["total_tokens_est"] += turn_tokens
+                elapsed = (time.perf_counter() - t0) * 1000
+                self.cumulative["total_duration_ms"] += elapsed
+                cumulative_snapshot = dict(self.cumulative)
 
             return HookResult(
                 hook_name=self.name,
@@ -204,7 +207,7 @@ class UsageTrackingHook(PostTurnHook):
                     "turn_tool_results": tool_result_count,
                     "turn_tokens_est": turn_tokens,
                     "turn_elapsed_ms": round(elapsed, 2),
-                    "cumulative": dict(self.cumulative),
+                    "cumulative": cumulative_snapshot,
                 },
                 elapsed_ms=elapsed,
             )
