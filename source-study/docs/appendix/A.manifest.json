@@ -1,0 +1,505 @@
+{
+  "source_commit": "290fdc9481a70612bc5823aa4ed225c52c52aad3",
+  "items": [
+    {
+      "name": "AgentTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/AgentTool/AgentTool.tsx:1-1398",
+        "tools.ts:3-3"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "AskUserQuestionTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/AskUserQuestionTool/AskUserQuestionTool.tsx:1-266",
+        "tools.ts:73-73"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "BashTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/BashTool/BashTool.tsx:1-1144",
+        "tools.ts:5-5"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "BriefTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/BriefTool/BriefTool.ts:1-205",
+        "tools.ts:13-13"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "ConfigTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/ConfigTool/ConfigTool.ts:1-468",
+        "tools.ts:81-81"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "CronCreateTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:31-31"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "CronDeleteTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:32-32"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "CronListTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:33-33"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "CtxInspectTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:110-110"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "EnterPlanModeTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/EnterPlanModeTool/EnterPlanModeTool.ts:1-127",
+        "tools.ts:78-78"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "EnterWorktreeTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/EnterWorktreeTool/EnterWorktreeTool.ts:1-128",
+        "tools.ts:79-79"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "ExitPlanModeTool",
+      "category": "family",
+      "source_files": [
+        "tools/ExitPlanModeTool/prompt.ts:1-30"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "ExitPlanModeV2Tool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:57-57"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "ExitWorktreeTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/ExitWorktreeTool/ExitWorktreeTool.ts:1-330",
+        "tools.ts:80-80"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "FileEditTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/FileEditTool/FileEditTool.ts:1-626",
+        "tools.ts:6-6"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "FileReadTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/FileReadTool/FileReadTool.ts:1-1184",
+        "tools.ts:7-7"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "FileWriteTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/FileWriteTool/FileWriteTool.ts:1-435",
+        "tools.ts:8-8"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "GlobTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/GlobTool/GlobTool.ts:1-199",
+        "tools.ts:9-9"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "GrepTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/GrepTool/GrepTool.ts:1-578",
+        "tools.ts:59-59"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "ListMcpResourcesTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/ListMcpResourcesTool/ListMcpResourcesTool.ts:1-124",
+        "tools.ts:75-75"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "ListPeersTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:126-126"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "LSPTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/LSPTool/LSPTool.ts:1-861",
+        "tools.ts:74-74"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "McpAuthTool",
+      "category": "family",
+      "source_files": [
+        "tools/McpAuthTool/McpAuthTool.ts:1-216"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "MCPTool",
+      "category": "family",
+      "source_files": [
+        "tools/MCPTool/MCPTool.ts:1-78"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "MonitorTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:39-39"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "NotebookEditTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/NotebookEditTool/NotebookEditTool.ts:1-491",
+        "tools.ts:10-10"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "OverflowTestTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:107-107"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "PowerShellTool",
+      "category": "family",
+      "source_files": [
+        "tools/PowerShellTool/PowerShellTool.tsx:1-1001"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "PushNotificationTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:45-45"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "ReadMcpResourceTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/ReadMcpResourceTool/ReadMcpResourceTool.ts:1-159",
+        "tools.ts:76-76"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "RemoteTriggerTool",
+      "category": "family",
+      "source_files": [
+        "tools/RemoteTriggerTool/RemoteTriggerTool.ts:1-162"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "REPLTool",
+      "category": "family",
+      "source_files": [
+        "tools/REPLTool/constants.ts:1-47"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "ScheduleCronTool",
+      "category": "family",
+      "source_files": [
+        "tools/ScheduleCronTool/prompt.ts:1-136"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "SendMessageTool",
+      "category": "family",
+      "source_files": [
+        "tools/SendMessageTool/SendMessageTool.ts:1-918"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "SendUserFileTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:42-42"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "SkillTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/SkillTool/SkillTool.ts:1-1109",
+        "tools.ts:4-4"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "SleepTool",
+      "category": "family",
+      "source_files": [
+        "tools/SleepTool/prompt.ts:1-18"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "SnipTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:123-123"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "SubscribePRTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:50-50"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "SuggestBackgroundPRTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:20-20"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "SyntheticOutputTool",
+      "category": "family",
+      "source_files": [
+        "tools/SyntheticOutputTool/SyntheticOutputTool.ts:1-164"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "TaskCreateTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskCreateTool/TaskCreateTool.ts:1-139",
+        "tools.ts:82-82"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TaskGetTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskGetTool/TaskGetTool.ts:1-129",
+        "tools.ts:83-83"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TaskListTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskListTool/TaskListTool.ts:1-117",
+        "tools.ts:85-85"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TaskOutputTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskOutputTool/TaskOutputTool.tsx:1-584",
+        "tools.ts:54-54"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TaskStopTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskStopTool/TaskStopTool.ts:1-132",
+        "tools.ts:12-12"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TaskUpdateTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TaskUpdateTool/TaskUpdateTool.ts:1-407",
+        "tools.ts:84-84"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TeamCreateTool",
+      "category": "family",
+      "source_files": [
+        "tools/TeamCreateTool/TeamCreateTool.ts:1-241"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "TeamDeleteTool",
+      "category": "family",
+      "source_files": [
+        "tools/TeamDeleteTool/TeamDeleteTool.ts:1-140"
+      ],
+      "notes": "tools/ 目录存在；运行期是否装载受 tools.ts 中 feature/coordinator/SDK 条件影响"
+    },
+    {
+      "name": "TerminalCaptureTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:113-113"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "TestingPermissionTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:58-58"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "TodoWriteTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/TodoWriteTool/TodoWriteTool.ts:1-116",
+        "tools.ts:56-56"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "ToolSearchTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/ToolSearchTool/ToolSearchTool.ts:1-472",
+        "tools.ts:77-77"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "TungstenTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:60-60"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "VerifyPlanExecutionTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:91-91"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "WebBrowserTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:117-117"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    },
+    {
+      "name": "WebFetchTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/WebFetchTool/WebFetchTool.ts:1-319",
+        "tools.ts:11-11"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "WebSearchTool",
+      "category": "leaf",
+      "source_files": [
+        "tools/WebSearchTool/WebSearchTool.ts:1-436",
+        "tools.ts:55-55"
+      ],
+      "notes": "tools.ts 默认 register 的运行期叶子工具"
+    },
+    {
+      "name": "WorkflowTool",
+      "category": "leaf",
+      "source_files": [
+        "tools.ts:129-129"
+      ],
+      "notes": "由 tools.ts 引用、未独占 tools/ 顶层目录"
+    }
+  ]
+}

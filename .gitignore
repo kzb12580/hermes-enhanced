@@ -1,0 +1,23 @@
+# Large binary packages
+*.tgz
+*.tar.gz
+
+# Node modules (can be reinstalled)
+source-map/restored-src/node_modules/
+source-map/package/node_modules/
+source-study/node_modules/
+
+# Git directories from cloned repos
+source-map/.git/
+source-study/.git/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log
+source-map/package/
+source-map/claude-code-2.1.88.tgz
+source-map/README.md
