@@ -407,11 +407,12 @@ class HookPipeline:
         self._hooks = [h for h in self._hooks if h.name != name]
         return len(self._hooks) < before
 
-    async def run_all(self, ctx: HookContext) -> list[HookResult]:
+    async def run_all(self, ctx: HookContext, hook_timeout: float = 30.0) -> list[HookResult]:
         """Run every enabled hook in priority order.
 
         Args:
             ctx: The hook context for this turn.
+            hook_timeout: Per-hook timeout in seconds (default 30s).
 
         Returns:
             List of results, one per enabled hook (in execution order).
@@ -420,7 +421,14 @@ class HookPipeline:
         for hook in self._hooks:
             if not hook.enabled:
                 continue
-            result = await hook.execute(ctx)
+            try:
+                result = await asyncio.wait_for(hook.execute(ctx), timeout=hook_timeout)
+            except asyncio.TimeoutError:
+                result = HookResult(
+                    hook_name=hook.name,
+                    success=False,
+                    error=f"Hook '{hook.name}' timed out after {hook_timeout}s",
+                )
             results.append(result)
         return results
 

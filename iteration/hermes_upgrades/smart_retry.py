@@ -409,6 +409,42 @@ class SmartRetryManager:
             try:
                 result = executor_fn(tool_call)
                 elapsed = self._time_fn() - t0
+                # Check if result indicates a returned failure (e.g. has success=False)
+                if hasattr(result, 'success') and result.success is False:
+                    # Treat as failure for retry purposes
+                    error_msg = getattr(result, 'error', '') or 'Tool returned failure'
+                    category = classify_error(str(error_msg))
+                    circuit.record_failure()
+                    history.append({
+                        "attempt": attempt + 1,
+                        "success": False,
+                        "error": str(error_msg),
+                        "category": category.name,
+                        "elapsed": elapsed,
+                    })
+                    should_retry = (
+                        attempt < policy.max_retries
+                        and category in policy.retryable_categories
+                    )
+                    if not should_retry:
+                        self._stats["total_failures"] += 1
+                        return RetryResult(
+                            error=str(error_msg),
+                            success=False,
+                            result=result,
+                            attempts=attempt + 1,
+                            retries=attempt,
+                            total_delay=total_delay,
+                            error_category=category,
+                            circuit_state=circuit.state.value,
+                            history=history,
+                        )
+                    # Calculate backoff delay
+                    delay = self._calculate_delay(policy, attempt)
+                    total_delay += delay
+                    self._stats["total_retries"] += 1
+                    self._sleep_fn(delay)
+                    continue
 
                 # Success!
                 circuit.record_success()

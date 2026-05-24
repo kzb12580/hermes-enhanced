@@ -179,6 +179,8 @@ class StreamingToolExecutor:
     """
 
     def __init__(self, max_concurrent: int = 5) -> None:
+        if max_concurrent < 1:
+            raise ValueError(f"max_concurrent must be >= 1, got {max_concurrent}")
         self._max_concurrent = max_concurrent
 
     async def execute_streaming(
@@ -254,6 +256,14 @@ class StreamingToolExecutor:
                             error=str(exc),
                         )
                     )
+                except asyncio.CancelledError:
+                    await queue.put(
+                        ToolResult(
+                            tool_id=call.get("id", "unknown"),
+                            success=False,
+                            error="Task was cancelled",
+                        )
+                    )
 
         tasks = [asyncio.create_task(_run(call)) for call in tool_calls]
         remaining = len(tasks)
@@ -287,6 +297,9 @@ class StreamingToolExecutor:
                     yield item
         finally:
             # Ensure all tasks are settled
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
 

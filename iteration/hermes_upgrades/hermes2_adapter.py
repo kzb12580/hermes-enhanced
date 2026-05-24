@@ -39,6 +39,11 @@ except ImportError:
     from permission_pipeline import PermissionLevel, PermissionPipeline, PermissionRule
 
 try:
+    from .permission_pipeline import _is_dangerous_command
+except ImportError:
+    from permission_pipeline import _is_dangerous_command
+
+try:
     from .context_compressor_v2 import ContextCompressorV2
 except ImportError:
     from context_compressor_v2 import ContextCompressorV2
@@ -250,9 +255,23 @@ class Hermes2Engine:
                 result["warnings"].append(msg)
                 continue
             name = tc["name"]
+            # Validate that args is a dict before passing to permission check
             args = tc.get("args", {})
+            if not isinstance(args, dict):
+                msg = f"Invalid args for tool '{name}': expected dict, got {type(args).__name__} — denied"
+                _log.warning(msg)
+                result["warnings"].append(msg)
+                result["denied"].append({"name": name, "reason": msg})
+                continue
             decision = self.permissions.check(name, args)
             if decision.allowed:
+                # CRITICAL: Always check dangerous commands even for auto-approved tools
+                if name == "terminal" and _is_dangerous_command(args):
+                    result["denied"].append({
+                        "name": name,
+                        "reason": "Dangerous terminal command detected — blocked regardless of auto-approval",
+                    })
+                    continue
                 allowed_calls.append(tc)
             elif decision.needs_prompt:
                 # Check if caller provided a confirmation callback
@@ -265,6 +284,13 @@ class Hermes2Engine:
                         _log.warning("Permission callback error for %s: %s", name, exc)
                         approved = False
                     if approved:
+                        # Also check dangerous commands even when user-approved via callback
+                        if name == "terminal" and _is_dangerous_command(args):
+                            result["denied"].append({
+                                "name": name,
+                                "reason": "Dangerous terminal command detected — blocked regardless of approval",
+                            })
+                            continue
                         allowed_calls.append(tc)
                     else:
                         result["needs_prompt"].append({
