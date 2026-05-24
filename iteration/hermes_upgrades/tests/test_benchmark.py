@@ -317,13 +317,13 @@ def test_bench_coordinator_full_cycle():
             AgentProfile(
                 role=AgentRole.WORKER,
                 name="worker-1",
-                capabilities=["code", "research", "design", "deploy", "test", "data"],
+                capabilities=["code", "research", "design", "deploy", "test", "data", "review"],
                 max_tasks=10,
             ),
             AgentProfile(
                 role=AgentRole.WORKER,
                 name="worker-2",
-                capabilities=["code", "research", "design", "deploy", "test", "data"],
+                capabilities=["code", "research", "design", "deploy", "test", "data", "review"],
                 max_tasks=10,
             ),
         ])

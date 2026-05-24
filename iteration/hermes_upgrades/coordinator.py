@@ -192,9 +192,21 @@ class TaskScheduler:
         sorted_tasks = sorted(tasks, key=lambda t: t.priority)
         assignments: dict[str, list[str]] = {a.id: [] for a in self.agents}
 
+        # Build a lookup of task statuses by id for dependency checking
+        task_status_map: dict[str, TaskStatus] = {t.id: t.status for t in tasks}
+
         for task in sorted_tasks:
             if task.status not in (TaskStatus.PENDING,):
                 continue
+
+            # Check that all dependencies are COMPLETED
+            if task.dependencies:
+                deps_met = all(
+                    task_status_map.get(dep_id) == TaskStatus.COMPLETED
+                    for dep_id in task.dependencies
+                )
+                if not deps_met:
+                    continue
 
             # Find matching agents sorted by load (fewer active tasks first)
             candidates = [
@@ -397,8 +409,14 @@ class Coordinator:
             AggregatedResult summarizing the run.
         """
         tasks = self.plan(objective, context)
-        self.assign(tasks)
-        self.execute(tasks, executor_fn)
+        # Iterate assign-execute cycles to handle task dependencies
+        max_rounds = len(tasks) + 1
+        for _ in range(max_rounds):
+            self.assign(tasks)
+            self.execute(tasks, executor_fn)
+            # If all tasks are done or no new tasks were assigned, stop
+            if all(t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED) for t in tasks):
+                break
         if reviewer_fn:
             self.review(tasks, reviewer_fn)
         return self.aggregator.aggregate(tasks)

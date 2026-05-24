@@ -360,6 +360,17 @@ class AutoDreamer:
         with self._lock:
             return self._dream_locked()
 
+    def dream_if_needed(self) -> Optional[DreamReport]:
+        """Check thresholds and run dream in a single locked operation.
+
+        This prevents TOCTOU race conditions between should_dream() and dream().
+        Returns a DreamReport if dreaming was triggered, None otherwise.
+        """
+        with self._lock:
+            if not self._trigger.should_run(self._session_count, self._last_dream):
+                return None
+            return self._dream_locked()
+
     def _dream_locked(self) -> DreamReport:
         """Internal dream implementation (must hold self._lock)."""
         if not self._pending_summaries:

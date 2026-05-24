@@ -247,6 +247,14 @@ class StreamingToolExecutor:
                             error=f"Tool execution timed out after {per_tool_timeout}s",
                         )
                     )
+                except asyncio.CancelledError:
+                    await queue.put(
+                        ToolResult(
+                            tool_id=call.get("id", "unknown"),
+                            success=False,
+                            error="Task was cancelled",
+                        )
+                    )
                 except Exception as exc:
                     # Non-fatal: wrap as failed ToolResult
                     await queue.put(
@@ -254,14 +262,6 @@ class StreamingToolExecutor:
                             tool_id=call.get("id", "unknown"),
                             success=False,
                             error=str(exc),
-                        )
-                    )
-                except asyncio.CancelledError:
-                    await queue.put(
-                        ToolResult(
-                            tool_id=call.get("id", "unknown"),
-                            success=False,
-                            error="Task was cancelled",
                         )
                     )
 

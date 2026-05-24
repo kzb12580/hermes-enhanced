@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import copy
 import re
 import time
 from abc import ABC, abstractmethod
@@ -422,7 +423,9 @@ class HookPipeline:
             if not hook.enabled:
                 continue
             try:
-                result = await asyncio.wait_for(hook.execute(ctx), timeout=hook_timeout)
+                # Deepcopy ctx for each hook to prevent inter-hook mutation
+                ctx_copy = copy.deepcopy(ctx)
+                result = await asyncio.wait_for(hook.execute(ctx_copy), timeout=hook_timeout)
             except asyncio.TimeoutError:
                 result = HookResult(
                     hook_name=hook.name,

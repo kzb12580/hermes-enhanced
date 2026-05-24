@@ -16,6 +16,8 @@ Modules integrated:
 
 from __future__ import annotations
 
+SHELL_TOOLS: frozenset[str] = frozenset({"terminal", "bash", "sh", "powershell", "cmd"})
+
 import asyncio
 import logging
 from dataclasses import dataclass, field
@@ -266,7 +268,7 @@ class Hermes2Engine:
             decision = self.permissions.check(name, args)
             if decision.allowed:
                 # CRITICAL: Always check dangerous commands even for auto-approved tools
-                if name == "terminal" and _is_dangerous_command(args):
+                if name in SHELL_TOOLS and _is_dangerous_command(args):
                     result["denied"].append({
                         "name": name,
                         "reason": "Dangerous terminal command detected — blocked regardless of auto-approval",
@@ -285,7 +287,7 @@ class Hermes2Engine:
                         approved = False
                     if approved:
                         # Also check dangerous commands even when user-approved via callback
-                        if name == "terminal" and _is_dangerous_command(args):
+                        if name in SHELL_TOOLS and _is_dangerous_command(args):
                             result["denied"].append({
                                 "name": name,
                                 "reason": "Dangerous terminal command detected — blocked regardless of approval",

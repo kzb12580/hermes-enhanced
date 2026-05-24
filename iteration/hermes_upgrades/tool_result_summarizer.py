@@ -203,6 +203,11 @@ class TerminalSummarizer:
         if not lines:
             return "", []
 
+        # Early exit: if within token budget, return content as-is
+        # before expensive regex processing
+        if TokenEstimator.estimate_tokens(content) <= target_tokens:
+            return content, ["full output (within budget)"]
+
         parts = []
 
         # Extract exit code if present

@@ -375,7 +375,10 @@ class MemoryStore:
             return
         worst = min(
             self._entries.values(),
-            key=lambda e: (e.relevance_score, e.created_at),
+            key=lambda e: (
+                e.relevance_score - PRIORITY_ORDER.get(e.type, 0),
+                e.created_at,
+            ),
         )
         del self._entries[worst.id]
 

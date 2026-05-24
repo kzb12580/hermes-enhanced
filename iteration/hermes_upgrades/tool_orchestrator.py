@@ -142,50 +142,45 @@ def partition(
     classifier = classifier or ToolConcurrencyClassifier()
     detector = detector or FileConflictDetector()
 
-    read_batch: list[ToolCall] = []
-    write_batches: list[list[ToolCall]] = []
+    # Dependency-aware partitioning that preserves original order.
+    # Consecutive non-conflicting reads are grouped into one batch.
+    # Writes and conflicting reads each flush the current read batch
+    # and become their own single-item batch.
+    batches: list[list[ToolCall]] = []
+    pending_reads: list[ToolCall] = []
 
-    # First pass – split by class.
+    # Collect all write/ambiguous calls for conflict checks
+    write_calls = [
+        tc for tc in tool_calls
+        if classifier.classify(tc.name) != ConcurrencyClass.READ_ONLY
+    ]
+
     for tc in tool_calls:
         cls = classifier.classify(tc.name)
         if cls == ConcurrencyClass.READ_ONLY:
-            read_batch.append(tc)
+            # Check if this read conflicts with any write call
+            conflict = any(
+                detector.has_write_conflict(tc, w, classifier)
+                for w in write_calls
+            )
+            if conflict:
+                # Flush pending reads, then this read gets its own batch
+                if pending_reads:
+                    batches.append(pending_reads)
+                    pending_reads = []
+                batches.append([tc])
+            else:
+                pending_reads.append(tc)
         else:
-            write_batches.append([tc])
+            # Write/ambiguous: flush pending reads first
+            if pending_reads:
+                batches.append(pending_reads)
+                pending_reads = []
+            batches.append([tc])
 
-    # Note: read-vs-read conflict check was removed — two READ_ONLY tools
-    # can never trigger a write conflict, so the loop was dead code.
-    final_read: list[ToolCall] = list(read_batch)
-
-    # Check reads against writes for conflicts too.
-    # (A read that conflicts with a write that already appears later
-    # should run *after* that write – re-order.)
-    # For simplicity we keep the invariant: read batch runs first,
-    # then writes in order.  If a read touches a write path it's
-    # already been separated above by the write-vs-write check;
-    # we also need read-vs-write cross-check.
-    clean_reads: list[ToolCall] = []
-    deferred_reads: list[ToolCall] = []
-    write_calls_flat = [tc for batch in write_batches for tc in batch]
-    for tc in final_read:
-        conflict = False
-        for w in write_calls_flat:
-            if detector.has_write_conflict(tc, w, classifier):
-                conflict = True
-                break
-        if conflict:
-            deferred_reads.append(tc)
-        else:
-            clean_reads.append(tc)
-
-    batches: list[list[ToolCall]] = []
-    if clean_reads:
-        batches.append(clean_reads)
-    # Deferred reads go after their conflicting writes.
-    # Insert writes, then deferred reads at end.
-    batches.extend(write_batches)
-    if deferred_reads:
-        batches.append(deferred_reads)
+    # Flush any remaining reads
+    if pending_reads:
+        batches.append(pending_reads)
 
     return batches
 
