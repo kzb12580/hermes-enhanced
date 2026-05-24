@@ -234,7 +234,8 @@ class StdioTransport(McpTransport):
     async def connect(self) -> None:
         """Spawn subprocess and perform the MCP initialize handshake."""
         env = {**os.environ, **self._config.env}
-        assert self._config.command is not None
+        if self._config.command is None:
+            raise ValueError("MCP server command is required but got None")
         self._validate_command(self._config.command, self._config.args)
         self._process = await asyncio.create_subprocess_exec(
             self._config.command,
