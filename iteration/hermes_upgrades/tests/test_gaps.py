@@ -636,8 +636,8 @@ class TestCoordinatorGaps:
     def test_release_below_zero(self):
         agent = AgentProfile(role=AgentRole.WORKER, name="w", capabilities=[],
                              active_tasks=0)
-        agent.release_task()
-        assert agent.active_tasks == 0
+        with pytest.raises(ValueError, match="no active tasks"):
+            agent.release_task()
 
     def test_plan_empty(self):
         c = Coordinator()

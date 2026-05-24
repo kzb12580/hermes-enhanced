@@ -577,6 +577,10 @@ class ToolResultSummarizer:
             char_count += len(line)
 
         removed = total_lines - len(head_lines) - len(tail_lines)
+        if removed <= 0:
+            # Head and tail overlap or cover everything — keep original
+            return content, ["content is short enough, kept in full"]
+
         marker = f"\n[... {removed} lines omitted ({total_lines} total) ...]\n"
 
         preserved.append(f"first {len(head_lines)} lines")

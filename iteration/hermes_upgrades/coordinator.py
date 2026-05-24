@@ -7,6 +7,7 @@ for coordinating multiple AI agents on complex objectives.
 from __future__ import annotations
 
 import re
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ class AgentProfile:
     max_tasks: int = 3
     active_tasks: int = 0
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def can_handle(self, required_capabilities: list[str]) -> bool:
         """Check if this agent covers all required capabilities."""
@@ -52,13 +54,16 @@ class AgentProfile:
 
     def assign_task(self) -> None:
         """Increment active task count."""
-        if not self.has_capacity():
-            raise ValueError(f"Agent {self.name} is at max capacity ({self.max_tasks})")
-        self.active_tasks += 1
+        with self._lock:
+            if not self.has_capacity():
+                raise ValueError(f"Agent {self.name} is at max capacity ({self.max_tasks})")
+            self.active_tasks += 1
 
     def release_task(self) -> None:
         """Decrement active task count."""
-        if self.active_tasks > 0:
+        with self._lock:
+            if self.active_tasks <= 0:
+                raise ValueError(f"Agent {self.name} has no active tasks to release")
             self.active_tasks -= 1
 
 

@@ -334,6 +334,7 @@ class SmartRetryManager:
         self._sleep_fn = sleep_fn or time.sleep
         self._circuits: dict[str, CircuitBreaker] = {}
         self._circuit_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
 
         # Stats
         self._stats = {
@@ -384,7 +385,8 @@ class SmartRetryManager:
         -------
         RetryResult with final result and retry metadata.
         """
-        self._stats["total_executions"] += 1
+        with self._stats_lock:
+            self._stats["total_executions"] += 1
         policy = self.get_policy(tool_call.name)
         circuit = self.get_circuit(tool_call.name)
         history: list[dict] = []
@@ -393,7 +395,8 @@ class SmartRetryManager:
         for attempt in range(policy.max_retries + 1):
             # Check circuit breaker
             if not circuit.allow_request():
-                self._stats["circuit_blocks"] += 1
+                with self._stats_lock:
+                    self._stats["circuit_blocks"] += 1
                 return RetryResult(
                     success=False,
                     error=f"Circuit breaker OPEN for {tool_call.name}",
@@ -428,7 +431,8 @@ class SmartRetryManager:
                         and category in policy.retryable_categories
                     )
                     if not should_retry:
-                        self._stats["total_failures"] += 1
+                        with self._stats_lock:
+                            self._stats["total_failures"] += 1
                         return RetryResult(
                             error=str(error_msg),
                             success=False,
@@ -443,13 +447,15 @@ class SmartRetryManager:
                     # Calculate backoff delay
                     delay = self._calculate_delay(policy, attempt)
                     total_delay += delay
-                    self._stats["total_retries"] += 1
+                    with self._stats_lock:
+                        self._stats["total_retries"] += 1
                     self._sleep_fn(delay)
                     continue
 
                 # Success!
                 circuit.record_success()
-                self._stats["total_successes"] += 1
+                with self._stats_lock:
+                    self._stats["total_successes"] += 1
                 history.append({
                     "attempt": attempt + 1,
                     "success": True,
@@ -492,7 +498,8 @@ class SmartRetryManager:
                 )
 
                 if not should_retry:
-                    self._stats["total_failures"] += 1
+                    with self._stats_lock:
+                        self._stats["total_failures"] += 1
                     return RetryResult(
                         error=error_msg,
                         success=False,
@@ -506,7 +513,8 @@ class SmartRetryManager:
 
                 # Check budget before retrying
                 if budget_check and not budget_check():
-                    self._stats["total_failures"] += 1
+                    with self._stats_lock:
+                        self._stats["total_failures"] += 1
                     return RetryResult(
                         error=f"{error_msg} (retry skipped: insufficient budget)",
                         success=False,
@@ -521,11 +529,13 @@ class SmartRetryManager:
                 # Calculate backoff delay
                 delay = self._calculate_delay(policy, attempt)
                 total_delay += delay
-                self._stats["total_retries"] += 1
+                with self._stats_lock:
+                    self._stats["total_retries"] += 1
                 self._sleep_fn(delay)
 
         # Should not reach here, but handle gracefully
-        self._stats["total_failures"] += 1
+        with self._stats_lock:
+            self._stats["total_failures"] += 1
         return RetryResult(
             error="Exhausted all retries",
             success=False,
@@ -559,8 +569,9 @@ class SmartRetryManager:
         """Reset all state."""
         for circuit in self._circuits.values():
             circuit.reset()
-        for key in self._stats:
-            self._stats[key] = 0
+        with self._stats_lock:
+            for key in self._stats:
+                self._stats[key] = 0
 
     # -- Internals -----------------------------------------------------------
 

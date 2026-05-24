@@ -171,6 +171,13 @@ class StdioTransport(McpTransport):
         """
         if not command or not command.strip():
             raise ValueError("MCP command must not be empty")
+        # Check against blocked commands denylist
+        import os as _os
+        base_cmd = _os.path.basename(command.strip())
+        if base_cmd in StdioTransport._BLOCKED_COMMANDS:
+            raise ValueError(
+                f"MCP command '{base_cmd}' is on the denylist and is not allowed"
+            )
         # Check for shell metacharacters in command or args
         dangerous_chars = set(";&|`$(){}!#~")
         for ch in dangerous_chars:

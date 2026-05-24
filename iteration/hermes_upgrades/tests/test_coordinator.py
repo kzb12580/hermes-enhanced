@@ -83,8 +83,8 @@ class TestAgentProfile:
 
     def test_release_task_at_zero_stays_zero(self):
         agent = make_worker(active_tasks=0)
-        agent.release_task()
-        assert agent.active_tasks == 0
+        with pytest.raises(ValueError, match="no active tasks"):
+            agent.release_task()
 
 
 # ── TaskSpec ──────────────────────────────────────────────────────────────────
