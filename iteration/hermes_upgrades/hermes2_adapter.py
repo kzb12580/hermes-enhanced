@@ -192,6 +192,10 @@ class Hermes2Engine:
         # Turn counter
         self._turn_count: int = 0
 
+        # Reusable thread-pool for running hooks when an event loop is active
+        import concurrent.futures
+        self._hook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
     # ── Public API ───────────────────────────────────────────────────────
 
     def process_tool_calls(
@@ -239,7 +243,13 @@ class Hermes2Engine:
         # 1. Permission check → filter denied, handle PROMPT
         allowed_calls: list[dict] = []
         for tc in dicts:
-            name = tc.get("name", "")
+            # Validate that each tool_call has a "name" key with a string value
+            if "name" not in tc or not isinstance(tc["name"], str) or not tc["name"]:
+                msg = f"Invalid tool_call entry (missing or non-string 'name'): {tc!r} — skipped"
+                _log.warning(msg)
+                result["warnings"].append(msg)
+                continue
+            name = tc["name"]
             args = tc.get("args", {})
             decision = self.permissions.check(name, args)
             if decision.allowed:
@@ -376,7 +386,7 @@ class Hermes2Engine:
             result[0] = dict(result[0])
             existing = result[0].get("content", "")
             # Coerce non-string content (e.g. OpenAI list format) to string
-            existing = extract_text_from_content(existing)
+            existing = str(extract_text_from_content(existing))
             result[0]["content"] = context_str + "\n\n" + existing
         else:
             result.insert(0, {"role": "system", "content": context_str})
@@ -451,8 +461,13 @@ class Hermes2Engine:
         tags : list[str] | None
             Optional tags for search boosting.
         """
+        try:
+            mem_type = MemoryType(type)
+        except ValueError:
+            valid = [e.value for e in MemoryType]
+            return f"Error: invalid memory type {type!r}. Valid types: {valid}"
         entry = MemoryEntry(
-            type=MemoryType(type),
+            type=mem_type,
             content=content,
             tags=tags or [],
             source="api",
@@ -474,10 +489,7 @@ class Hermes2Engine:
 
         if loop and loop.is_running():
             # Already inside an event loop — use a new thread
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                results = pool.submit(asyncio.run, self.hooks.run_all(ctx)).result()
+            results = self._hook_executor.submit(asyncio.run, self.hooks.run_all(ctx)).result()
         else:
             results = asyncio.run(self.hooks.run_all(ctx))
 

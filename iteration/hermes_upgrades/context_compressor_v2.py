@@ -115,7 +115,9 @@ class PressureMonitor:
         """
         tokens = _total_tokens(messages)
         if self.model_token_limit <= 0:
-            pressure = 1.0
+            raise ValueError(
+                f"model_token_limit must be positive, got {self.model_token_limit}"
+            )
         else:
             pressure = min(1.0, tokens / self.model_token_limit)
         self.history.append(pressure)

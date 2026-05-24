@@ -158,15 +158,15 @@ class TestPressureMonitorEdgeCases:
         """Division by zero when model_token_limit is 0."""
         monitor = PressureMonitor(model_token_limit=0)
         messages = [{"role": "user", "content": "hello"}]
-        pressure = monitor.update(messages)
-        assert pressure == 1.0
+        with pytest.raises(ValueError, match="model_token_limit must be positive"):
+            monitor.update(messages)
 
     def test_update_with_negative_token_limit(self):
         """Negative token limit shouldn't crash."""
         monitor = PressureMonitor(model_token_limit=-100)
         messages = [{"role": "user", "content": "hello"}]
-        pressure = monitor.update(messages)
-        assert 0.0 <= pressure <= 1.0
+        with pytest.raises(ValueError, match="model_token_limit must be positive"):
+            monitor.update(messages)
 
 
 # ============================================================================
