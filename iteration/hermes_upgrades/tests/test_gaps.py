@@ -362,7 +362,7 @@ class TestContextCompressorV2Gaps:
 # ============================================================================
 
 from hermes_upgrades.auto_dream import (
-    AutoDreamer, DreamReport, DreamTrigger,
+    AutoDreamer, ConsolidationResult, DreamReport, DreamTrigger,
     MemoryConsolidator, SessionSummary, TranscriptAnalyzer,
     _keywords,
 )
@@ -476,9 +476,15 @@ class TestAutoDreamGaps:
         recent = MemoryEntry(type=MemoryType.MEMORY, content="new",
                              access_count=0, relevance_score=0.5,
                              created_at=now)
-        consolidator.consolidate([], [high, old, recent])
-        assert high.relevance_score > 1.0
-        assert old.relevance_score < 0.5
+        result = consolidator.consolidate([], [high, old, recent])
+        # Promoted/demoted should be in result, not in-place
+        assert len(result.promoted) == 1
+        assert result.promoted[0].relevance_score > 1.0
+        assert len(result.demoted) == 1
+        assert result.demoted[0].relevance_score < 0.5
+        # Originals unchanged
+        assert high.relevance_score == 1.0
+        assert old.relevance_score == 0.5
         assert recent.relevance_score == 0.5
 
     def test_dreamer_record_and_should_dream(self):

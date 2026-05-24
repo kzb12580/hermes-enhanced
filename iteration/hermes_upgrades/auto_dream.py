@@ -54,6 +54,21 @@ class DreamReport:
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+@dataclass
+class ConsolidationResult:
+    """Result of a memory consolidation pass.
+
+    Attributes:
+        new_entries: Newly created episodic memories from session summaries.
+        promoted: Copies of memories whose relevance was boosted.
+        demoted: Copies of memories whose relevance was reduced.
+    """
+
+    new_entries: list[MemoryEntry] = field(default_factory=list)
+    promoted: list[MemoryEntry] = field(default_factory=list)
+    demoted: list[MemoryEntry] = field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # DreamTrigger
 # ---------------------------------------------------------------------------
@@ -211,16 +226,23 @@ class MemoryConsolidator:
         self,
         summaries: list[SessionSummary],
         existing_memories: list[MemoryEntry],
-    ) -> list[MemoryEntry]:
-        """Return a list of new/updated :class:`MemoryEntry` objects.
+    ) -> ConsolidationResult:
+        """Run consolidation and return a :class:`ConsolidationResult`.
 
         * Deduplicates existing memories by content similarity.
         * Promotes frequently accessed memories.
         * Demotes rarely accessed old memories.
         * Creates new episodic memories from session summaries.
+
+        The input *existing_memories* list is **not** modified.  Promoted
+        and demoted entries are deep copies with updated relevance scores.
         """
+        import copy
+
         now = datetime.now(timezone.utc)
         new_entries: list[MemoryEntry] = []
+        promoted: list[MemoryEntry] = []
+        demoted: list[MemoryEntry] = []
 
         # --- Create episodic memories from summaries -----------------------
         for i, s in enumerate(summaries):
@@ -242,24 +264,34 @@ class MemoryConsolidator:
                 ))
 
         # --- Promote frequently accessed memories --------------------------
-        promote_count = 0
         for mem in existing_memories:
             if mem.access_count >= 5 and mem.relevance_score < 2.0:
-                mem.relevance_score = min(mem.relevance_score + 0.3, 2.0)
-                promote_count += 1
+                promoted_mem = copy.deepcopy(mem)
+                promoted_mem.relevance_score = min(
+                    promoted_mem.relevance_score + 0.3, 2.0
+                )
+                promoted.append(promoted_mem)
 
         # --- Demote rarely accessed old memories ---------------------------
-        demote_count = 0
         cutoff = now - timedelta(days=14)
         for mem in existing_memories:
-            if mem.access_count == 0 and mem.created_at < cutoff and mem.relevance_score > 0.1:
-                mem.relevance_score = max(mem.relevance_score - 0.2, 0.1)
-                demote_count += 1
+            if (mem.access_count == 0
+                    and mem.created_at < cutoff
+                    and mem.relevance_score > 0.1):
+                demoted_mem = copy.deepcopy(mem)
+                demoted_mem.relevance_score = max(
+                    demoted_mem.relevance_score - 0.2, 0.1
+                )
+                demoted.append(demoted_mem)
 
-        self._last_promote_count = promote_count
-        self._last_demote_count = demote_count
+        self._last_promote_count = len(promoted)
+        self._last_demote_count = len(demoted)
 
-        return new_entries
+        return ConsolidationResult(
+            new_entries=new_entries,
+            promoted=promoted,
+            demoted=demoted,
+        )
 
     def get_promote_count(self) -> int:
         """Return number of memories promoted in last consolidation."""
@@ -322,23 +354,31 @@ class AutoDreamer:
         summaries = list(self._pending_summaries)
         existing = list(self._store.entries)
 
-        # Consolidate: create new episodic memories
-        new_memories = self._consolidator.consolidate(summaries, existing)
+        # Consolidate: create new episodic memories (non-destructive)
+        result = self._consolidator.consolidate(summaries, existing)
 
-        # Track promote/demote counts
-        promote_count = 0
-        demote_count = 0
         now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=14)
-        for mem in existing:
-            if mem.access_count >= 5 and mem.relevance_score < 2.0:
-                promote_count += 1
-            if mem.access_count == 0 and mem.created_at < cutoff and mem.relevance_score > 0.1:
-                demote_count += 1
+
+        # Apply promoted/demoted changes back to the store
+        for i, mem in enumerate(self._store.entries):
+            # Find matching promoted entry by content + original access count
+            for pm in result.promoted:
+                if pm.content == mem.content and pm.access_count == mem.access_count:
+                    self._store.entries[i].relevance_score = pm.relevance_score
+                    break
+            else:
+                # Only check demoted if not already promoted
+                for dm in result.demoted:
+                    if dm.content == mem.content and dm.access_count == mem.access_count:
+                        self._store.entries[i].relevance_score = dm.relevance_score
+                        break
+
+        promote_count = len(result.promoted)
+        demote_count = len(result.demoted)
 
         # Merge similar new memories
-        merged_memories = self._merge_similar(new_memories)
-        merge_count = len(new_memories) - len(merged_memories)
+        merged_memories = self._merge_similar(result.new_entries)
+        merge_count = len(result.new_entries) - len(merged_memories)
 
         # Add to store
         for mem in merged_memories:
@@ -393,21 +433,28 @@ class AutoDreamer:
         # With length-based early skip to avoid expensive SequenceMatcher
         merged: list[MemoryEntry] = []
         used: set[int] = set()
+        total = len(unique)
 
         for i, mem_a in enumerate(unique):
             if i in used:
                 continue
             best = mem_a
-            for j in range(i + 1, len(unique)):
+            # Early exit: if all remaining items are used, stop
+            if len(used) >= total - 1:
+                merged.append(best)
+                break
+            for j in range(i + 1, total):
                 if j in used:
                     continue
                 mem_b = unique[j]
-                # Length guard: skip if content lengths differ by >3x
+                # Zero-length guard: skip comparison if either content is empty
                 len_a, len_b = len(best.content), len(mem_b.content)
-                if len_a > 0 and len_b > 0:
-                    length_ratio = max(len_a, len_b) / min(len_a, len_b)
-                    if length_ratio > 3.0:
-                        continue
+                if len_a == 0 or len_b == 0:
+                    continue
+                # Length guard: skip if content lengths differ by >3x
+                length_ratio = max(len_a, len_b) / min(len_a, len_b)
+                if length_ratio > 3.0:
+                    continue
                 sim = MemoryConsolidator.content_similarity(
                     best.content, mem_b.content
                 )

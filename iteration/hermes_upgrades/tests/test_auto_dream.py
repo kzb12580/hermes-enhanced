@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from hermes_upgrades.memory_system import MemoryEntry, MemoryStore, MemoryType
 from hermes_upgrades.auto_dream import (
     AutoDreamer,
+    ConsolidationResult,
     DreamReport,
     DreamTrigger,
     MemoryConsolidator,
@@ -256,25 +257,29 @@ class TestMemoryConsolidator:
                 topics=["api", "backend"],
             )
         ]
-        new_entries = consolidator.consolidate(summaries, [])
-        assert len(new_entries) >= 1
-        assert all(e.type == MemoryType.EPISODIC for e in new_entries)
-        assert any("FastAPI" in e.content for e in new_entries)
+        result = consolidator.consolidate(summaries, [])
+        assert isinstance(result, ConsolidationResult)
+        assert len(result.new_entries) >= 1
+        assert all(e.type == MemoryType.EPISODIC for e in result.new_entries)
+        assert any("FastAPI" in e.content for e in result.new_entries)
 
     def test_promote_frequently_accessed_memories(self):
         """Should boost relevance for memories with access_count >= 5."""
         consolidator = MemoryConsolidator()
         mem = _make_memory(content="popular memory", access_count=10, relevance=0.5)
-        consolidator.consolidate([], [mem])
-        assert mem.relevance_score > 0.5
-        assert mem.relevance_score <= 2.0
+        result = consolidator.consolidate([], [mem])
+        assert len(result.promoted) == 1
+        assert result.promoted[0].relevance_score > 0.5
+        assert result.promoted[0].relevance_score <= 2.0
+        # Original should NOT be modified
+        assert mem.relevance_score == 0.5
 
     def test_do_not_promote_already_high_relevance(self):
         """Should not promote memories that are already at relevance 2.0."""
         consolidator = MemoryConsolidator()
         mem = _make_memory(content="high relevance", access_count=10, relevance=2.0)
-        consolidator.consolidate([], [mem])
-        assert mem.relevance_score == 2.0
+        result = consolidator.consolidate([], [mem])
+        assert len(result.promoted) == 0
 
     def test_demote_old_unused_memories(self):
         """Should reduce relevance for old, unused memories."""
@@ -285,9 +290,12 @@ class TestMemoryConsolidator:
             relevance=0.8,
             created_days_ago=30,
         )
-        consolidator.consolidate([], [mem])
-        assert mem.relevance_score < 0.8
-        assert mem.relevance_score >= 0.1
+        result = consolidator.consolidate([], [mem])
+        assert len(result.demoted) == 1
+        assert result.demoted[0].relevance_score < 0.8
+        assert result.demoted[0].relevance_score >= 0.1
+        # Original should NOT be modified
+        assert mem.relevance_score == 0.8
 
     def test_do_not_demote_below_minimum(self):
         """Should not demote below relevance 0.1."""
@@ -298,8 +306,9 @@ class TestMemoryConsolidator:
             relevance=0.15,
             created_days_ago=30,
         )
-        consolidator.consolidate([], [mem])
-        assert mem.relevance_score >= 0.1
+        result = consolidator.consolidate([], [mem])
+        assert len(result.demoted) == 1
+        assert result.demoted[0].relevance_score >= 0.1
 
     def test_do_not_demote_recent_memories(self):
         """Should not demote memories created less than 14 days ago."""
@@ -310,7 +319,8 @@ class TestMemoryConsolidator:
             relevance=0.8,
             created_days_ago=5,
         )
-        consolidator.consolidate([], [mem])
+        result = consolidator.consolidate([], [mem])
+        assert len(result.demoted) == 0
         assert mem.relevance_score == 0.8
 
     def test_do_not_demote_accessed_memories(self):
@@ -322,7 +332,8 @@ class TestMemoryConsolidator:
             relevance=0.8,
             created_days_ago=30,
         )
-        consolidator.consolidate([], [mem])
+        result = consolidator.consolidate([], [mem])
+        assert len(result.demoted) == 0
         assert mem.relevance_score == 0.8
 
     def test_content_similarity_identical(self):
@@ -343,15 +354,15 @@ class TestMemoryConsolidator:
     def test_empty_summaries_no_new_memories(self):
         """Empty summaries should produce no new memories."""
         consolidator = MemoryConsolidator()
-        new_entries = consolidator.consolidate([], [])
-        assert new_entries == []
+        result = consolidator.consolidate([], [])
+        assert result.new_entries == []
 
     def test_summary_with_no_extractable_info(self):
         """Summary with no decisions/errors/preferences/topics produces nothing."""
         consolidator = MemoryConsolidator()
         summaries = [SessionSummary()]
-        new_entries = consolidator.consolidate(summaries, [])
-        assert new_entries == []
+        result = consolidator.consolidate(summaries, [])
+        assert result.new_entries == []
 
 
 # ===========================================================================

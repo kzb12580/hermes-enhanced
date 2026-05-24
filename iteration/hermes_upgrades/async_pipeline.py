@@ -116,20 +116,33 @@ class Pipeline:
         """Run *input_data* through every stage, yielding final outputs.
 
         If there are no stages the input itself is yielded.
+        Intermediate stages buffer their results, but the final stage
+        yields items immediately for true streaming behaviour.
         """
         if not self._stages:
             yield input_data
             return
 
         current: list[Any] = [input_data]
-        for stage in self._stages:
-            next_items: list[Any] = []
-            for item in current:
-                async for out in stage(item):
-                    next_items.append(out)
-            current = next_items
-        for item in current:
-            yield item
+        for stage_idx, stage in enumerate(self._stages):
+            is_last = stage_idx == len(self._stages) - 1
+            try:
+                if is_last:
+                    # Final stage: yield items immediately (true streaming)
+                    for item in current:
+                        async for out in stage(item):
+                            yield out
+                else:
+                    # Intermediate stage: buffer for next stage
+                    next_items: list[Any] = []
+                    for item in current:
+                        async for out in stage(item):
+                            next_items.append(out)
+                    current = next_items
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Pipeline stage {stage.name!r} failed: {exc}"
+                ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +185,8 @@ class StreamingToolExecutor:
         self,
         tool_calls: list[dict[str, Any]],
         executor_fn: Callable[[dict[str, Any]], Awaitable[ToolResult]],
+        per_tool_timeout: float = 60.0,
+        global_timeout: float | None = None,
     ) -> AsyncIterator[ToolResult]:
         """Yield ``ToolResult`` objects as each tool completes.
 
@@ -179,26 +194,57 @@ class StreamingToolExecutor:
             tool_calls: List of tool-call dicts (must include ``id`` key).
             executor_fn: Async callable that runs one tool call and returns
                 a ``ToolResult``.
+            per_tool_timeout: Timeout in seconds for each individual tool
+                invocation (default 60s).
+            global_timeout: Optional total timeout in seconds for the
+                entire execution batch.
 
         Yields:
             ToolResult in completion order.
         """
         semaphore = asyncio.Semaphore(self._max_concurrent)
-        queue: asyncio.Queue[ToolResult | BaseException] = asyncio.Queue()
+        queue: asyncio.Queue[ToolResult | BaseException | None] = asyncio.Queue()
         fatal_event = asyncio.Event()
+        start_time = asyncio.get_event_loop().time()
+
+        def _remaining_global() -> float | None:
+            if global_timeout is None:
+                return None
+            elapsed = asyncio.get_event_loop().time() - start_time
+            return max(0.0, global_timeout - elapsed)
 
         async def _run(call: dict[str, Any]) -> None:
             if fatal_event.is_set():
+                await queue.put(None)  # signal skipped
                 return
             async with semaphore:
                 if fatal_event.is_set():
+                    await queue.put(None)  # signal skipped
                     return
                 try:
-                    result = await executor_fn(call)
+                    # Wrap executor call so that SystemExit/KeyboardInterrupt
+                    # are caught *inside* this task (CPython's Task.__step
+                    # re-raises BaseExceptions instead of storing them).
+                    async def _safe_exec():
+                        try:
+                            return await executor_fn(call)
+                        except (SystemExit, KeyboardInterrupt) as exc:
+                            return exc
+
+                    result = await asyncio.wait_for(
+                        _safe_exec(), timeout=per_tool_timeout
+                    )
+                    if isinstance(result, BaseException):
+                        fatal_event.set()
                     await queue.put(result)
-                except (SystemExit, KeyboardInterrupt) as exc:
-                    fatal_event.set()
-                    await queue.put(exc)
+                except asyncio.TimeoutError:
+                    await queue.put(
+                        ToolResult(
+                            tool_id=call.get("id", "unknown"),
+                            success=False,
+                            error=f"Tool execution timed out after {per_tool_timeout}s",
+                        )
+                    )
                 except Exception as exc:
                     # Non-fatal: wrap as failed ToolResult
                     await queue.put(
@@ -212,19 +258,36 @@ class StreamingToolExecutor:
         tasks = [asyncio.create_task(_run(call)) for call in tool_calls]
         remaining = len(tasks)
 
-        while remaining > 0:
-            item = await queue.get()
-            if isinstance(item, BaseException):
-                # Fatal – cancel everything and re-raise
-                for t in tasks:
-                    t.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-                raise item
-            remaining -= 1
-            yield item
+        try:
+            while remaining > 0:
+                timeout_val = _remaining_global()
+                if timeout_val is not None and timeout_val <= 0:
+                    raise asyncio.TimeoutError(
+                        f"Global timeout of {global_timeout}s exceeded"
+                    )
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=timeout_val,
+                    )
+                except asyncio.TimeoutError:
+                    for t in tasks:
+                        t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    raise
 
-        # Ensure all tasks are settled
-        await asyncio.gather(*tasks, return_exceptions=True)
+                if isinstance(item, BaseException):
+                    # Fatal – cancel everything and re-raise
+                    for t in tasks:
+                        t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    raise item
+                remaining -= 1
+                if item is not None:
+                    yield item
+        finally:
+            # Ensure all tasks are settled
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # ---------------------------------------------------------------------------

@@ -172,8 +172,9 @@ class MicrocompactLevel:
         result: list[dict] = []
         for i, msg in enumerate(messages):
             if i in prune_set:
-                # Clear content but keep the message structure
-                pruned = dict(msg)
+                # Deep-copy to avoid mutating the original message's
+                # nested structures (e.g. tool_calls lists)
+                pruned = copy.deepcopy(msg)
                 pruned["content"] = "[tool result pruned — context compression]"
                 result.append(pruned)
             else:
