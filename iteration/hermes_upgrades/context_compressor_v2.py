@@ -461,17 +461,18 @@ class ContextCompressorV2:
     ) -> tuple[str, list[dict]]:
         """Try micro → reactive → full, return first that meets threshold."""
         target = self.profile.pressure_threshold - 0.3  # lower target = more aggressive compression
+        original_tokens = _total_tokens(messages)
 
         # Micro
         result = MicrocompactLevel.prune_old_tool_results(
             messages, keep_last_n=self.profile.keep_last_n
         )
-        if self._improvement_ok(messages, result):
+        if self._improvement_ok(messages, result, original_tokens):
             return "micro", result
 
         # Reactive
         result = ReactiveLevel.compress(messages, target_ratio=target)
-        if self._improvement_ok(messages, result):
+        if self._improvement_ok(messages, result, original_tokens):
             return "reactive", result
 
         # Full (best-effort without LLM — aggressive reactive)
@@ -479,8 +480,9 @@ class ContextCompressorV2:
         return "full", result
 
     @staticmethod
-    def _improvement_ok(original: list[dict], compressed: list[dict]) -> bool:
+    def _improvement_ok(original: list[dict], compressed: list[dict],
+                        original_tokens: int | None = None) -> bool:
         """Return True if compression achieved at least a 10% reduction."""
-        o = _total_tokens(original)
+        o = original_tokens if original_tokens is not None else _total_tokens(original)
         c = _total_tokens(compressed)
         return c < o * 0.9 if o > 0 else False

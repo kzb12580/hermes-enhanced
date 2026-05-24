@@ -93,9 +93,12 @@ STOP_WORDS = frozenset(
 )
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
 def _tokenize(text: str) -> list[str]:
     """Lowercase alphanumeric tokens, excluding stop words."""
-    tokens = re.findall(r"[a-z0-9]+", text.lower())
+    tokens = _TOKEN_RE.findall(text.lower())
     return [t for t in tokens if t not in STOP_WORDS and len(t) > 1]
 
 
@@ -173,6 +176,7 @@ class MemoryStore:
         self.storage_path = Path(storage_path) if storage_path else None
         self._entries: dict[str, MemoryEntry] = {}
         self._search = MemorySearch()
+        self._dirty: bool = False
         if self.storage_path and self.storage_path.exists():
             self.load()
 
@@ -183,7 +187,7 @@ class MemoryStore:
         if len(self._entries) >= self.max_entries:
             self._evict()
         self._entries[entry.id] = entry
-        self._auto_save()
+        self._auto_save_immediate()
         return entry.id
 
     def get(self, id: str) -> Optional[MemoryEntry]:
@@ -192,7 +196,7 @@ class MemoryStore:
         if entry:
             entry.access_count += 1
             entry.accessed_at = datetime.now(timezone.utc)
-            self._auto_save()
+            self._auto_save()  # dirty flag only — access stats are non-critical
         return entry
 
     def search(self, query: str, type: Optional[MemoryType] = None,
@@ -215,16 +219,27 @@ class MemoryStore:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [e for _, e in scored[:limit]]
 
+    # Allowed updatable fields (prevents setting internal/computed attributes)
+    _UPDATABLE_FIELDS: frozenset[str] = frozenset({
+        "type", "content", "tags", "relevance_score", "source", "access_count",
+    })
+
     def update(self, id: str, **kwargs) -> bool:
-        """Update fields on an existing entry."""
+        """Update fields on an existing entry.
+
+        Only allows updating safe fields: content, tags, relevance_score,
+        source, access_count. Prevents modification of id, type, created_at,
+        and accessed_at through this interface.
+        """
         entry = self._entries.get(id)
         if not entry:
             return False
         for key, value in kwargs.items():
+            if key not in self._UPDATABLE_FIELDS:
+                continue
             if key == "type" and isinstance(value, str):
                 value = MemoryType(value)
-            if hasattr(entry, key):
-                setattr(entry, key, value)
+            setattr(entry, key, value)
         self._auto_save()
         return True
 
@@ -232,7 +247,7 @@ class MemoryStore:
         """Remove entry by id."""
         if id in self._entries:
             del self._entries[id]
-            self._auto_save()
+            self._auto_save_immediate()
             return True
         return False
 
@@ -273,6 +288,7 @@ class MemoryStore:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         data = [e.to_dict() for e in self._entries.values()]
         self.storage_path.write_text(json.dumps(data, indent=2))
+        self._dirty = False
 
     def load(self) -> None:
         """Load entries from JSON file."""
@@ -284,8 +300,20 @@ class MemoryStore:
     # -- Internal ------------------------------------------------------------
 
     def _auto_save(self) -> None:
+        """Mark dirty — will persist on next flush()."""
+        if self.storage_path:
+            self._dirty = True
+
+    def _auto_save_immediate(self) -> None:
+        """Persist to disk immediately (for structural changes)."""
         if self.storage_path:
             self.save()
+
+    def flush(self) -> None:
+        """Explicitly persist pending changes to disk."""
+        if self._dirty and self.storage_path:
+            self.save()
+            self._dirty = False
 
     def _evict(self) -> None:
         """Remove lowest-relevance, oldest entry."""
@@ -414,8 +442,9 @@ class MemoryInjector:
             header = f"### {label}\n"
             body = "\n".join(sections[label]) + "\n"
             segment = header + body
-            if len("".join(parts)) + len(segment) > char_budget:
-                remaining = char_budget - len("".join(parts))
+            current_len = len("".join(parts))
+            if current_len + len(segment) > char_budget:
+                remaining = char_budget - current_len
                 if remaining > len(header) + 20:
                     # Truncate body
                     allowed = remaining - len(header)

@@ -71,11 +71,42 @@ class PermissionRule:
 
 # Pre-compiled dangerous pattern detection for terminal commands
 _DANGEROUS_PATTERNS: list[re.Pattern[str]] = [
+    # Destructive file operations
     re.compile(r"rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/"),
+    re.compile(r"rm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+/"),
+    re.compile(r"\brm\s+-[a-zA-Z]*rf"),
+    re.compile(r"\brmdir\s+/"),
     re.compile(r"dd\s+if="),
     re.compile(r"\bmkfs\b"),
-    re.compile(r":\(\)\s*\{\s*:\|:\&\s*\}\s*;:"),
+    re.compile(r"\bfdisk\b"),
+    # Fork bomb
+    re.compile(r":\(\)\s*\{\s*:\|:&\s*\};\s*:"),
+    # Disk/device writes
     re.compile(r">\s*/dev/sd"),
+    re.compile(r">\s*/dev/nvme"),
+    # Privilege escalation
+    re.compile(r"\bsudo\b"),
+    re.compile(r"\bsu\s+-"),
+    # Pipe-to-shell attacks
+    re.compile(r"\bcurl\b.*\|\s*(?:ba)?sh"),
+    re.compile(r"\bwget\b.*\|\s*(?:ba)?sh"),
+    re.compile(r"\bcurl\b.*\|\s*bash"),
+    re.compile(r"\bwget\b.*\|\s*bash"),
+    # Reverse shells / network backdoors
+    re.compile(r"\bnc\s+-[a-zA-Z]*l"),
+    re.compile(r"\bncat\b"),
+    re.compile(r"\bnetcat\b"),
+    re.compile(r"\bsocat\b"),
+    # Dangerous permission changes
+    re.compile(r"\bchmod\s+777"),
+    re.compile(r"\bchmod\s+-R\s+777"),
+    # Credential theft
+    re.compile(r"\bcat\s+/etc/shadow"),
+    re.compile(r"\bcat\s+/etc/passwd"),
+    # Subshell / command substitution in dangerous context
+    re.compile(r"\beval\s+"),
+    # Environment variable exfiltration
+    re.compile(r"\benv\b.*\|\s*(?:curl|wget|nc)"),
 ]
 
 

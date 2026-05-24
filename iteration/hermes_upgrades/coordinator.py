@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 class AgentRole(Enum):
@@ -71,11 +71,11 @@ class TaskSpec:
     context: dict[str, Any] = field(default_factory=dict)
     dependencies: list[str] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
-    assigned_to: Optional[str] = None
-    result: Optional[dict[str, Any]] = None
+    assigned_to: str | None = None
+    result: dict[str, Any] | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -73,6 +73,10 @@ class ResultDeduplicator:
     def is_duplicate(self, content: str) -> bool:
         """Return True if *content* was previously registered."""
         h = self.hash_result(content)
+        return self.is_duplicate_hash(h)
+
+    def is_duplicate_hash(self, h: str) -> bool:
+        """Return True if *hash* was previously registered."""
         if h in self._seen:
             # Move to end (most-recently used)
             self._seen.move_to_end(h)
@@ -243,7 +247,7 @@ class ToolResultManager:
         result_hash = ResultDeduplicator.hash_result(content)
 
         # --- dedup ---
-        if self._dedup.is_duplicate(content):
+        if self._dedup.is_duplicate_hash(result_hash):
             self._stats["dedup_saves"] += 1
             cached = self._cache.get(result_hash)
             if cached is not None:
@@ -303,6 +307,23 @@ class ToolResultManager:
 
     # -- internals ----------------------------------------------------------
 
+    @staticmethod
+    def _sanitize_name(name: str) -> str:
+        """Sanitize a tool name for safe use in filenames.
+
+        Strips path separators and other dangerous characters to prevent
+        path traversal attacks when constructing filenames from tool names.
+        """
+        # Replace path separators and null bytes
+        safe = name.replace("/", "_").replace("\\", "_").replace("\0", "")
+        # Strip leading dots (prevent hidden files / relative path traversal)
+        safe = safe.lstrip(".")
+        # Keep only alphanumeric, underscore, hyphen, dot
+        safe = re.sub(r"[^a-zA-Z0-9_.\-]", "_", safe)
+        # Collapse multiple underscores
+        safe = re.sub(r"_+", "_", safe).strip("_")
+        return safe or "unknown"
+
     def _save_to_disk(
         self,
         tool_name: str,
@@ -314,7 +335,15 @@ class ToolResultManager:
         if self._disk_dir is None:
             raise RuntimeError("_save_to_disk called but disk_dir is not configured")
         safe_name = result_hash[:16]
-        out = self._disk_dir / f"{tool_name}_{safe_name}.json"
+        safe_tool = self._sanitize_name(tool_name)
+        out = self._disk_dir / f"{safe_tool}_{safe_name}.json"
+        # Verify resolved path is still within disk_dir (defense in depth)
+        try:
+            out.resolve().relative_to(self._disk_dir.resolve())
+        except ValueError:
+            raise ValueError(
+                f"Path traversal detected: resolved path {out} escapes disk_dir"
+            )
         payload = {
             "tool_name": tool_name,
             "hash": result_hash,

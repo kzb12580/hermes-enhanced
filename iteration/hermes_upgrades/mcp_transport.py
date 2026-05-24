@@ -153,6 +153,38 @@ class StdioTransport(McpTransport):
         self._reader_task: Optional[asyncio.Task[None]] = None
         self._tools: list[McpToolSchema] = []
 
+    # -- Deny-list for suspicious commands -----------------------------------
+    _BLOCKED_COMMANDS: frozenset[str] = frozenset({
+        "rm", "dd", "mkfs", "fdisk", "format", "del", "rmdir",
+        "sudo", "su", "chmod", "chown", "chgrp",
+        "curl", "wget", "nc", "ncat", "netcat", "socat",
+        "python", "python3", "ruby", "perl", "bash", "sh", "zsh", "fish",
+        "eval", "exec",
+    })
+
+    @staticmethod
+    def _validate_command(command: str, args: list[str]) -> None:
+        """Validate the MCP server command before spawning.
+
+        Raises ValueError if the command is empty or contains shell
+        metacharacters that suggest injection.
+        """
+        if not command or not command.strip():
+            raise ValueError("MCP command must not be empty")
+        # Check for shell metacharacters in command or args
+        dangerous_chars = set(";&|`$(){}!#~")
+        for ch in dangerous_chars:
+            if ch in command:
+                raise ValueError(
+                    f"MCP command contains dangerous character {ch!r}: {command!r}"
+                )
+        for arg in args:
+            for ch in dangerous_chars:
+                if ch in arg:
+                    raise ValueError(
+                        f"MCP arg contains dangerous character {ch!r}: {arg!r}"
+                    )
+
     # -- JSON-RPC helpers ---------------------------------------------------
 
     def _next_id(self) -> int:
@@ -203,6 +235,7 @@ class StdioTransport(McpTransport):
         """Spawn subprocess and perform the MCP initialize handshake."""
         env = {**os.environ, **self._config.env}
         assert self._config.command is not None
+        self._validate_command(self._config.command, self._config.args)
         self._process = await asyncio.create_subprocess_exec(
             self._config.command,
             *self._config.args,
