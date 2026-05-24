@@ -44,7 +44,6 @@ claude-code-study/
 │       ├── tool_result_summarizer.py # 智能摘要
 │       └── tests/               # 测试套件 (934 个)
 ├── README.md
-└── REVIEW_*.md                  # 各轮审查报告
 ```
 
 ## 🚀 安装部署
