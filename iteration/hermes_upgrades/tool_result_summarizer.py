@@ -523,18 +523,12 @@ class ToolResultSummarizer:
         # Check content for JSON
         stripped = content.lstrip()
         if stripped.startswith(("{", "[")):
-            # Try parsing just enough to confirm it's JSON
-            # For large content, try first 1000 chars or last 100 chars to find a valid fragment
-            for chunk in (content[:1000], content[:500]):
-                try:
-                    json.loads(chunk)
-                    return SummaryStrategy.JSON_DATA
-                except (json.JSONDecodeError, ValueError):
-                    continue
-            # If content looks like JSON structure but is too long to parse fragment,
-            # check if it ends with } or ]
-            if stripped.endswith(("}", "]")):
+            # Try parsing the full content first (most reliable)
+            try:
+                json.loads(content)
                 return SummaryStrategy.JSON_DATA
+            except (json.JSONDecodeError, ValueError):
+                pass
 
         # Check content for code-like patterns
         if re.search(r"^(?:class|def|function|import|export)\s", content, re.MULTILINE):

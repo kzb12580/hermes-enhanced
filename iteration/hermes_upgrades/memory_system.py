@@ -265,6 +265,19 @@ class MemoryStore:
                         value = MemoryType(value)
                     except ValueError:
                         continue  # Skip invalid type values
+                # Type validation for numeric fields
+                if key == "relevance_score":
+                    if not isinstance(value, (int, float)):
+                        continue  # Skip non-numeric relevance_score
+                    value = float(value)
+                elif key == "access_count":
+                    if not isinstance(value, (int, float)):
+                        continue  # Skip non-numeric access_count
+                    value = int(value)
+                elif key == "content" and not isinstance(value, str):
+                    continue  # Skip non-string content
+                elif key == "tags" and not isinstance(value, list):
+                    continue  # Skip non-list tags
                 setattr(entry, key, value)
             self._auto_save()
             return True

@@ -322,24 +322,29 @@ class ContextWindow:
     def __init__(self, max_tokens: int = 200_000) -> None:
         self._max_tokens = max_tokens
         self._messages: list[dict[str, str]] = []
+        import threading
+        self._lock = threading.RLock()
 
     # -- public API --------------------------------------------------------
 
     def add(self, content: str, role: str = "user") -> None:
         """Append a message."""
-        self._messages.append({"role": role, "content": content})
+        with self._lock:
+            self._messages.append({"role": role, "content": content})
 
     def get_messages(self) -> list[dict[str, str]]:
         """Return a copy of messages in OpenAI format."""
-        return list(self._messages)
+        with self._lock:
+            return list(self._messages)
 
     @property
     def current_tokens(self) -> int:
         """Estimated token count of all messages."""
-        return sum(
-            len(m["content"]) // self._CHARS_PER_TOKEN + 1
-            for m in self._messages
-        )
+        with self._lock:
+            return sum(
+                len(m["content"]) // self._CHARS_PER_TOKEN + 1
+                for m in self._messages
+            )
 
     @property
     def max_tokens(self) -> int:
@@ -348,9 +353,10 @@ class ContextWindow:
     @property
     def pressure(self) -> float:
         """Context utilisation ratio in ``[0.0, 1.0]``."""
-        if self._max_tokens == 0:
-            return 1.0
-        return min(1.0, self.current_tokens / self._max_tokens)
+        with self._lock:
+            if self._max_tokens == 0:
+                return 1.0
+            return min(1.0, self.current_tokens / self._max_tokens)
 
     async def auto_compact(
         self,
@@ -363,22 +369,29 @@ class ContextWindow:
         otherwise a naive strategy keeps the system prompt and last half
         of messages.
         """
-        if self.pressure < threshold:
-            return
+        # Check pressure without holding lock during await
+        with self._lock:
+            if self.pressure < threshold:
+                return
+            # Take a snapshot for the compressor
+            messages_snapshot = list(self._messages)
 
         if compressor is not None:
-            self._messages = await compressor(self._messages)
+            compressed = await compressor(messages_snapshot)
+            with self._lock:
+                self._messages = compressed
             return
 
         # Naive compaction: keep first message (system) + last half
-        if len(self._messages) <= 2:
-            return
-        keep = max(2, len(self._messages) // 2)
-        system_msgs = [m for m in self._messages if m["role"] == "system"]
-        other_msgs = [m for m in self._messages if m["role"] != "system"]
-        kept_others = other_msgs[-keep:]
-        # Rebuild: all system messages first, then the kept tail
-        self._messages = system_msgs + kept_others
+        with self._lock:
+            if len(self._messages) <= 2:
+                return
+            keep = max(2, len(self._messages) // 2)
+            system_msgs = [m for m in self._messages if m["role"] == "system"]
+            other_msgs = [m for m in self._messages if m["role"] != "system"]
+            kept_others = other_msgs[-keep:]
+            # Rebuild: all system messages first, then the kept tail
+            self._messages = system_msgs + kept_others
 
 
 # ---------------------------------------------------------------------------
@@ -404,27 +417,34 @@ class BackPressureController:
         self._low_water = low_water
         self._pressure: float = 0.0
         self._paused: bool = False
+        import threading
+        self._lock = threading.Lock()
 
     def update(self, current_tokens: int, max_tokens: int) -> None:
         """Record latest token counts."""
         if max_tokens <= 0:
-            self._pressure = 1.0
+            pressure = 1.0
         else:
-            self._pressure = min(1.0, current_tokens / max_tokens)
+            pressure = min(1.0, current_tokens / max_tokens)
 
-        if self._pressure >= self._high_water:
-            self._paused = True
-        elif self._pressure <= self._low_water:
-            self._paused = False
+        with self._lock:
+            self._pressure = pressure
+            if pressure >= self._high_water:
+                self._paused = True
+            elif pressure <= self._low_water:
+                self._paused = False
 
     def should_pause(self) -> bool:
         """Return ``True`` if producers should stop sending data."""
-        return self._paused
+        with self._lock:
+            return self._paused
 
     def should_resume(self) -> bool:
         """Return ``True`` if producers may resume."""
-        return not self._paused
+        with self._lock:
+            return not self._paused
 
     @property
     def pressure(self) -> float:
-        return self._pressure
+        with self._lock:
+            return self._pressure

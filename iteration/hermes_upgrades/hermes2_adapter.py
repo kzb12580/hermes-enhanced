@@ -202,6 +202,27 @@ class Hermes2Engine:
         # Reusable thread-pool for running hooks when an event loop is active
         import concurrent.futures
         self._hook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown()
+        return False
+
+    def shutdown(self) -> None:
+        """Shut down internal thread pools. Safe to call multiple times."""
+        if not self._closed:
+            self._hook_executor.shutdown(wait=False)
+            self._closed = True
+
+    def __del__(self) -> None:
+        """Best-effort cleanup on garbage collection."""
+        try:
+            self.shutdown()
+        except Exception:
+            pass
 
     # ── Public API ───────────────────────────────────────────────────────
 

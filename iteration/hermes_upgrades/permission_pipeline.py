@@ -49,7 +49,11 @@ class PermissionRule:
         """Evaluate the condition callable, if present. Returns True if no condition."""
         if self.condition is None:
             return True
-        return self.condition(args)
+        try:
+            return self.condition(args)
+        except Exception:
+            # Condition crashed — treat as "no match" (fail-safe: deny)
+            return False
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict (condition not serializable, omitted)."""

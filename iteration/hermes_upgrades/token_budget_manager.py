@@ -133,25 +133,29 @@ class TokenBudgetManager:
         self._used_tokens: int = 0
         self._turns: list[TurnRecord] = []
         self._current_turn: TurnRecord | None = None
+        import threading
+        self._lock = threading.RLock()
 
     # -- Public API ----------------------------------------------------------
 
     def begin_turn(self, turn_number: int) -> None:
         """Mark the start of a new turn."""
-        self._current_turn = TurnRecord(
-            turn_number=turn_number,
-            timestamp=time.time(),
-        )
+        with self._lock:
+            self._current_turn = TurnRecord(
+                turn_number=turn_number,
+                timestamp=time.time(),
+            )
 
     def end_turn(self) -> TurnRecord | None:
         """Mark the end of the current turn and finalize its record."""
-        if self._current_turn is None:
-            return None
-        self._used_tokens += self._current_turn.total_tokens
-        self._turns.append(self._current_turn)
-        record = self._current_turn
-        self._current_turn = None
-        return record
+        with self._lock:
+            if self._current_turn is None:
+                return None
+            self._used_tokens += self._current_turn.total_tokens
+            self._turns.append(self._current_turn)
+            record = self._current_turn
+            self._current_turn = None
+            return record
 
     def allocate(
         self,
@@ -224,17 +228,19 @@ class TokenBudgetManager:
         actual_tokens : int
             Actual tokens consumed.
         """
-        if self._current_turn is not None:
-            self._current_turn.tool_usages[tool_name] = (
-                self._current_turn.tool_usages.get(tool_name, 0) + actual_tokens
-            )
-            self._current_turn.total_tokens += actual_tokens
+        with self._lock:
+            if self._current_turn is not None:
+                self._current_turn.tool_usages[tool_name] = (
+                    self._current_turn.tool_usages.get(tool_name, 0) + actual_tokens
+                )
+                self._current_turn.total_tokens += actual_tokens
 
     @property
     def used_tokens(self) -> int:
         """Total tokens used so far (completed turns + current turn partial)."""
-        current_partial = self._current_turn.total_tokens if self._current_turn else 0
-        return self._used_tokens + current_partial
+        with self._lock:
+            current_partial = self._current_turn.total_tokens if self._current_turn else 0
+            return self._used_tokens + current_partial
 
     @property
     def remaining_tokens(self) -> int:
@@ -264,33 +270,36 @@ class TokenBudgetManager:
 
     def get_snapshot(self) -> BudgetSnapshot:
         """Return a point-in-time snapshot of budget state."""
-        return BudgetSnapshot(
-            session_budget=self.session_budget,
-            used_tokens=self.used_tokens,
-            remaining_tokens=self.remaining_tokens,
-            pressure=self.pressure,
-            pressure_zone=self.pressure_zone,
-            turn_count=len(self._turns),
-            avg_tokens_per_turn=(
-                self._used_tokens / len(self._turns) if self._turns else 0.0
-            ),
-        )
+        with self._lock:
+            return BudgetSnapshot(
+                session_budget=self.session_budget,
+                used_tokens=self.used_tokens,
+                remaining_tokens=self.remaining_tokens,
+                pressure=self.pressure,
+                pressure_zone=self.pressure_zone,
+                turn_count=len(self._turns),
+                avg_tokens_per_turn=(
+                    self._used_tokens / len(self._turns) if self._turns else 0.0
+                ),
+            )
 
     def get_turn_history(self) -> list[TurnRecord]:
         """Return completed turn records."""
-        return list(self._turns)
+        with self._lock:
+            return list(self._turns)
 
     def estimate_turns_remaining(self) -> float:
         """Estimate how many turns can fit in the remaining budget.
 
         Uses the average token consumption per turn.
         """
-        if not self._turns:
-            return float("inf")
-        avg = self._used_tokens / len(self._turns)
-        if avg <= 0:
-            return float("inf")
-        return self.remaining_tokens / avg
+        with self._lock:
+            if not self._turns:
+                return float("inf")
+            avg = self._used_tokens / len(self._turns)
+            if avg <= 0:
+                return float("inf")
+            return self.remaining_tokens / avg
 
     def suggest_compression(self) -> bool:
         """Return True if the agent should proactively compress context."""
@@ -302,9 +311,10 @@ class TokenBudgetManager:
 
     def reset(self) -> None:
         """Reset all tracking state."""
-        self._used_tokens = 0
-        self._turns.clear()
-        self._current_turn = None
+        with self._lock:
+            self._used_tokens = 0
+            self._turns.clear()
+            self._current_turn = None
 
     # -- Internals -----------------------------------------------------------
 
