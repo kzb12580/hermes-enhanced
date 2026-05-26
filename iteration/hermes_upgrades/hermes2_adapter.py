@@ -97,8 +97,13 @@ try:
 except ImportError:
     from token_utils import extract_text_from_content
 
+try:
+    from .token_budget_manager import TokenBudgetManager, PressureZone
+except ImportError:
+    from token_budget_manager import TokenBudgetManager, PressureZone
 
-# ---------------------------------------------------------------------------
+
+# ── _coerce_non_dict_items ──────────────────────────────────────────────
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -179,6 +184,13 @@ class Hermes2Engine:
         self.memory_extractor = MemoryExtractor()
         self.memory_injector = MemoryInjector()
         self.coordinator = Coordinator()
+
+        # Session-level token budget tracking
+        self.budget = TokenBudgetManager(
+            session_budget=int(self.config.max_context_tokens * 0.8),  # 80% for tools
+            model_limit=self.config.max_context_tokens,
+        )
+        self._budget_turn_counter = 0
 
         # Hooks — register all built-in hooks
         self.hooks = HookPipeline()
@@ -357,7 +369,7 @@ class Hermes2Engine:
         # 4. Execute batches
         batch_results = self.orchestrator.execute(batches, executor_fn)
 
-        # 5. Process each result through result manager
+        # 5. Process each result through result manager + budget tracking
         for tool_call in call_objects:
             br = batch_results.get(tool_call.id)
             if br is None:
@@ -378,6 +390,8 @@ class Hermes2Engine:
                     "was_deduped": pr.was_deduped,
                     "token_count": pr.token_count,
                 }
+                # Budget: record actual token usage
+                self.budget.record_usage(tool_call.name, pr.token_count)
 
         return result
 
@@ -403,6 +417,9 @@ class Hermes2Engine:
         with self._turn_lock:
             self._turn_count += 1
 
+        # 0. Budget: begin turn
+        self.budget.begin_turn(self._turn_count)
+
         # 1. Build HookContext and run hooks
         ctx = HookContext(
             messages=messages,
@@ -424,6 +441,19 @@ class Hermes2Engine:
             compression_applied = True
             compressed_messages = compressed.messages
         pressure = self.compressor.monitor.current
+
+        # 4. Budget: end turn + snapshot
+        turn_record = self.budget.end_turn()
+        budget_snapshot = self.budget.get_snapshot()
+
+        # 5. Budget-aware compression suggestion
+        if budget_snapshot.pressure_zone in (PressureZone.ORANGE, PressureZone.RED, PressureZone.EXCEEDED):
+            if not compression_applied:
+                compressed = self.compressor.compress(messages, level="auto")
+                compression_applied = True
+                compressed_messages = compressed.messages
+                reason = f"Budget pressure {budget_snapshot.pressure_zone.value} ({budget_snapshot.pressure:.1%})"
+
         return {
             "hooks_results": hooks_results,
             "memories_extracted": memories_extracted,
@@ -431,6 +461,16 @@ class Hermes2Engine:
             "compressed_messages": compressed_messages,
             "pressure": pressure,
             "pressure_reason": reason,
+            "budget": {
+                "used": budget_snapshot.used_tokens,
+                "remaining": budget_snapshot.remaining_tokens,
+                "pressure": round(budget_snapshot.pressure, 4),
+                "zone": budget_snapshot.pressure_zone.value,
+                "turn_count": budget_snapshot.turn_count,
+                "avg_per_turn": round(budget_snapshot.avg_tokens_per_turn),
+                "suggest_compression": self.budget.suggest_compression(),
+                "turns_remaining": round(self.budget.estimate_turns_remaining(), 1),
+            },
         }
 
     def apply_turn_result(
@@ -511,6 +551,7 @@ class Hermes2Engine:
 
     def get_stats(self) -> dict[str, Any]:
         """Aggregate statistics from all sub-modules."""
+        budget_snap = self.budget.get_snapshot()
         return {
             "turn_count": self._turn_count,
             "orchestrator": {
@@ -524,6 +565,15 @@ class Hermes2Engine:
                 "threshold": self.config.auto_dream_threshold,
                 "enabled": self.auto_dreamer is not None,
                 "history_count": len(self.auto_dreamer.get_history()) if self.auto_dreamer else 0,
+            },
+            "budget": {
+                "session_budget": budget_snap.session_budget,
+                "used_tokens": budget_snap.used_tokens,
+                "remaining_tokens": budget_snap.remaining_tokens,
+                "pressure": round(budget_snap.pressure, 4),
+                "zone": budget_snap.pressure_zone.value,
+                "avg_per_turn": round(budget_snap.avg_tokens_per_turn),
+                "turns_remaining": round(self.budget.estimate_turns_remaining(), 1),
             },
         }
 
