@@ -62,4 +62,4 @@ __all__ = [
     "extract_text_from_content",
 ]
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
