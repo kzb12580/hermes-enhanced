@@ -20,6 +20,7 @@ SHELL_TOOLS: frozenset[str] = frozenset({"terminal", "bash", "sh", "powershell",
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -189,15 +190,18 @@ class Hermes2Engine:
                 model_token_limit=self.config.max_context_tokens,
             ))
 
-        self.auto_dreamer = AutoDreamer(
-            memory_store=self.memory,
-            trigger=DreamTrigger(
-                session_threshold=self.config.auto_dream_threshold,
-            ),
-        )
+        self.auto_dreamer = None
+        if self.config.enable_auto_dream:
+            self.auto_dreamer = AutoDreamer(
+                memory_store=self.memory,
+                trigger=DreamTrigger(
+                    session_threshold=self.config.auto_dream_threshold,
+                ),
+            )
 
         # Turn counter
         self._turn_count: int = 0
+        self._turn_lock = threading.Lock()
 
         # Reusable thread-pool for running hooks when an event loop is active
         import concurrent.futures
@@ -215,6 +219,9 @@ class Hermes2Engine:
         """Shut down internal thread pools. Safe to call multiple times."""
         if not self._closed:
             self._hook_executor.shutdown(wait=False)
+            self.orchestrator.shutdown(wait=False)
+            if hasattr(self, '_hook_loop') and self._hook_loop is not None and not self._hook_loop.is_closed():
+                self._hook_loop.close()
             self._closed = True
 
     def __del__(self) -> None:
@@ -284,13 +291,14 @@ class Hermes2Engine:
                 msg = f"Invalid args for tool '{name}': expected dict, got {type(args).__name__} — denied"
                 _log.warning(msg)
                 result["warnings"].append(msg)
-                result["denied"].append({"name": name, "reason": msg})
+                result["denied"].append({"id": tc.get("id"), "name": name, "reason": msg})
                 continue
             decision = self.permissions.check(name, args)
             if decision.allowed:
                 # CRITICAL: Always check dangerous commands even for auto-approved tools
-                if name in SHELL_TOOLS and _is_dangerous_command(args):
+                if _is_dangerous_command(args):
                     result["denied"].append({
+                        "id": tc.get("id"),
                         "name": name,
                         "reason": "Dangerous terminal command detected — blocked regardless of auto-approval",
                     })
@@ -308,8 +316,9 @@ class Hermes2Engine:
                         approved = False
                     if approved:
                         # Also check dangerous commands even when user-approved via callback
-                        if name in SHELL_TOOLS and _is_dangerous_command(args):
+                        if _is_dangerous_command(args):
                             result["denied"].append({
+                                "id": tc.get("id"),
                                 "name": name,
                                 "reason": "Dangerous terminal command detected — blocked regardless of approval",
                             })
@@ -325,17 +334,22 @@ class Hermes2Engine:
                     })
             else:
                 result["denied"].append({
-                    "name": name, "reason": decision.reason
+                    "id": tc.get("id"), "name": name, "reason": decision.reason
                 })
 
         if not allowed_calls:
             return result
 
         # 2. Convert to ToolCall objects
-        call_objects = [
-            ToolCall(name=tc["name"], args=tc.get("args", {}))
-            for tc in allowed_calls
-        ]
+        call_objects = []
+        for tc in allowed_calls:
+            call_id = tc.get("id")
+            if call_id is None:
+                import uuid as _uuid
+                call_id = str(_uuid.uuid4())
+            call_objects.append(
+                ToolCall(name=tc["name"], args=tc.get("args", {}), id=call_id)
+            )
 
         # 3. Partition into batches
         batches = self.orchestrator.partition(call_objects)
@@ -386,7 +400,8 @@ class Hermes2Engine:
             reference with this value.**  See :meth:`apply_turn_result`
             for a convenience wrapper that does this automatically.
         """
-        self._turn_count += 1
+        with self._turn_lock:
+            self._turn_count += 1
 
         # 1. Build HookContext and run hooks
         ctx = HookContext(
@@ -484,10 +499,14 @@ class Hermes2Engine:
         """
         if session_count is not None:
             return session_count >= self.config.auto_dream_threshold
+        if self.auto_dreamer is None:
+            return False
         return self.auto_dreamer.should_dream()
 
     def dream(self) -> DreamReport:
         """Trigger a dream cycle and return the report."""
+        if self.auto_dreamer is None:
+            raise RuntimeError("Auto-dream is disabled in config")
         return self.auto_dreamer.dream()
 
     def get_stats(self) -> dict[str, Any]:
@@ -503,7 +522,8 @@ class Hermes2Engine:
             "hooks": self.hooks.get_hooks(),
             "auto_dream": {
                 "threshold": self.config.auto_dream_threshold,
-                "history_count": len(self.auto_dreamer.get_history()),
+                "enabled": self.auto_dreamer is not None,
+                "history_count": len(self.auto_dreamer.get_history()) if self.auto_dreamer else 0,
             },
         }
 
@@ -575,7 +595,10 @@ class Hermes2Engine:
             # Already inside an event loop — use a new thread
             results = self._hook_executor.submit(asyncio.run, self.hooks.run_all(ctx)).result()
         else:
-            results = asyncio.run(self.hooks.run_all(ctx))
+            # Reuse a cached event loop instead of creating a new one per call
+            if not hasattr(self, '_hook_loop') or self._hook_loop.is_closed():
+                self._hook_loop = asyncio.new_event_loop()
+            results = self._hook_loop.run_until_complete(self.hooks.run_all(ctx))
 
         return [
             {

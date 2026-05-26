@@ -272,6 +272,7 @@ class TestPersistence:
         s1 = MemoryStore(storage_path=tmp_path_file)
         e = MemoryEntry(type=MemoryType.MEMORY, content="persist me", tags=["test"])
         s1.add(e)
+        s1.save()  # _auto_save only marks dirty; explicit save() needed before loading
         eid = e.id
 
         # Load in a fresh store

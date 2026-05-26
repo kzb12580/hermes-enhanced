@@ -330,6 +330,11 @@ class JsonSummarizer:
         """Summarize JSON data."""
         preserved = []
 
+        # Don't attempt to parse extremely large JSON to avoid OOM
+        _MAX_JSON_PARSE_SIZE = 1_000_000  # 1MB
+        if len(content) > _MAX_JSON_PARSE_SIZE:
+            return content[:target_tokens * 4], ["JSON too large to parse: head excerpt"]
+
         # Try to parse as JSON
         try:
             data = json.loads(content)

@@ -120,7 +120,8 @@ _DANGEROUS_PATTERNS: list[re.Pattern[str]] = [
 
 def _is_dangerous_command(args: dict[str, Any]) -> bool:
     """Check if terminal command contains dangerous patterns."""
-    command = args.get("command", "")
+    # Check multiple possible arg keys for shell commands
+    command = args.get("command", "") or args.get("cmd", "") or args.get("script", "")
     if not isinstance(command, str):
         return False
     return any(pat.search(command) for pat in _DANGEROUS_PATTERNS)
@@ -171,7 +172,15 @@ class PermissionPipeline:
         Args:
             rules: List of permission rules. If None, default rules are used.
         """
-        self.rules: list[PermissionRule] = rules if rules is not None else _build_default_rules()
+        if rules is not None and len(rules) == 0:
+            # Empty list = caller explicitly wants no restrictions
+            self.rules: list[PermissionRule] = [
+                PermissionRule("*", PermissionLevel.AUTO, "Default: all tools allowed"),
+            ]
+        elif rules is not None:
+            self.rules = rules
+        else:
+            self.rules = _build_default_rules()
         self.pre_hooks: list[PreHook] = []
         self.post_hooks: list[PostHook] = []
 
@@ -305,4 +314,8 @@ class PermissionPipeline:
             A new PermissionPipeline instance.
         """
         rules = [PermissionRule.from_dict(r) for r in data.get("rules", [])]
+        # from_dict: empty rules means "no rules configured" (not "allow all")
+        # Use default rules in that case, not the allow_all workaround
+        if not rules:
+            return cls(rules=None)
         return cls(rules=rules)

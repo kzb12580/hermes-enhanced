@@ -38,6 +38,10 @@ def env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except (ValueError, TypeError):
+        import logging
+        logging.getLogger(__name__).warning(
+            "env_int: invalid value %r for %s, using default %r", raw, name, default
+        )
         return default
 
 

@@ -151,7 +151,13 @@ class StdioTransport(McpTransport):
         self._request_id: int = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._reader_task: Optional[asyncio.Task[None]] = None
+        self._stderr_task: Optional[asyncio.Task[None]] = None
         self._tools: list[McpToolSchema] = []
+
+    @property
+    def tools(self) -> list[McpToolSchema]:
+        """Public access to discovered tools."""
+        return list(self._tools)
 
     # -- Deny-list for suspicious commands -----------------------------------
     _BLOCKED_COMMANDS: frozenset[str] = frozenset({
@@ -174,7 +180,10 @@ class StdioTransport(McpTransport):
         # Check against blocked commands denylist
         import os as _os
         base_cmd = _os.path.basename(command.strip())
-        if base_cmd in StdioTransport._BLOCKED_COMMANDS:
+        if base_cmd in StdioTransport._BLOCKED_COMMANDS or any(
+            base_cmd.startswith(b + sep) for b in StdioTransport._BLOCKED_COMMANDS
+            for sep in ('.', '-', '_')
+        ):
             raise ValueError(
                 f"MCP command '{base_cmd}' is on the denylist and is not allowed"
             )
@@ -206,7 +215,7 @@ class StdioTransport(McpTransport):
         self._process.stdin.write(data.encode())
         await self._process.stdin.drain()
 
-    async def _read_message(self) -> Optional[dict[str, Any]]:
+    async def _read_message(self) -> Optional[dict]:
         """Read a single JSON-RPC message from stdout."""
         if not self._process or not self._process.stdout:
             return None
@@ -216,7 +225,11 @@ class StdioTransport(McpTransport):
         )
         if not line:
             return None
-        return json.loads(line.decode())
+        try:
+            return json.loads(line.decode())
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            logger.warning("Malformed MCP message from %s: %s", self._config.name, exc)
+            return None
 
     async def _reader_loop(self) -> None:
         """Background task that reads responses and resolves pending futures."""
@@ -236,6 +249,19 @@ class StdioTransport(McpTransport):
         finally:
             self._connected = False
 
+    async def _drain_stderr(self) -> None:
+        """Background task that drains stderr to prevent pipe buffer deadlock."""
+        try:
+            if not self._process or not self._process.stderr:
+                return
+            while True:
+                line = await self._process.stderr.readline()
+                if not line:
+                    break
+                logger.debug("MCP stderr [%s]: %s", self._config.name, line.decode(errors="replace").rstrip())
+        except asyncio.CancelledError:
+            pass
+
     # -- Public API ---------------------------------------------------------
 
     async def connect(self) -> None:
@@ -254,6 +280,7 @@ class StdioTransport(McpTransport):
         )
         self._connected = True
         self._reader_task = asyncio.ensure_future(self._reader_loop())
+        self._stderr_task = asyncio.ensure_future(self._drain_stderr())
 
         # MCP initialize handshake
         resp = await self._request("initialize", {
@@ -282,9 +309,19 @@ class StdioTransport(McpTransport):
                 await self._reader_task
             except asyncio.CancelledError:
                 pass
+        if self._stderr_task:
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                pass
         if self._process:
             self._process.terminate()
-            await self._process.wait()
+            try:
+                await asyncio.wait_for(self._process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                self._process.kill()
+                await self._process.wait()
             self._process = None
         for fut in self._pending.values():
             fut.cancel()
@@ -351,6 +388,11 @@ class HttpTransport(McpTransport):
         self._http_client = http_client
         self._tools: list[McpToolSchema] = []
         self._session_id: Optional[str] = None
+
+    @property
+    def tools(self) -> list[McpToolSchema]:
+        """Public access to discovered tools."""
+        return list(self._tools)
 
     @property
     def base_url(self) -> str:
@@ -424,7 +466,7 @@ _TRANSPORT_MAP: dict[TransportType, type[McpTransport]] = {
     TransportType.STDIO: StdioTransport,
     TransportType.HTTP: HttpTransport,
     TransportType.SSE: HttpTransport,   # SSE shares HTTP transport
-    TransportType.WEBSOCKET: HttpTransport,  # Placeholder; same interface
+    # WEBSOCKET intentionally omitted — not yet implemented
 }
 
 
@@ -438,6 +480,8 @@ def create_transport(config: McpServerConfig, **kwargs: Any) -> McpTransport:
     Returns:
         An ``McpTransport`` instance (not yet connected).
     """
+    if config.transport == TransportType.WEBSOCKET:
+        raise NotImplementedError("WebSocket transport is not yet implemented")
     cls = _TRANSPORT_MAP.get(config.transport)
     if cls is None:
         raise ValueError(f"Unsupported transport type: {config.transport}")
@@ -527,7 +571,7 @@ class McpManager:
         tools: list[McpToolSchema] = []
         for transport in self._transports.values():
             if isinstance(transport, (StdioTransport, HttpTransport)):
-                tools.extend(transport._tools)
+                tools.extend(transport.tools)
         return tools
 
     def get_server_status(self) -> dict[str, str]:

@@ -27,12 +27,11 @@ from dataclasses import dataclass, field
 # Constants
 # ---------------------------------------------------------------------------
 
-CHARS_PER_TOKEN: int = 4  # rough heuristic
-
-
-def _estimate_tokens(text: str) -> int:
-    """Estimate token count from string length (~4 chars per token)."""
-    return len(text) // CHARS_PER_TOKEN
+try:
+    from .token_utils import estimate_tokens as _estimate_tokens, estimate_content_tokens
+except ImportError:
+    from token_utils import estimate_tokens as _estimate_tokens, estimate_content_tokens
+CHARS_PER_TOKEN: int = 4  # kept for backward compat; prefer estimate_tokens()
 
 
 def _message_tokens(msg: dict) -> int:
@@ -108,6 +107,8 @@ class PressureMonitor:
         model_token_limit: Maximum tokens the model supports.
     """
 
+    MAX_HISTORY: int = 1000
+
     def __init__(self, model_token_limit: int) -> None:
         import threading
         self._lock = threading.Lock()
@@ -129,6 +130,8 @@ class PressureMonitor:
             pressure = min(1.0, tokens / self.model_token_limit)
         with self._lock:
             self.history.append(pressure)
+            if len(self.history) > self.MAX_HISTORY:
+                self.history = self.history[-self.MAX_HISTORY:]
         return pressure
 
     def should_compress(self, threshold: float) -> bool:
@@ -184,9 +187,8 @@ class MicrocompactLevel:
         result: list[dict] = []
         for i, msg in enumerate(messages):
             if i in prune_set:
-                # Deep-copy to avoid mutating the original message's
-                # nested structures (e.g. tool_calls lists)
-                pruned = copy.deepcopy(msg)
+                # Shallow-copy to avoid mutating the original message
+                pruned = dict(msg)
                 pruned["content"] = "[tool result pruned — context compression]"
                 result.append(pruned)
             else:
@@ -328,6 +330,13 @@ class FullLevel:
         Keeps the system message (index 0 if present) and the last few
         messages so the model has recent context.  Everything else is
         replaced by a single summary message.
+
+        .. note::
+            **Metadata loss:** The original messages being replaced may carry
+            metadata keys (``tool_call_id``, ``name``, ``tool_calls``, etc.)
+            that are not preserved in the generated summary message.  Callers
+            that rely on tool-call metadata for round-tripping with the API
+            should be aware that the summarised region will lose this context.
         """
         if not messages:
             return messages
@@ -454,6 +463,8 @@ class ContextCompressorV2:
         with self._stats_lock:
             self._stats_compressions += 1
             self._stats_ratios.append(ratio)
+            if len(self._stats_ratios) > 1000:
+                self._stats_ratios = self._stats_ratios[-1000:]
             self._stats_tokens_saved += max(0, original_tokens - compressed_tokens)
 
         return CompressedMessages(
@@ -503,7 +514,13 @@ class ContextCompressorV2:
     @staticmethod
     def _improvement_ok(original: list[dict], compressed: list[dict],
                         original_tokens: int | None = None) -> bool:
-        """Return True if compression achieved at least a 10% reduction."""
+        """Return True if compression achieved at least a 10% reduction.
+
+        An empty or zero-token original conversation requires no compression,
+        so this returns True immediately.
+        """
         o = original_tokens if original_tokens is not None else _total_tokens(original)
+        if o <= 0:
+            return True  # nothing to compress — vacuously "ok"
         c = _total_tokens(compressed)
-        return c < o * 0.9 if o > 0 else False
+        return c < o * 0.9

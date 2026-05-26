@@ -85,6 +85,9 @@ def estimate_content_tokens(content: Any) -> int:
         for part in content:
             if isinstance(part, dict) and "text" in part:
                 total += estimate_tokens(part["text"])
+            elif isinstance(part, dict):
+                # Non-text parts (e.g. images) — estimate from repr
+                total += estimate_tokens(str(part))
         return total
     return estimate_tokens(str(content)) if content else 0
 

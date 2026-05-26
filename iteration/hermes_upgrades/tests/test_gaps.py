@@ -91,7 +91,8 @@ class TestMemorySystemGaps:
     def test_tokenize_stops_short_tokens(self):
         tokens = _tokenize("I am a x y z")
         assert "i" not in tokens
-        assert "x" not in tokens
+        # Single-char tokens are now included if they're not stop words
+        assert "x" in tokens
 
     def test_tokenize_empty(self):
         assert _tokenize("") == []
@@ -361,7 +362,7 @@ class TestContextCompressorV2Gaps:
 # 5. auto_dream gaps
 # ============================================================================
 
-from hermes_upgrades.auto_dream import (
+from agent.hermes2.auto_dream import (
     AutoDreamer, ConsolidationResult, DreamReport, DreamTrigger,
     MemoryConsolidator, SessionSummary, TranscriptAnalyzer,
     _keywords,
@@ -630,7 +631,7 @@ class TestCoordinatorGaps:
     def test_aggregate_empty(self):
         agg = ResultAggregator()
         result = agg.aggregate([])
-        assert result.all_completed is True
+        assert result.all_completed is False  # empty list = nothing completed
         assert len(result.failed_tasks) == 0
 
     def test_release_below_zero(self):
@@ -664,7 +665,7 @@ class TestCoordinatorGaps:
 # 8. post_turn_hooks gaps
 # ============================================================================
 
-from hermes_upgrades.post_turn_hooks import (
+from agent.hermes2.post_turn_hooks import (
     HookContext, HookPipeline, HookResult, PostTurnHook,
     MemoryExtractionHook, UsageTrackingHook, PromptSuggestionHook,
     ContextHealthHook,
@@ -837,8 +838,8 @@ class TestToolOrchestratorGaps:
 # 11. hermes2_adapter gaps
 # ============================================================================
 
-from hermes_upgrades.hermes2_adapter import Hermes2Config, Hermes2Engine, from_config
-from hermes_upgrades.memory_system import MemoryType as MT
+from agent.hermes2.hermes2_adapter import Hermes2Config, Hermes2Engine, from_config
+from agent.hermes2.memory_system import MemoryType as MT
 
 
 class TestHermes2AdapterGaps:

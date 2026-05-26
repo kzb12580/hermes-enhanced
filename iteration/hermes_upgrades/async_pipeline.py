@@ -15,6 +15,7 @@ Components:
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -112,12 +113,23 @@ class Pipeline:
 
     # -- execution ---------------------------------------------------------
 
-    async def execute(self, input_data: Any) -> AsyncIterator[Any]:
+    @staticmethod
+    async def _collect_gen(gen):
+        """Collect all items from an async generator into a list."""
+        return [item async for item in gen]
+
+    async def execute(self, input_data: Any, per_stage_timeout: float | None = None) -> AsyncIterator[Any]:
         """Run *input_data* through every stage, yielding final outputs.
 
         If there are no stages the input itself is yielded.
         Intermediate stages buffer their results, but the final stage
         yields items immediately for true streaming behaviour.
+
+        Args:
+            input_data: The initial data to feed into the pipeline.
+            per_stage_timeout: Optional timeout in seconds for each stage
+                invocation on each item. If exceeded, the item is skipped
+                with a RuntimeError.
         """
         if not self._stages:
             yield input_data
@@ -130,15 +142,39 @@ class Pipeline:
                 if is_last:
                     # Final stage: yield items immediately (true streaming)
                     for item in current:
-                        async for out in stage(item):
-                            yield out
+                        if per_stage_timeout is not None:
+                            collected = await asyncio.wait_for(
+                                self._collect_gen(stage(item)),
+                                timeout=per_stage_timeout,
+                            )
+                            for out in collected:
+                                yield out
+                        else:
+                            async for out in stage(item):
+                                yield out
                 else:
                     # Intermediate stage: buffer for next stage
                     next_items: list[Any] = []
                     for item in current:
-                        async for out in stage(item):
-                            next_items.append(out)
+                        if per_stage_timeout is not None:
+                            collected = await asyncio.wait_for(
+                                self._collect_gen(stage(item)),
+                                timeout=per_stage_timeout,
+                            )
+                            next_items.extend(collected)
+                        else:
+                            async for out in stage(item):
+                                next_items.append(out)
                     current = next_items
+            except asyncio.CancelledError:
+                # Ensure cancellation propagates cleanly rather than
+                # being swallowed or misclassified as a stage error.
+                # In Python 3.9+ CancelledError is a BaseException so
+                # it would bypass ``except Exception`` anyway, but an
+                # explicit handler documents the intent and allows us
+                # to add cleanup logic (e.g. cancelling in-flight
+                # sub-tasks) if needed in the future.
+                raise
             except Exception as exc:
                 raise RuntimeError(
                     f"Pipeline stage {stage.name!r} failed: {exc}"
@@ -207,12 +243,12 @@ class StreamingToolExecutor:
         semaphore = asyncio.Semaphore(self._max_concurrent)
         queue: asyncio.Queue[ToolResult | BaseException | None] = asyncio.Queue()
         fatal_event = asyncio.Event()
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.monotonic()
 
         def _remaining_global() -> float | None:
             if global_timeout is None:
                 return None
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = time.monotonic() - start_time
             return max(0.0, global_timeout - elapsed)
 
         async def _run(call: dict[str, Any]) -> None:

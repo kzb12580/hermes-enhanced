@@ -17,42 +17,28 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+try:
+    from .token_utils import estimate_tokens as _estimate_tokens, estimate_content_tokens
+except ImportError:
+    from token_utils import estimate_tokens as _estimate_tokens, estimate_content_tokens
+
 
 # ---------------------------------------------------------------------------
 # TokenEstimator
 # ---------------------------------------------------------------------------
 
 class TokenEstimator:
-    """Fast approximate token counter using ~4 chars/token heuristic."""
+    """Fast approximate token counter — delegates to token_utils."""
 
     @staticmethod
     def estimate_tokens(text: str) -> int:
-        """Estimate token count for a single string.
-
-        Uses a rough 4-chars-per-token approximation which is adequate
-        for budget management (actual tokenizers vary by ±20%).
-        """
-        if not text:
-            return 0
-        return max(1, len(text) // 4)
+        """Estimate token count for a single string."""
+        return _estimate_tokens(text)
 
     @staticmethod
     def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
-        """Sum estimated tokens across all message dicts.
-
-        Each message is expected to have a ``content`` key (str).
-        """
-        total = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                total += TokenEstimator.estimate_tokens(content)
-            elif isinstance(content, list):
-                # OpenAI-style content arrays
-                for part in content:
-                    if isinstance(part, dict) and "text" in part:
-                        total += TokenEstimator.estimate_tokens(part["text"])
-        return total
+        """Sum estimated tokens across all message dicts."""
+        return estimate_content_tokens([msg.get("content", "") for msg in messages])
 
 
 # ---------------------------------------------------------------------------
@@ -150,11 +136,14 @@ class SmartTruncator:
 
         # Single-line or very short text: character-based truncation
         if total_lines <= 2:
+            marker_text = f"\n[...truncated N chars...]\n"
+            marker_chars = len(marker_text)
             char_budget = max_tokens * 4  # ~4 chars per token
-            if char_budget < 1:
+            content_budget = max(1, char_budget - marker_chars)
+            if content_budget < 1:
                 return "[...truncated...]"
-            head_chars = max(1, int(char_budget * 0.6))
-            tail_chars = max(1, int(char_budget * 0.3))
+            head_chars = max(1, int(content_budget * 0.6))
+            tail_chars = max(1, int(content_budget * 0.3))
             if head_chars + tail_chars >= len(text):
                 return text[:char_budget]
             return (
@@ -162,6 +151,11 @@ class SmartTruncator:
                 + f"\n[...truncated {len(text) - head_chars - tail_chars} chars...]\n"
                 + text[-tail_chars:]
             )
+
+        # Reserve space for the truncation marker
+        marker_template = "\n[...truncated {n} lines...]\n"
+        marker_tokens = self._estimator.estimate_tokens(marker_template.format(n=9999))
+        effective_budget = max(1, max_tokens - marker_tokens)
 
         head_lines = max(1, int(total_lines * keep_head))
         tail_lines = max(1, int(total_lines * keep_tail))
@@ -171,10 +165,22 @@ class SmartTruncator:
             head_lines = max(1, total_lines // 2)
             tail_lines = max(1, total_lines - head_lines)
 
+        # Iteratively reduce head/tail if result exceeds effective budget
         removed = total_lines - head_lines - tail_lines
         head = "".join(lines[:head_lines])
         tail = "".join(lines[-tail_lines:])
         marker = f"\n[...truncated {removed} lines...]\n"
+
+        while (
+            head_lines + tail_lines > 2
+            and self._estimator.estimate_tokens(head + marker + tail) > effective_budget
+        ):
+            head_lines = max(1, head_lines - 1)
+            tail_lines = max(1, tail_lines - 1)
+            removed = total_lines - head_lines - tail_lines
+            head = "".join(lines[:head_lines])
+            tail = "".join(lines[-tail_lines:])
+            marker = f"\n[...truncated {removed} lines...]\n"
 
         return head + marker + tail
 
@@ -281,6 +287,7 @@ class ToolResultManager:
                 self._stats["dedup_saves"] += 1
                 cached = self._cache.get(result_hash)
                 if cached is not None:
+                    self._cache.move_to_end(result_hash)
                     return replace(cached, was_deduped=True)
                 # Hash collision path – fall through to re-process
 
@@ -288,18 +295,13 @@ class ToolResultManager:
             was_truncated = False
             processed = content
 
-            # First apply per-tool budget
+            # Compute effective budget: use the smaller of per-tool and global
             tool_budgets = {**DEFAULT_TOOL_BUDGETS, **self.per_tool_budgets}
             tool_budget = tool_budgets.get(tool_name, tool_budgets.get("default", 8000))
+            effective_budget = min(tool_budget, self.max_tokens)
             tokens = self._estimator.estimate_tokens(processed)
-            if tokens > tool_budget:
-                processed = self._truncator.truncate(processed, tool_budget)
-                was_truncated = True
-
-            # Then apply global max
-            tokens = self._estimator.estimate_tokens(processed)
-            if tokens > self.max_tokens:
-                processed = self._truncator.truncate(processed, self.max_tokens)
+            if tokens > effective_budget:
+                processed = self._truncator.truncate(processed, effective_budget)
                 was_truncated = True
 
             if was_truncated:

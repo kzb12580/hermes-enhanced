@@ -75,12 +75,12 @@ class MemoryEntry:
     def from_dict(cls, d: dict) -> "MemoryEntry":
         """Deserialize from dict."""
         return cls(
-            id=d["id"],
-            type=MemoryType(d["type"]),
-            content=d["content"],
+            id=d.get("id", str(uuid.uuid4())),
+            type=MemoryType(d.get("type", "memory")),
+            content=d.get("content", ""),
             tags=d.get("tags", []),
-            created_at=datetime.fromisoformat(d["created_at"]),
-            accessed_at=datetime.fromisoformat(d["accessed_at"]),
+            created_at=datetime.fromisoformat(d.get("created_at", datetime.now(timezone.utc).isoformat())),
+            accessed_at=datetime.fromisoformat(d.get("accessed_at", datetime.now(timezone.utc).isoformat())),
             access_count=d.get("access_count", 0),
             relevance_score=d.get("relevance_score", 1.0),
             source=d.get("source", ""),
@@ -102,7 +102,7 @@ STOP_WORDS = frozenset(
 )
 
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -110,7 +110,7 @@ def _tokenize(text: str) -> list[str]:
     if not isinstance(text, str):
         return []
     tokens = _TOKEN_RE.findall(text.lower())
-    return [t for t in tokens if t not in STOP_WORDS and len(t) > 1]
+    return [t for t in tokens if t not in STOP_WORDS]
 
 
 def _tf(tokens: list[str]) -> Counter:
@@ -207,7 +207,7 @@ class MemoryStore:
             if len(self._entries) >= self.max_entries:
                 self._evict()
             self._entries[entry.id] = entry
-            self._auto_save_immediate()
+            self._auto_save()
             return entry.id
 
     def get(self, id: str) -> Optional[MemoryEntry]:
@@ -239,7 +239,14 @@ class MemoryStore:
             for e in candidates
         ]
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [_copy.deepcopy(e) for _, e in scored[:limit]]
+        # Update access statistics on the originals before returning copies
+        result_entries = [e for _, e in scored[:limit]]
+        now = datetime.now(timezone.utc)
+        for entry in result_entries:
+            entry.access_count += 1
+            entry.accessed_at = now
+        self._auto_save()
+        return [_copy.deepcopy(e) for e in result_entries]
 
     # Allowed updatable fields (prevents setting internal/computed attributes)
     _UPDATABLE_FIELDS: frozenset[str] = frozenset({
@@ -287,7 +294,7 @@ class MemoryStore:
         with self._lock:
             if id in self._entries:
                 del self._entries[id]
-                self._auto_save_immediate()
+                self._auto_save()
                 return True
             return False
 
@@ -386,14 +393,22 @@ class MemoryStore:
                 self._dirty = False
 
     def _evict(self) -> None:
-        """Remove lowest-relevance, oldest entry."""
+        """Remove lowest-relevance, oldest entry.
+
+        NOTE: Caller must hold ``self._lock``.  This method is intentionally
+        lock-free to avoid double-locking when called from ``add()`` which
+        already holds the reentrant lock.
+        """
         if not self._entries:
             return
         worst = min(
             self._entries.values(),
             key=lambda e: (
-                e.relevance_score - PRIORITY_ORDER.get(e.type, 0),
-                e.created_at,
+                # Sort by (priority_tier, -relevance_score, created_at).
+                # Lower priority_tier = higher importance (evicted last).
+                # Higher relevance_score = evicted last.
+                # Older created_at = evicted first among ties.
+                (PRIORITY_ORDER.get(e.type, 99), -e.relevance_score, e.created_at),
             ),
         )
         del self._entries[worst.id]

@@ -216,7 +216,8 @@ class TestPipelineManagement:
     def test_add_rule_append(self):
         pp = PermissionPipeline(rules=[])
         pp.add_rule(PermissionRule("foo", PermissionLevel.AUTO))
-        assert len(pp.get_rules()) == 1
+        # rules=[] now creates a default allow-all rule, so 2 total
+        assert len(pp.get_rules()) == 2
 
     def test_add_rule_at_index(self):
         pp = PermissionPipeline(rules=[
@@ -238,8 +239,9 @@ class TestPipelineManagement:
 
     def test_remove_rule_out_of_range(self):
         pp = PermissionPipeline(rules=[])
+        # rules=[] now has 1 default allow-all rule, so index 1 is out of range
         with pytest.raises(IndexError):
-            pp.remove_rule(0)
+            pp.remove_rule(1)
 
     def test_get_rules_returns_copy(self):
         pp = PermissionPipeline(rules=[PermissionRule("x", PermissionLevel.AUTO)])
@@ -361,11 +363,13 @@ class TestSerialization:
 
     def test_from_dict_empty(self):
         pp = PermissionPipeline.from_dict({"rules": []})
-        assert len(pp.get_rules()) == 0
+        # Empty rules in from_dict loads default rules (via _build_default_rules)
+        assert len(pp.get_rules()) > 0
 
     def test_from_dict_missing_rules(self):
         pp = PermissionPipeline.from_dict({})
-        assert len(pp.get_rules()) == 0
+        # Missing rules key loads default rules (via _build_default_rules)
+        assert len(pp.get_rules()) > 0
 
 
 # ── Edge cases ───────────────────────────────────────────────────────────────
@@ -374,7 +378,9 @@ class TestEdgeCases:
     def test_empty_pipeline_prompts(self):
         pp = PermissionPipeline(rules=[])
         d = pp.check("anything", {})
-        assert d.needs_prompt is True
+        # rules=[] now means allow-all with default wildcard rule
+        assert d.needs_prompt is False
+        assert d.allowed is True
 
     def test_condition_on_deny_rule_ignored(self):
         """DENY rules don't evaluate conditions (condition only escalates PROMPT→DENY)."""

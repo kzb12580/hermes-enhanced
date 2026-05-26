@@ -8,7 +8,7 @@ import os
 # Ensure package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from hermes_upgrades.post_turn_hooks import (
+from agent.hermes2.post_turn_hooks import (
     HookContext,
     HookResult,
     PostTurnHook,

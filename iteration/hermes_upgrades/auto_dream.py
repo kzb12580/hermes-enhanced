@@ -90,7 +90,14 @@ class DreamTrigger:
         self._last_run: datetime = datetime.fromtimestamp(0, tz=timezone.utc)
 
     def should_run(self, session_count: int, last_run: datetime) -> bool:
-        """Return ``True`` if either threshold has been exceeded."""
+        """Return ``True`` if either threshold has been exceeded.
+
+        .. warning::
+            **Side-effect:** This method mutates ``self._session_count`` and
+            ``self._last_run`` to the values passed in.  Callers should be
+            aware that ``get_trigger_reason()`` depends on these cached
+            values and reflects the most recent call to ``should_run()``.
+        """
         self._session_count = session_count
         # Guard against naive datetime
         if last_run.tzinfo is None:
@@ -272,6 +279,7 @@ class MemoryConsolidator:
                 ))
 
         # --- Promote frequently accessed memories --------------------------
+        promoted_ids: set[str] = set()
         for mem in existing_memories:
             if mem.access_count >= 5 and mem.relevance_score < 2.0:
                 promoted_mem = copy.deepcopy(mem)
@@ -279,10 +287,15 @@ class MemoryConsolidator:
                     promoted_mem.relevance_score + 0.3, 2.0
                 )
                 promoted.append(promoted_mem)
+                promoted_ids.add(mem.id)
 
         # --- Demote rarely accessed old memories ---------------------------
+        # Skip memories that were already promoted to avoid conflicting
+        # relevance changes on the same entry.
         cutoff = now - timedelta(days=14)
         for mem in existing_memories:
+            if mem.id in promoted_ids:
+                continue
             if (mem.access_count == 0
                     and mem.created_at < cutoff
                     and mem.relevance_score > 0.1):
@@ -342,6 +355,8 @@ class AutoDreamer:
         self._history: list[DreamReport] = []
         self._lock = threading.Lock()
 
+    MAX_HISTORY: int = 100
+
     # -- Public API ---------------------------------------------------------
 
     def record_session(self, summary: SessionSummary) -> None:
@@ -372,25 +387,25 @@ class AutoDreamer:
             return self._dream_locked()
 
     def _dream_locked(self) -> DreamReport:
-        """Internal dream implementation (must hold self._lock)."""
+        """Internal dream implementation (must hold self._lock).
+
+        Gathers all needed data while holding self._lock, then releases it
+        before calling MemoryStore methods (which acquire store._lock) to
+        avoid a lock-ordering deadlock.
+        """
         if not self._pending_summaries:
             report = DreamReport(timestamp=datetime.now(timezone.utc))
             self._history.append(report)
+            if len(self._history) > self.MAX_HISTORY:
+                self._history = self._history[-self.MAX_HISTORY:]
             return report
 
+        # Phase 1: gather data while holding self._lock
         summaries = list(self._pending_summaries)
         existing = list(self._store.entries)
 
         # Consolidate: create new episodic memories (non-destructive)
         result = self._consolidator.consolidate(summaries, existing)
-
-        now = datetime.now(timezone.utc)
-
-        # Apply promoted/demoted changes back to the store
-        for pm in result.promoted:
-            self._store.update(pm.id, relevance_score=pm.relevance_score)
-        for dm in result.demoted:
-            self._store.update(dm.id, relevance_score=dm.relevance_score)
 
         promote_count = len(result.promoted)
         demote_count = len(result.demoted)
@@ -399,12 +414,29 @@ class AutoDreamer:
         merged_memories = self._merge_similar(result.new_entries)
         merge_count = len(result.new_entries) - len(merged_memories)
 
-        # Add to store
-        for mem in merged_memories:
-            self._store.add(mem)
-
-        # Generate insights
+        # Generate insights (read-only, safe under lock)
         insights = self._generate_insights(summaries)
+
+        # Reset counters (under self._lock)
+        self._pending_summaries.clear()
+        self._session_count = 0
+        now = datetime.now(timezone.utc)
+        self._last_dream = now
+
+        # Phase 2: release self._lock before store operations
+        self._lock.release()
+        try:
+            # Apply promoted/demoted changes back to the store
+            for pm in result.promoted:
+                self._store.update(pm.id, relevance_score=pm.relevance_score)
+            for dm in result.demoted:
+                self._store.update(dm.id, relevance_score=dm.relevance_score)
+
+            # Add to store
+            for mem in merged_memories:
+                self._store.add(mem)
+        finally:
+            self._lock.acquire()
 
         report = DreamReport(
             sessions_reviewed=len(summaries),
@@ -416,11 +448,9 @@ class AutoDreamer:
             timestamp=now,
         )
 
-        # Reset counters
-        self._pending_summaries.clear()
-        self._session_count = 0
-        self._last_dream = now
         self._history.append(report)
+        if len(self._history) > self.MAX_HISTORY:
+            self._history = self._history[-self.MAX_HISTORY:]
         return report
 
     def get_history(self) -> list[DreamReport]:

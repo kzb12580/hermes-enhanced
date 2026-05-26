@@ -14,23 +14,23 @@ import pytest
 # Ensure package imports work (modules use relative imports)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from hermes_upgrades.memory_system import (
+from agent.hermes2.memory_system import (
     MemoryEntry, MemoryExtractor, MemoryInjector, MemorySearch,
     MemoryStore, MemoryType, _tokenize,
 )
-from hermes_upgrades.context_compressor_v2 import (
+from agent.hermes2.context_compressor_v2 import (
     ContextCompressorV2, PressureMonitor, _message_tokens, _total_tokens,
     _estimate_tokens,
 )
-from hermes_upgrades.tool_result_manager import (
+from agent.hermes2.tool_result_manager import (
     TokenEstimator, ResultDeduplicator, SmartTruncator, ToolResultManager,
 )
-from hermes_upgrades.tool_orchestrator import ToolCall, ToolOrchestrator
-from hermes_upgrades.permission_pipeline import PermissionPipeline, PermissionRule, PermissionLevel
-from hermes_upgrades.hermes2_adapter import Hermes2Engine, Hermes2Config, from_config
-from hermes_upgrades.coordinator import TaskDecomposer, Coordinator, ResultAggregator
-from hermes_upgrades.post_turn_hooks import HookContext, HookPipeline
-from hermes_upgrades.auto_dream import TranscriptAnalyzer
+from agent.hermes2.tool_orchestrator import ToolCall, ToolOrchestrator
+from agent.hermes2.permission_pipeline import PermissionPipeline, PermissionRule, PermissionLevel
+from agent.hermes2.hermes2_adapter import Hermes2Engine, Hermes2Config, from_config
+from agent.hermes2.coordinator import TaskDecomposer, Coordinator, ResultAggregator
+from agent.hermes2.post_turn_hooks import HookContext, HookPipeline
+from agent.hermes2.auto_dream import TranscriptAnalyzer
 
 
 # ============================================================================
@@ -103,14 +103,16 @@ class TestMemoryStoreSearchEdgeCases:
 class TestMemoryEntryFromDict:
 
     def test_from_dict_missing_required_keys(self):
-        """from_dict uses direct d['key'] access — missing keys crash."""
+        """from_dict uses .get() with defaults — missing keys are filled in."""
         incomplete = {"id": "x", "type": "user"}  # missing content, created_at, etc.
-        with pytest.raises(KeyError):
-            MemoryEntry.from_dict(incomplete)
+        entry = MemoryEntry.from_dict(incomplete)
+        assert entry.id == "x"
+        assert entry.content == ""  # default for missing content
 
     def test_from_dict_empty_dict(self):
-        with pytest.raises(KeyError):
-            MemoryEntry.from_dict({})
+        entry = MemoryEntry.from_dict({})
+        assert entry.type == MemoryType.MEMORY  # default type
+        assert entry.content == ""  # default content
 
     def test_from_dict_none(self):
         with pytest.raises((AttributeError, TypeError)):
@@ -193,9 +195,9 @@ class TestTokenEstimationEdgeCases:
         assert isinstance(tokens, int)
 
     def test_estimate_tokens_with_none(self):
-        """_estimate_tokens(None) crashes."""
-        with pytest.raises(TypeError):
-            _estimate_tokens(None)
+        """_estimate_tokens(None) returns 0 gracefully."""
+        result = _estimate_tokens(None)
+        assert result == 0
 
 
 # ============================================================================
@@ -344,8 +346,8 @@ class TestCoordinatorEdgeCases:
         """Aggregating empty task list."""
         agg = ResultAggregator()
         result = agg.aggregate([])
-        assert result.all_completed is True
-        assert result.summary.startswith("All 0")
+        assert result.all_completed is False  # empty list = nothing completed
+        assert "0/0" in result.summary
 
 
 # ============================================================================

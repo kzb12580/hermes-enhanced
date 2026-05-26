@@ -263,10 +263,10 @@ class TestTokenBudgetManager:
         assert mgr.end_turn() is None
 
     def test_record_usage_without_turn(self):
-        """Recording usage outside a turn is a no-op."""
+        """Recording usage outside a turn accumulates as orphan tokens."""
         mgr = TokenBudgetManager()
         mgr.record_usage("tool", 10_000)  # Should not raise
-        assert mgr.used_tokens == 0
+        assert mgr.used_tokens == 10_000  # orphan tokens are tracked, not lost
 
     def test_custom_tool_budgets(self):
         """Custom tool budgets override defaults."""
@@ -418,8 +418,10 @@ class TestSmartRetryManager:
         def flaky_executor(tc):
             nonlocal call_count
             call_count += 1
-            if call_count < 3:
-                raise ConnectionError("Connection timed out")
+            if call_count == 1:
+                raise ConnectionError("Connection timed out (attempt 1)")
+            if call_count == 2:
+                raise ConnectionError("Connection timed out (attempt 2)")
             return "success"
 
         mgr = SmartRetryManager(
@@ -454,8 +456,12 @@ class TestSmartRetryManager:
 
     def test_max_retries_exhausted(self):
         """All retries exhausted returns failure."""
+        call_count = 0
         def always_fail(tc):
-            raise ConnectionError("Connection timed out")
+            nonlocal call_count
+            call_count += 1
+            # Vary error message to avoid the same-error guard
+            raise ConnectionError(f"Connection timed out (attempt {call_count})")
 
         policy = RetryPolicy(max_retries=2, base_delay=0.01, backoff_factor=1.0)
         mgr = SmartRetryManager(
@@ -466,7 +472,7 @@ class TestSmartRetryManager:
         result = mgr.execute_with_retry(tc, always_fail)
 
         assert result.success is False
-        assert result.attempts == 3  # 1 initial + 2 retries
+        assert result.attempts == 3  # 1 initial + 2 retries (all fail)
         assert result.retries == 2
 
     def test_circuit_breaker_blocks_execution(self):

@@ -217,8 +217,8 @@ class TestCreateTransport:
 
     def test_websocket_maps_to_http(self) -> None:
         cfg = McpServerConfig(name="ws", transport=TransportType.WEBSOCKET, url="ws://localhost")
-        t = create_transport(cfg)
-        assert isinstance(t, HttpTransport)
+        with pytest.raises(NotImplementedError, match="WebSocket"):
+            create_transport(cfg)
 
 
 # ====================================================================

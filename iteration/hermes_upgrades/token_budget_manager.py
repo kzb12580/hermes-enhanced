@@ -133,6 +133,7 @@ class TokenBudgetManager:
         self._used_tokens: int = 0
         self._turns: list[TurnRecord] = []
         self._current_turn: TurnRecord | None = None
+        self._orphan_tokens: int = 0  # tokens recorded outside any turn
         import threading
         self._lock = threading.RLock()
 
@@ -201,8 +202,10 @@ class TokenBudgetManager:
         available = int(base_budget * factor)
         available = min(available, remaining, requested)
 
-        # Never allocate less than 200 tokens (minimum useful result) or more than requested
-        available = max(200, available) if remaining >= 200 else remaining
+        # Never allocate less than 200 tokens (minimum useful result), capped at zone amount
+        zone_amount = int(base_budget * factor)
+        floor = min(200, zone_amount)
+        available = max(floor, available) if remaining >= floor else remaining
         available = min(available, requested)
 
         reason = f"Pressure zone {zone.value}: allocated {available}/{requested} tokens"
@@ -220,7 +223,6 @@ class TokenBudgetManager:
 
     def record_usage(self, tool_name: str, actual_tokens: int) -> None:
         """Record actual token usage for a tool call in the current turn.
-
         Parameters
         ----------
         tool_name : str
@@ -234,13 +236,17 @@ class TokenBudgetManager:
                     self._current_turn.tool_usages.get(tool_name, 0) + actual_tokens
                 )
                 self._current_turn.total_tokens += actual_tokens
+            else:
+                # No active turn — accumulate in a fallback counter so
+                # usage is not silently lost.
+                self._orphan_tokens += actual_tokens
 
     @property
     def used_tokens(self) -> int:
         """Total tokens used so far (completed turns + current turn partial)."""
         with self._lock:
             current_partial = self._current_turn.total_tokens if self._current_turn else 0
-            return self._used_tokens + current_partial
+            return self._used_tokens + current_partial + self._orphan_tokens
 
     @property
     def remaining_tokens(self) -> int:
@@ -313,6 +319,7 @@ class TokenBudgetManager:
         """Reset all tracking state."""
         with self._lock:
             self._used_tokens = 0
+            self._orphan_tokens = 0
             self._turns.clear()
             self._current_turn = None
 

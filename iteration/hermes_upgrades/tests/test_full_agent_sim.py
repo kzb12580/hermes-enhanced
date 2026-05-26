@@ -51,14 +51,14 @@ from context_compressor_v2 import (
     PressureMonitor,
     _total_tokens,
 )
-from hermes_upgrades.memory_system import (
+from agent.hermes2.memory_system import (
     MemoryEntry,
     MemoryExtractor,
     MemoryInjector,
     MemoryStore,
     MemoryType,
 )
-from hermes_upgrades.post_turn_hooks import (
+from agent.hermes2.post_turn_hooks import (
     ContextHealthHook,
     HookContext,
     HookPipeline,
@@ -68,7 +68,7 @@ from hermes_upgrades.post_turn_hooks import (
     PromptSuggestionHook,
     UsageTrackingHook,
 )
-from hermes_upgrades.auto_dream import (
+from agent.hermes2.auto_dream import (
     AutoDreamer,
     DreamReport,
     DreamTrigger,

@@ -25,11 +25,11 @@ import pytest
 # Ensure package imports work (modules use relative imports)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from hermes_upgrades.hermes2_adapter import Hermes2Config, Hermes2Engine, from_config
-from hermes_upgrades.tool_orchestrator import ToolCall
-from hermes_upgrades.permission_pipeline import PermissionLevel, PermissionRule
-from hermes_upgrades.memory_system import MemoryEntry, MemoryType
-from hermes_upgrades.auto_dream import SessionSummary
+from agent.hermes2.hermes2_adapter import Hermes2Config, Hermes2Engine, from_config
+from agent.hermes2.tool_orchestrator import ToolCall
+from agent.hermes2.permission_pipeline import PermissionLevel, PermissionRule
+from agent.hermes2.memory_system import MemoryEntry, MemoryType
+from agent.hermes2.auto_dream import SessionSummary
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ class TestProcessToolCalls:
         """Write tools produce individual batches."""
         engine = Hermes2Engine()
         # Override to auto-approve writes
-        from hermes_upgrades.permission_pipeline import PermissionLevel as PL
+        from agent.hermes2.permission_pipeline import PermissionLevel as PL
 
         rules = [PermissionRule("*", PermissionLevel.AUTO)]
         engine = Hermes2Engine(Hermes2Config(permission_rules=rules))
@@ -337,14 +337,14 @@ class TestDreamLifecycle:
     def test_should_dream_uses_internal_state(self):
         engine = Hermes2Engine(Hermes2Config(auto_dream_threshold=1))
         # Manually record enough sessions to trigger
-        from hermes_upgrades.auto_dream import SessionSummary
+        from agent.hermes2.auto_dream import SessionSummary
 
         engine.auto_dreamer.record_session(SessionSummary(topics=["test"]))
         assert engine.should_dream() is True
 
     def test_dream_returns_report(self):
         engine = Hermes2Engine()
-        from hermes_upgrades.auto_dream import SessionSummary
+        from agent.hermes2.auto_dream import SessionSummary
 
         # Record some sessions with content
         for i in range(3):
@@ -362,7 +362,7 @@ class TestDreamLifecycle:
 
     def test_dream_resets_session_count(self):
         engine = Hermes2Engine()
-        from hermes_upgrades.auto_dream import SessionSummary
+        from agent.hermes2.auto_dream import SessionSummary
 
         engine.auto_dreamer.record_session(SessionSummary(topics=["a"]))
         engine.dream()
@@ -539,7 +539,7 @@ class TestEdgeCases:
     def test_get_stats_after_dream(self):
         """Stats should reflect dream history."""
         engine = Hermes2Engine()
-        from hermes_upgrades.auto_dream import SessionSummary
+        from agent.hermes2.auto_dream import SessionSummary
 
         engine.auto_dreamer.record_session(SessionSummary(topics=["test"]))
         engine.dream()

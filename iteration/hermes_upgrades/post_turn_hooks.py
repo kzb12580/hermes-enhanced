@@ -38,6 +38,11 @@ try:
 except ImportError:
     from memory_system import MemoryExtractor, MemoryEntry
 
+try:
+    from .token_utils import estimate_tokens
+except ImportError:
+    from token_utils import estimate_tokens
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -118,10 +123,18 @@ class MemoryExtractionHook(PostTurnHook):
         try:
             # Build message list for extractor
             msgs: list[dict] = list(ctx.messages)
-            # Ensure the latest user/assistant messages are included
-            if ctx.user_message:
+            # Ensure the latest user/assistant messages are included,
+            # but only if they aren't already present in ctx.messages
+            # (avoids duplicate extraction on the same content).
+            if ctx.user_message and not any(
+                m.get("role") == "user" and m.get("content") == ctx.user_message
+                for m in msgs
+            ):
                 msgs.append({"role": "user", "content": ctx.user_message})
-            if ctx.assistant_message:
+            if ctx.assistant_message and not any(
+                m.get("role") == "assistant" and m.get("content") == ctx.assistant_message
+                for m in msgs
+            ):
                 msgs.append({"role": "assistant", "content": ctx.assistant_message})
 
             entries: list[MemoryEntry] = self._extractor.extract_from_conversation(msgs)
@@ -181,15 +194,14 @@ class UsageTrackingHook(PostTurnHook):
             tool_call_count = len(ctx.tool_calls)
             tool_result_count = len(ctx.tool_results)
 
-            # Rough token estimate: ~4 chars per token
-            user_tokens = len(ctx.user_message) // 4
-            assistant_tokens = len(ctx.assistant_message) // 4
+            user_tokens = estimate_tokens(ctx.user_message)
+            assistant_tokens = estimate_tokens(ctx.assistant_message)
             turn_tokens = user_tokens + assistant_tokens
 
             # Add tool result content tokens
             for tr in ctx.tool_results:
                 content = str(tr.get("content", ""))
-                turn_tokens += len(content) // 4
+                turn_tokens += estimate_tokens(content)
 
             with self._lock:
                 self.cumulative["total_turns"] += 1
@@ -235,12 +247,13 @@ class PromptSuggestionHook(PostTurnHook):
     _EDIT_TOOLS = frozenset({
         "write_file", "patch", "str_replace_editor", "create", "edit",
     })
+    _FILE_PATH_RE: re.Pattern = re.compile(r"(?:/[\w./-]+\.\w+)")
     _ERROR_PATTERNS: list[re.Pattern] = [
-        re.compile(r"error", re.I),
-        re.compile(r"traceback", re.I),
-        re.compile(r"exception", re.I),
-        re.compile(r"failed", re.I),
-        re.compile(r"fatal", re.I),
+        re.compile(r"\berror\b(?!\s*-?\s*free)", re.I),
+        re.compile(r"\btraceback\b", re.I),
+        re.compile(r"\bexception\b", re.I),
+        re.compile(r"\bfailed\b", re.I),
+        re.compile(r"\bfatal\b", re.I),
     ]
 
     async def execute(self, ctx: HookContext) -> HookResult:
@@ -281,9 +294,7 @@ class PromptSuggestionHook(PostTurnHook):
 
             # Check assistant message for file paths mentioned
             if ctx.assistant_message:
-                file_mentions = re.findall(
-                    r"(?:/[\w./-]+\.\w+)", ctx.assistant_message
-                )
+                file_mentions = self._FILE_PATH_RE.findall(ctx.assistant_message)
                 if file_mentions and not edited_files:
                     suggestions.append(
                         "Files were mentioned in the response. "
@@ -389,6 +400,8 @@ class HookPipeline:
     """
 
     def __init__(self, hooks: Optional[list[PostTurnHook]] = None) -> None:
+        import threading
+        self._lock = threading.Lock()
         self._hooks: list[PostTurnHook] = []
         if hooks:
             for h in hooks:
@@ -399,17 +412,24 @@ class HookPipeline:
 
         If a hook with the same name already exists it is replaced.
         Hooks are kept sorted by priority (ascending = runs first).
+
+        Thread-safe: protected by an internal lock.
         """
-        # Remove existing hook with same name
-        self._hooks = [h for h in self._hooks if h.name != hook.name]
-        self._hooks.append(hook)
-        self._hooks.sort(key=lambda h: h.priority)
+        with self._lock:
+            # Remove existing hook with same name
+            self._hooks = [h for h in self._hooks if h.name != hook.name]
+            self._hooks.append(hook)
+            self._hooks.sort(key=lambda h: h.priority)
 
     def unregister(self, name: str) -> bool:
-        """Remove a hook by name. Returns True if found and removed."""
-        before = len(self._hooks)
-        self._hooks = [h for h in self._hooks if h.name != name]
-        return len(self._hooks) < before
+        """Remove a hook by name. Returns True if found and removed.
+
+        Thread-safe: protected by an internal lock.
+        """
+        with self._lock:
+            before = len(self._hooks)
+            self._hooks = [h for h in self._hooks if h.name != name]
+            return len(self._hooks) < before
 
     async def run_all(self, ctx: HookContext, hook_timeout: float = 30.0) -> list[HookResult]:
         """Run every enabled hook in priority order.
@@ -426,8 +446,16 @@ class HookPipeline:
             if not hook.enabled:
                 continue
             try:
-                # Deepcopy ctx for each hook to prevent inter-hook mutation
-                ctx_copy = copy.deepcopy(ctx)
+                # Shallow copy of messages list for inter-hook isolation
+                ctx_copy = HookContext(
+                    messages=[dict(m) for m in ctx.messages],
+                    user_message=ctx.user_message,
+                    assistant_message=ctx.assistant_message,
+                    tool_calls=ctx.tool_calls,
+                    tool_results=ctx.tool_results,
+                    session_id=ctx.session_id,
+                    turn_number=ctx.turn_number,
+                )
                 result = await asyncio.wait_for(hook.execute(ctx_copy), timeout=hook_timeout)
             except asyncio.TimeoutError:
                 result = HookResult(
@@ -461,7 +489,17 @@ class HookPipeline:
         for hook in self._hooks:
             if hook.name in name_set and hook.enabled:
                 try:
-                    result = await hook.execute(ctx)
+                    # Shallow copy of messages list for inter-hook isolation
+                    ctx_copy = HookContext(
+                        messages=[dict(m) for m in ctx.messages],
+                        user_message=ctx.user_message,
+                        assistant_message=ctx.assistant_message,
+                        tool_calls=ctx.tool_calls,
+                        tool_results=ctx.tool_results,
+                        session_id=ctx.session_id,
+                        turn_number=ctx.turn_number,
+                    )
+                    result = await hook.execute(ctx_copy)
                 except Exception as exc:
                     result = HookResult(
                         hook_name=hook.name,

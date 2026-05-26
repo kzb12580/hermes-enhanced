@@ -188,10 +188,23 @@ class TaskScheduler:
         """Assign tasks to agents.
 
         Args:
-            tasks: Tasks to schedule (modified in-place: status and assigned_to).
+            tasks: Tasks to schedule.
 
         Returns:
             Mapping of agent_id -> list of assigned task_ids.
+
+        .. warning::
+            **Side-effects:** This method mutates tasks **in-place**:
+
+            * ``task.status`` is changed from ``PENDING`` to ``ASSIGNED``
+              for tasks that receive an agent.
+            * ``task.assigned_to`` is set to the chosen agent's id.
+            * ``task_status_map`` is a **point-in-time snapshot** built at
+              the start of the call; it is updated as tasks are assigned
+              within the same invocation but does *not* reflect concurrent
+              external changes.  Callers relying on dependency ordering
+              should ensure all upstream tasks are completed before calling
+              ``schedule()``.
         """
         # Sort by priority (lower number = higher priority)
         sorted_tasks = sorted(tasks, key=lambda t: t.priority)
@@ -227,6 +240,7 @@ class TaskScheduler:
                 agent.assign_task()
                 task.assigned_to = agent.id
                 task.status = TaskStatus.ASSIGNED
+                task_status_map[task.id] = TaskStatus.ASSIGNED
                 assignments[agent.id].append(task.id)
 
         return assignments
@@ -246,7 +260,7 @@ class ResultAggregator:
         """
         completed = [t for t in results if t.status == TaskStatus.COMPLETED]
         failed = [t for t in results if t.status == TaskStatus.FAILED]
-        all_done = len(failed) == 0 and len(completed) == len(results)
+        all_done = bool(results) and len(failed) == 0 and len(completed) == len(results)
 
         details: list[dict[str, Any]] = []
         for task in results:
@@ -392,7 +406,10 @@ class Coordinator:
         reviews: dict[str, Any] = {}
         for task in tasks:
             if task.status == TaskStatus.COMPLETED:
-                reviews[task.id] = reviewer_fn(task)
+                try:
+                    reviews[task.id] = reviewer_fn(task)
+                except Exception as exc:
+                    reviews[task.id] = {"error": str(exc)}
         return reviews
 
     def run_full_cycle(

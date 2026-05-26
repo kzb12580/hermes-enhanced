@@ -24,32 +24,32 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
 
-from hermes_upgrades.tool_orchestrator import (
+from agent.hermes2.tool_orchestrator import (
     BatchResult,
     ToolCall,
     ToolOrchestrator,
 )
-from hermes_upgrades.tool_result_manager import (
+from agent.hermes2.tool_result_manager import (
     ProcessedResult,
     ToolResultManager,
 )
-from hermes_upgrades.permission_pipeline import (
+from agent.hermes2.permission_pipeline import (
     PermissionDecision,
     PermissionLevel,
     PermissionPipeline,
 )
-from hermes_upgrades.memory_system import (
+from agent.hermes2.memory_system import (
     MemoryEntry,
     MemoryExtractor,
     MemoryStore,
     MemoryType,
 )
-from hermes_upgrades.context_compressor_v2 import (
+from agent.hermes2.context_compressor_v2 import (
     CompressedMessages,
     ContextCompressorV2,
     FullLevel,
 )
-from hermes_upgrades.post_turn_hooks import (
+from agent.hermes2.post_turn_hooks import (
     HookContext,
     HookPipeline,
     HookResult,
@@ -58,17 +58,17 @@ from hermes_upgrades.post_turn_hooks import (
     PromptSuggestionHook,
     ContextHealthHook,
 )
-from hermes_upgrades.auto_dream import (
+from agent.hermes2.auto_dream import (
     SessionSummary,
     TranscriptAnalyzer,
 )
-from hermes_upgrades.coordinator import (
+from agent.hermes2.coordinator import (
     AggregatedResult,
     ResultAggregator,
     TaskSpec,
     TaskStatus,
 )
-from hermes_upgrades.hermes2_adapter import Hermes2Engine, Hermes2Config
+from agent.hermes2.hermes2_adapter import Hermes2Engine, Hermes2Config
 
 
 # ============================================================================
@@ -772,7 +772,7 @@ class TestContract_TaskSpec_ResultAggregator:
         aggregator = ResultAggregator()
         result = aggregator.aggregate([])
         assert isinstance(result, AggregatedResult)
-        assert result.all_completed is True
+        assert result.all_completed is False  # empty list means no tasks completed
         assert result.details == []
         assert result.failed_tasks == []
 

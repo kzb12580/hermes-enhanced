@@ -269,7 +269,12 @@ class CircuitBreaker:
                     return True
                 return False
 
-            # HALF_OPEN — only allow one probe request
+            # HALF_OPEN — only allow one probe request.
+            # NOTE: _probe_sent is already True from the OPEN→HALF_OPEN
+            # transition above (that transition *is* the probe), so this
+            # branch correctly blocks all subsequent requests while the
+            # probe is in-flight.  record_success() / record_failure()
+            # will transition out of HALF_OPEN and reset _probe_sent.
             if not self._probe_sent:
                 self._probe_sent = True
                 return True
@@ -492,10 +497,16 @@ class SmartRetryManager:
                 })
 
                 # Check if we should retry
-                should_retry = (
-                    attempt < policy.max_retries
-                    and category in policy.retryable_categories
-                )
+                # Guard: if the same error repeats on every attempt, stop early
+                if len(history) >= 2 and all(
+                    h.get("error") == error_msg for h in history
+                ):
+                    should_retry = False
+                else:
+                    should_retry = (
+                        attempt < policy.max_retries
+                        and category in policy.retryable_categories
+                    )
 
                 if not should_retry:
                     with self._stats_lock:

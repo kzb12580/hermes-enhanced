@@ -12,8 +12,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from hermes_upgrades.memory_system import MemoryEntry, MemoryStore, MemoryType
-from hermes_upgrades.auto_dream import (
+from agent.hermes2.memory_system import MemoryEntry, MemoryStore, MemoryType
+from agent.hermes2.auto_dream import (
     AutoDreamer,
     ConsolidationResult,
     DreamReport,

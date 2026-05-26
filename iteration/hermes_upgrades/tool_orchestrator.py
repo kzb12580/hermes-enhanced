@@ -149,19 +149,31 @@ def partition(
     batches: list[list[ToolCall]] = []
     pending_reads: list[ToolCall] = []
 
-    # Collect all write/ambiguous calls for conflict checks
+    # Collect all write/ambiguous calls for conflict checks, indexed by path
     write_calls = [
         tc for tc in tool_calls
         if classifier.classify(tc.name) != ConcurrencyClass.READ_ONLY
     ]
+    write_path_index: dict[str, list[ToolCall]] = {}
+    for w in write_calls:
+        for path in detector.extract_paths(w):
+            write_path_index.setdefault(path, []).append(w)
 
     for tc in tool_calls:
         cls = classifier.classify(tc.name)
         if cls == ConcurrencyClass.READ_ONLY:
-            # Check if this read conflicts with any write call
+            # Only check write calls that share the same path
+            tc_paths = detector.extract_paths(tc)
+            relevant_writes: list[ToolCall] = []
+            seen_ids: set[str] = set()
+            for path in tc_paths:
+                for w in write_path_index.get(path, []):
+                    if w.id not in seen_ids:
+                        seen_ids.add(w.id)
+                        relevant_writes.append(w)
             conflict = any(
                 detector.has_write_conflict(tc, w, classifier)
-                for w in write_calls
+                for w in relevant_writes
             )
             if conflict:
                 # Flush pending reads, then this read gets its own batch
@@ -230,6 +242,13 @@ class ToolOrchestrator:
             self._async_executor.shutdown(wait=wait)
             self._closed = True
 
+    def __del__(self) -> None:
+        """Best-effort shutdown if the caller forgot to close us."""
+        try:
+            self.shutdown(wait=False)
+        except Exception:
+            pass  # swallow — __del__ must never raise
+
     # ── public API ───────────────────────────────────────────────────────
 
     def partition(self, tool_calls: list[ToolCall]) -> list[list[ToolCall]]:
@@ -293,13 +312,23 @@ class ToolOrchestrator:
                         loop.close()
                 else:
                     # Running loop exists — execute in a new thread
+                    # NOTE: Each async tool call that arrives while a loop is
+                    # already running creates a **new event loop** in a thread
+                    # from ``self._async_executor``.  This means:
+                    #   1. Per-call loop setup/teardown overhead.
+                    #   2. No shared state (caches, connection pools, etc.)
+                    #      across loops unless they are module-level globals.
+                    #   3. Thread-safety of the executor_fn's internals is
+                    #      the caller's responsibility.
+                    # For high-throughput scenarios, consider passing an
+                    # explicit loop or using a single persistent worker loop.
                     def _run_in_new_loop():
                         new_loop = asyncio.new_event_loop()
                         try:
                             return new_loop.run_until_complete(coro)
                         finally:
                             new_loop.close()
-                    result = self._async_executor.submit(_run_in_new_loop).result()
+                    result = self._async_executor.submit(_run_in_new_loop).result(timeout=300)
             elapsed = time.monotonic() - t0
             if on_progress:
                 on_progress(tc.name, "completed", elapsed)
@@ -329,20 +358,19 @@ class ToolOrchestrator:
                 return asyncio.run(coro)
             else:
                 # Running loop exists — execute in a new thread with its own loop
-                return self._async_executor.submit(asyncio.run, coro).result()
+                return self._async_executor.submit(asyncio.run, coro).result(timeout=300)
 
-        # Sync executor – use threads.
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Sync executor – reuse the instance-level thread pool.
+        from concurrent.futures import as_completed
 
         results: dict[str, BatchResult] = {}
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = {
-                pool.submit(self._run_one, tc, executor_fn, on_progress): tc
-                for tc in batch
-            }
-            for future in as_completed(futures):
-                tc = futures[future]
-                results[tc.id] = future.result()
+        futures = {
+            self._async_executor.submit(self._run_one, tc, executor_fn, on_progress): tc
+            for tc in batch
+        }
+        for future in as_completed(futures):
+            tc = futures[future]
+            results[tc.id] = future.result()
         return results
 
     async def _run_concurrent_async(
