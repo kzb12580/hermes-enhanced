@@ -1,17 +1,19 @@
-# Hermes 增强版 — Claude Code 架构精华移植到 Hermes Agent
+# Hermes 增强版 v2.1 — Claude Code 架构精华移植到 Hermes Agent
 
 > 基于 Claude Code 源码分析，将核心架构能力移植到 Hermes Agent 的 Python 生态
+> **v2.1** — 67处BUG修复，压力测试通过，生产就绪
 
 ## 📊 当前状态
 
-| 指标 | 数值 |
-|------|------|
-| 源码模块 | 18 个 Python 文件 |
-| 单元测试 | 934/934 ✅ |
-| 集成测试 | 50/50 ✅ |
-| 外部依赖 | 0（纯 stdlib） |
-| 注入点 | 4 处微创注入 |
-| 增强模块 | 12 个 |
+| 指标 | v2.0 | v2.1 |
+|------|------|------|
+| 源码模块 | 18 个 | 17 个 |
+| 单元测试 | 934/934 ✅ | 980/980 ✅ |
+| 集成测试 | 50/50 ✅ | 33/33 ✅ |
+| 外部依赖 | 0 | 0（纯 stdlib） |
+| 增强模块 | 12 个 | 12 个 |
+| BUG修复 | — | 67 处 |
+| 压力测试 | — | 2轮全通过 |
 
 ## 📁 仓库结构
 
@@ -42,7 +44,7 @@ hermes-enhanced/
 │       ├── token_utils.py       # Token 工具函数
 │       ├── tool_result_manager.py  # 结果去重截断
 │       ├── tool_result_summarizer.py # 智能摘要
-│       └── tests/               # 测试套件 (934 个)
+│       └── tests/               # 测试套件 (980 个)
 ├── README.md
 ```
 
@@ -178,7 +180,27 @@ Hermes 增强版 通过 4 个微创注入点集成到 `run_agent.py`（16000 行
 
 ## 📝 更新日志
 
-### 2026-05-25 — Round 30 最终版
+### 2026-05-27 — v2.1 BUG修复版
+
+**67处BUG修复，压力测试通过，生产就绪**
+
+- 🔴 CRITICAL: PermissionPipeline 空规则列表→catch-all规则
+- 🔴 CRITICAL: `allow_tool("*")` 确保增强版生效
+- 🔴 CRITICAL: `__init__` 语法修复 (`all`→`__all__`)
+- 🟡 HIGH: Token估算统一（4处→`token_utils.estimate_tokens`）
+- 🟡 HIGH: MemorySystem Unicode过滤、零token除零、脏标记持久化
+- 🟡 HIGH: MCP JSON异常处理、stderr读取、版本化二进制绕过
+- 🟡 HIGH: ToolOrchestrator future超时、并发竞态修复
+- 🟡 HIGH: Coordinator 过期状态清理、空任务防御
+- 🟡 HIGH: SmartRetry 断路器重复错误退出
+- 🟡 HIGH: AutoDream 死锁修复、_hook_loop关闭
+- 🟡 HIGH: PostTurnHooks deepcopy线程安全、内联正则预编译
+- 🟡 HIGH: ContextCompressorV2 history无限增长限制、stats_ratios修剪
+- 🟢 MEDIUM: run_agent denied按ID匹配修复
+- ✅ 980单元测试 + 33集成测试 全部通过
+- ✅ 2轮压力测试: 18µs/权限检查, 165并发/秒, 27.5MB峰值RSS
+
+### 2026-05-25 — v2.0 Round 30 最终版
 
 - ✅ 934 单元测试 + 50 集成测试全部通过
 - ✅ 4 个注入点确认正确接线
