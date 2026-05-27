@@ -70,8 +70,18 @@ jobs:
         run: pyinstaller build.spec --distpath ../dist-backend --workpath ../build-backend
 
       # ---- macOS code signing (conditional) ----
+      - name: Check macOS signing secret
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo "HAS_CSC_LINK=true" >> $GITHUB_ENV
+          fi
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+
       - name: Build & publish Electron app (macOS, with signing)
-        if: matrix.platform == 'mac' && secrets.CSC_LINK != ''
+        if: matrix.platform == 'mac' && env.HAS_CSC_LINK == 'true'
         run: npx electron-builder --${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,7 +89,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Build & publish Electron app (macOS, unsigned)
-        if: matrix.platform == 'mac' && secrets.CSC_LINK == ''
+        if: matrix.platform == 'mac' && env.HAS_CSC_LINK != 'true'
         run: npx electron-builder --${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
