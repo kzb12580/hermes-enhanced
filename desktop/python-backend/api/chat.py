@@ -21,7 +21,7 @@ _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
 
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
-MAX_TOOL_ROUNDS = 25
+MAX_TOOL_ROUNDS = 999
 
 DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant with access to tools for file operations, terminal commands, and web search.
 
