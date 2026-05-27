@@ -30,6 +30,7 @@ export function InputBar() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const thinkingPickerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 右键菜单
   const { isOpen, position, menuItems, openMenu, closeMenu } = useContextMenu();
@@ -147,6 +148,21 @@ export function InputBar() {
   const handleStop = useCallback(() => {
     stopGeneration();
   }, [stopGeneration]);
+
+  // 文件选择处理
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    // 将文件名添加到输入框
+    const fileNames = Array.from(files).map(f => f.name).join(', ');
+    setInput(prev => prev ? `${prev}\n附件: ${fileNames}` : `附件: ${fileNames}`);
+    
+    // 重置 input 以便再次选择同一文件
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
 
   // 获取当前供应商名称和模型简称
   const currentProviderObj = providers.find((p) => p.id === currentProvider);
@@ -334,10 +350,17 @@ export function InputBar() {
 
         {/* 输入框 */}
         <div className="flex items-end gap-2 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            className="hidden"
+            multiple
+          />
           <button
             className="flex-shrink-0 p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
             title="添加附件"
-            disabled
+            onClick={() => fileInputRef.current?.click()}
           >
             <Paperclip size={18} />
           </button>

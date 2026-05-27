@@ -285,38 +285,56 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                   const isActive = activeSkills.includes(skill.id) || activeSkills.includes(skill.name);
                   const isSelected = selected?.id === skill.id || selected?.name === skill.name;
                   return (
-                    <button
+                    <div
                       key={skill.id}
-                      onClick={() => setSelectedId(skill.id)}
-                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-all duration-150
+                      className={`flex items-center transition-all duration-150
                         ${isSelected
                           ? 'bg-[var(--accent)]/10 border-l-2 border-[var(--accent)]'
                           : 'border-l-2 border-transparent hover:bg-[var(--bg-tertiary)]'
                         }`}
                     >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
-                        ${isActive ? 'bg-[var(--accent)]/20' : 'bg-[var(--bg-tertiary)]'}`}>
-                        {skill.is_builtin ? (
-                          <Zap size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
-                        ) : (
-                          <User size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-[var(--text-primary)] truncate">
-                            {skill.name}
-                          </span>
-                          {isActive && (
-                            <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+                      <button
+                        onClick={() => setSelectedId(skill.id)}
+                        className="flex-1 text-left px-4 py-2.5 flex items-center gap-3"
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
+                          ${isActive ? 'bg-[var(--accent)]/20' : 'bg-[var(--bg-tertiary)]'}`}>
+                          {skill.is_builtin ? (
+                            <Zap size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+                          ) : (
+                            <User size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
                           )}
                         </div>
-                        <span className="text-xs text-[var(--text-muted)] truncate block">
-                          {skill.description}
-                        </span>
-                      </div>
-                      <ChevronRight size={12} className="text-[var(--text-muted)] flex-shrink-0" />
-                    </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+                              {skill.name}
+                            </span>
+                            {isActive && (
+                              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+                            )}
+                          </div>
+                          <span className="text-xs text-[var(--text-muted)] truncate block">
+                            {skill.description}
+                          </span>
+                        </div>
+                      </button>
+                      {/* Quick toggle button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleActive(skill.id || skill.name);
+                        }}
+                        className={`flex-shrink-0 px-2 py-1 mr-2 rounded text-xs transition-colors
+                          ${isActive
+                            ? 'bg-[var(--accent)] text-white hover:opacity-80'
+                            : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-surface)]'
+                          }`}
+                        title={isActive ? '点击停用' : '点击激活'}
+                      >
+                        {isActive ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
                   );
                 })}
               </div>
