@@ -23,6 +23,102 @@ _session_lock = asyncio.Lock()
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
 MAX_TOOL_ROUNDS = 999
 
+# ─── Model context window mapping ───
+# Key: model name substring → context window tokens
+# Fallback: 32K if no match
+MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # OpenAI
+    "gpt-4o": 128_000,
+    "gpt-4-turbo": 128_000,
+    "gpt-4.1": 1_048_576,
+    "gpt-5": 1_048_576,
+    "o1": 200_000,
+    "o3": 200_000,
+    "o4": 200_000,
+    # Anthropic
+    "claude-sonnet-4": 200_000,
+    "claude-opus-4": 200_000,
+    "claude-3.5-sonnet": 200_000,
+    "claude-3-opus": 200_000,
+    # DeepSeek
+    "deepseek-v3": 65_536,
+    "deepseek-v4": 131_072,
+    "deepseek-r1": 65_536,
+    # Google
+    "gemini-2.5": 1_048_576,
+    "gemini-2.0": 1_048_576,
+    "gemini-1.5": 1_048_576,
+    # Qwen
+    "qwen-max": 131_072,
+    "qwen-plus": 131_072,
+    "qwen-turbo": 131_072,
+    "qwq": 131_072,
+    # MIMO
+    "mimo": 131_072,
+}
+
+# Response token budgets by context size
+RESPONSE_TOKEN_BUDGETS = {
+    1_048_576: 32_768,   # 1M context → 32K response
+    200_000: 16_384,     # 200K → 16K
+    131_072: 8_192,      # 131K → 8K
+    128_000: 8_192,      # 128K → 8K
+    65_536: 4_096,       # 65K → 4K
+    32_768: 4_096,       # 32K → 4K
+}
+
+
+def get_model_context_config(model_name: str) -> tuple[int, int]:
+    """Return (context_window, max_response_tokens) for a model."""
+    model_lower = model_name.lower()
+    context_window = 32_768  # default
+    for pattern, window in MODEL_CONTEXT_WINDOWS.items():
+        if pattern in model_lower:
+            context_window = window
+            break
+    # Find appropriate response budget
+    max_response = 4_096  # default
+    for threshold, budget in sorted(RESPONSE_TOKEN_BUDGETS.items(), reverse=True):
+        if context_window >= threshold:
+            max_response = budget
+            break
+    return context_window, max_response
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~4 chars per token for mixed CJK/English."""
+    if not text:
+        return 0
+    # Count CJK characters (≈2 tokens each) vs ASCII (≈0.25 tokens each)
+    cjk = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    ascii_chars = len(text) - cjk
+    return cjk * 2 + max(1, ascii_chars // 4)
+
+
+def truncate_messages_by_tokens(messages: list[dict], max_input_tokens: int) -> list[dict]:
+    """Truncate message history to fit within token budget, keeping recent messages."""
+    if not messages:
+        return messages
+
+    # Always keep the first message (system prompt or first user message)
+    result = []
+    total_tokens = 0
+
+    # Walk backwards from most recent
+    for msg in reversed(messages):
+        content = msg.get("content") or ""
+        msg_tokens = estimate_tokens(content)
+        # Add overhead for tool_calls JSON
+        if "tool_calls" in msg:
+            msg_tokens += estimate_tokens(json.dumps(msg["tool_calls"]))
+        if total_tokens + msg_tokens > max_input_tokens and result:
+            break
+        result.append(msg)
+        total_tokens += msg_tokens
+
+    result.reverse()
+    return result
+
 DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant with access to tools for file operations, terminal commands, and web search.
 
 When the user asks you to:
@@ -75,6 +171,7 @@ async def _call_provider_with_tools(
     proxy_url: Optional[str] = None,
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
+    max_tokens: int = 4096,
 ):
     """Call provider with tool calling loop.
 
@@ -101,7 +198,7 @@ async def _call_provider_with_tools(
             "model": model,
             "messages": current_messages,
             "stream": True,
-            "max_tokens": 4096,
+            "max_tokens": max_tokens,
         }
 
         if tools:
@@ -251,6 +348,18 @@ async def _call_provider_with_tools(
                 result = f"Error: tool {tool_name} timed out after 60 seconds"
             return idx, call_id, tool_name, args, result
 
+        # ─── Notify frontend: tool calls starting ───
+        for idx in sorted(tool_calls_map.keys()):
+            tc = tool_calls_map[idx]
+            args = {}
+            try:
+                args = json.loads(tc["arguments_str"]) if tc["arguments_str"] else {}
+            except json.JSONDecodeError:
+                pass
+            yield {"event": "tool_call", "data": json.dumps({
+                "id": tc["id"], "name": tc["name"], "args": args
+            })}
+
         tasks = [_run_one(idx, tc) for idx, tc in sorted(tool_calls_map.items())]
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -259,11 +368,6 @@ async def _call_provider_with_tools(
                 logger.error("Tool execution exception: %s", item)
                 continue
             idx, call_id, tool_name, args, result = item
-
-            # Notify frontend
-            yield {"event": "tool_call", "data": json.dumps({
-                "id": call_id, "name": tool_name, "args": args
-            })}
 
             logger.info("Tool %s result: %s...", tool_name, result[:200])
 
@@ -341,15 +445,29 @@ async def chat(message: ChatMessage, request: Request):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-    # Build message history
+    # Build message history with model-aware context window
     history = _sessions[session_id]["messages"]
     api_messages = []
+
+    # Resolve provider settings early (needed for context config)
+    base_url = message.base_url
+    api_key = message.api_key
+    model = message.model or "default"
 
     # System prompt
     sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
     api_messages.append({"role": "system", "content": sys_prompt})
 
-    recent = history[-50:] if len(history) > 50 else history
+    # Auto-adjust context based on model
+    context_window, max_response = get_model_context_config(model)
+    # Reserve tokens: system prompt + response + safety margin
+    system_tokens = estimate_tokens(sys_prompt)
+    max_input_tokens = context_window - max_response - system_tokens - 500  # 500 token safety
+
+    logger.info("Context config: model=%s, context_window=%d, max_response=%d, max_input=%d, history=%d msgs",
+                model, context_window, max_response, max_input_tokens, len(history))
+
+    recent = truncate_messages_by_tokens(history, max_input_tokens)
     for m in recent:
         msg = {"role": m["role"], "content": m["content"]}
         # 保留 tool_calls（assistant 消息）
@@ -359,10 +477,6 @@ async def chat(message: ChatMessage, request: Request):
         if "tool_call_id" in m:
             msg["tool_call_id"] = m["tool_call_id"]
         api_messages.append(msg)
-
-    base_url = message.base_url
-    api_key = message.api_key
-    model = message.model or "default"
 
     # Fallback: echo mode if no provider
     if not base_url or not api_key:
@@ -405,6 +519,7 @@ async def chat(message: ChatMessage, request: Request):
                 proxy_url=message.proxy_url,
                 thinking_mode=message.thinking_mode,
                 thinking_budget=message.thinking_budget,
+                max_tokens=max_response,
             ):
                 if await request.is_disconnected():
                     break
