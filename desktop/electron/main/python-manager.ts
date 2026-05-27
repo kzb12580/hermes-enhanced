@@ -10,7 +10,7 @@ import { ChildProcess, spawn, execSync } from 'child_process'
 import { app, BrowserWindow } from 'electron'
 import { net } from 'electron'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync, appendFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, PythonState, PythonHealthResponse, PythonStatus } from '../shared/types'
 import { settingsStore } from './store'
 
@@ -38,6 +38,7 @@ export class PythonManager {
   private startTime: number | null = null
   private logBuffer: string[] = []
   private readonly maxLogBuffer = 500
+  private readonly logFilePath: string
   private consecutiveHealthFailures = 0
   private readonly maxConsecutiveHealthFailures = 3
   private lineBuffer = ''
@@ -68,6 +69,19 @@ export class PythonManager {
       lastError: null,
       restartCount: 0
     }
+
+    // 初始化日志文件
+    const logDir = join(app.getPath('userData'), 'logs')
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true })
+    }
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    this.logFilePath = join(logDir, `hermes-${dateStr}.log`)
+    // 写入启动标记
+    try {
+      writeFileSync(this.logFilePath, `\n${'='.repeat(60)}\n[Hermes Desktop] 启动于 ${now.toISOString()}\n${'='.repeat(60)}\n`, { flag: 'a' })
+    } catch { /* ignore */ }
 
     app.on('will-quit', () => {
       this.destroy()
@@ -590,6 +604,11 @@ export class PythonManager {
     this.lineBuffer = ''
   }
 
+  /** 获取日志文件路径（供渲染进程显示） */
+  getLogFilePath(): string {
+    return this.logFilePath
+  }
+
   private addLog(message: string): void {
     const timestamp = new Date().toISOString()
     const logEntry = `[${timestamp}] ${message}`
@@ -598,6 +617,10 @@ export class PythonManager {
       this.logBuffer.shift()
     }
     console.log(logEntry)
+    // 写入日志文件
+    try {
+      appendFileSync(this.logFilePath, logEntry + '\n')
+    } catch { /* ignore */ }
   }
 
   destroy(): void {

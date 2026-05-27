@@ -214,6 +214,11 @@ function registerIPCHandlers(): void {
     return { success: true, data: pythonManager.getLogs() }
   })
 
+  // 获取日志文件路径
+  ipcMain.handle('python:log-file-path', (): IPCResponse => {
+    return { success: true, data: pythonManager.getLogFilePath() }
+  })
+
   // ---------- 应用信息 ----------
   ipcMain.handle(IPC_CHANNELS.APP_VERSION, (): string => {
     return app.getVersion()
