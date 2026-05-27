@@ -21,7 +21,7 @@ _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
 
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
-MAX_TOOL_ROUNDS = 10
+MAX_TOOL_ROUNDS = 25
 
 DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant with access to tools for file operations, terminal commands, and web search.
 
@@ -91,8 +91,12 @@ async def _call_provider_with_tools(
 
     tools = openai_tools()
     current_messages = list(messages)
+    full_response = ""
 
     for round_num in range(MAX_TOOL_ROUNDS):
+        if round_num >= 20:
+            logger.warning("Tool calling round %d/%d — approaching limit", round_num + 1, MAX_TOOL_ROUNDS)
+            yield {"event": "token", "data": f"\n⏳ 工具调用轮次 {round_num + 1}/{MAX_TOOL_ROUNDS}...\n"}
         body: dict = {
             "model": model,
             "messages": current_messages,
@@ -265,8 +269,37 @@ async def _call_provider_with_tools(
                 "content": result[:10000],
             })
 
-    # Exceeded max rounds
-    yield {"event": "error", "data": f"Exceeded maximum tool calling rounds ({MAX_TOOL_ROUNDS})"}
+    # Exceeded max rounds — try one final call without tools to get a summary
+    logger.warning("Exceeded max tool rounds (%d), requesting final summary", MAX_TOOL_ROUNDS)
+    yield {"event": "token", "data": f"\n\n⚠️ 已达到最大工具调用轮次({MAX_TOOL_ROUNDS})，正在总结...\n\n"}
+    try:
+        summary_body: dict = {
+            "model": model,
+            "messages": current_messages + [{"role": "user", "content": "请根据上面的工具执行结果，给出最终回复。不要再调用任何工具。"}],
+            "stream": True,
+            "max_tokens": 4096,
+        }
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
+            async with client.stream("POST", chat_url, headers=headers, json=summary_body) as resp:
+                if resp.status_code == 200:
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield {"event": "token", "data": content}
+                        except json.JSONDecodeError:
+                            pass
+    except Exception as e:
+        logger.error("Final summary call failed: %s", e)
+        yield {"event": "error", "data": f"工具调用轮次已耗尽({MAX_TOOL_ROUNDS}轮)，且最终总结失败"}
+
     yield {"event": "done", "data": ""}
 
 
