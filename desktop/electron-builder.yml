@@ -27,6 +27,7 @@ extraResources:
     filter:
       - '**/*.py'
       - '**/*.txt'
+      - '**/*.md'
       - '!**/.venv/**'
       - '!**/venv/**'
       - '!**/__pycache__/**'
