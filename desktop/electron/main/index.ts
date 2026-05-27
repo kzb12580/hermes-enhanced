@@ -3,7 +3,7 @@
  * 负责应用生命周期、窗口管理、Python 后端管理、IPC 处理
  */
 import { app, BrowserWindow, Menu, ipcMain, dialog, shell, nativeTheme } from 'electron'
-import { createMainWindow, getMainWindow, showMainWindow, destroyMainWindow } from './window'
+import { createMainWindow, getMainWindow, showMainWindow } from './window'
 import { createTray, destroyTray } from './tray'
 import { PythonManager } from './python-manager'
 import { initUpdater, checkForUpdates, downloadUpdate, installUpdate } from './updater'
@@ -67,7 +67,7 @@ app.whenReady().then(async () => {
   }
 
   // 主题跟随系统
-  nativeTheme.themeSource = settingsStore.get('theme') === 'system' ? 'system' : settingsStore.get('theme')
+  nativeTheme.themeSource = settingsStore.get('theme')
 
   console.log('[主进程] Hermes Desktop 已启动')
 })
@@ -85,17 +85,29 @@ app.on('window-all-closed', () => {
 /**
  * 应用即将退出
  */
-app.on('before-quit', async () => {
+let isQuittingCleanupDone = false
+
+app.on('before-quit', (event) => {
+  if (isQuittingCleanupDone) return // cleanup already done, allow quit to proceed
+
+  event.preventDefault()
   app.isQuitting = true
   console.log('[主进程] 正在清理资源...')
 
-  // 停止 Python 后端
-  if (pythonManager) {
-    await pythonManager.stop()
+  // Async cleanup, then force-quit
+  const cleanup = async () => {
+    try {
+      if (pythonManager) {
+        await pythonManager.stop()
+      }
+    } catch (err) {
+      console.error('[主进程] Error stopping Python:', err)
+    }
+    destroyTray()
+    isQuittingCleanupDone = true
+    app.quit() // re-emits before-quit, but isQuittingCleanupDone prevents loop
   }
-
-  // 销毁托盘
-  destroyTray()
+  cleanup()
 })
 
 /**
@@ -106,7 +118,11 @@ app.on('activate', () => {
   if (mainWindow) {
     showMainWindow()
   } else {
-    createMainWindow()
+    const newWindow = createMainWindow()
+    if (pythonManager) {
+      pythonManager.setMainWindow(newWindow)
+    }
+    initUpdater(newWindow)
   }
 })
 
@@ -209,8 +225,17 @@ function registerIPCHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.APP_RESTART, () => {
-    app.relaunch()
-    app.exit(0)
+    // Stop Python backend before relaunching
+    const cleanup = async () => {
+      try {
+        if (pythonManager) await pythonManager.stop()
+      } catch (err) {
+        console.error('[主进程] Error stopping Python before restart:', err)
+      }
+      app.relaunch()
+      app.exit(0)
+    }
+    cleanup()
   })
 
   // ---------- 更新器 ----------
@@ -258,7 +283,7 @@ function registerIPCHandlers(): void {
   // ---------- 对话框 ----------
   ipcMain.handle(IPC_CHANNELS.SHOW_MESSAGE_BOX, async (_event, options) => {
     const win = getMainWindow()
-    if (win) {
+    if (win && !win.isDestroyed()) {
       return dialog.showMessageBox(win, options)
     }
     return dialog.showMessageBox(options)
@@ -268,9 +293,9 @@ function registerIPCHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL_URL, (_event, url: string) => {
     if (!isAllowedUrl(url)) {
       console.warn(`[主进程] Blocked unsafe external URL: ${url}`)
-      return
+      return { success: false, error: `Blocked unsafe URL: ${url}` }
     }
-    return shell.openExternal(url)
+    return shell.openExternal(url).then(() => ({ success: true })).catch((err) => ({ success: false, error: String(err) }))
   })
 }
 

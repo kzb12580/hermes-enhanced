@@ -1,10 +1,10 @@
 """Memory API — store, list, and delete memories."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -13,9 +13,10 @@ _memories: dict[str, dict] = {}
 
 
 class MemoryCreate(BaseModel):
-    content: str
-    tags: list[str] = []
-    source: str = "user"
+    # FIX: Add min_length/max_length constraints
+    content: str = Field(..., min_length=1, max_length=10000)
+    tags: list[str] = Field(default_factory=list)
+    source: str = Field(default="user", max_length=100)
 
 
 @router.get("/api/memories")
@@ -33,7 +34,8 @@ async def save_memory(body: MemoryCreate):
         "content": body.content,
         "tags": body.tags,
         "source": body.source,
-        "created_at": datetime.utcnow().isoformat(),
+        # FIX: Use datetime.now(timezone.utc) instead of deprecated datetime.utcnow()
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     _memories[mid] = memory
     return memory

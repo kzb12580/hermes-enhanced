@@ -62,10 +62,15 @@ export function createMainWindow(): BrowserWindow {
   })
 
   // 关闭时隐藏到托盘而非退出
+  let hasShownTrayNotification = false
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault()
       mainWindow?.hide()
+      if (!hasShownTrayNotification) {
+        hasShownTrayNotification = true
+        mainWindow?.webContents.send('window:minimized-to-tray')
+      }
     }
   })
 

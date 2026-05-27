@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { DisplayMessage } from '../../stores/chatStore';
@@ -75,6 +76,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <div className="markdown-body">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeSanitize]}
                 components={{
                   code({ node, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || '');

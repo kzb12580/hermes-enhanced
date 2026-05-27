@@ -67,7 +67,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
-        run: pip install -r python-backend/requirements.txt pyinstaller
+        run: pip install -r python-backend/requirements.txt pyinstaller==6.14.0
 
       - name: Build Python backend
         working-directory: desktop/python-backend

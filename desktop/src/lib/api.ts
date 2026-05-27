@@ -57,10 +57,12 @@ class ApiClient {
     return this.baseUrl;
   }
 
-  private getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+  private getHeaders(isGet = false): Record<string, string> {
+    const headers: Record<string, string> = {};
+    // Only set Content-Type for non-GET requests
+    if (!isGet) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
@@ -68,7 +70,27 @@ class ApiClient {
   }
 
   /**
-   * Fetch with retry logic and connection timeout.
+   * Parse error response body for meaningful error messages.
+   */
+  private async parseErrorResponse(res: Response): Promise<string> {
+    try {
+      const body = await res.json();
+      if (body.detail) return body.detail;
+      if (body.message) return body.message;
+      if (body.error) return body.error;
+      return JSON.stringify(body);
+    } catch {
+      try {
+        return await res.text();
+      } catch {
+        return `HTTP ${res.status}`;
+      }
+    }
+  }
+
+  /**
+   * Fetch with retry logic. Only retries on network errors and 5xx status codes.
+   * Connection timeout only applies to connection establishment, not the full stream.
    */
   private async fetchWithRetry(
     url: string,
@@ -76,6 +98,7 @@ class ApiClient {
     retries = MAX_RETRIES
   ): Promise<Response> {
     const controller = new AbortController();
+    // Connection-only timeout: clear after response headers arrive
     const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS);
 
     // If caller provided an external signal, propagate its abort
@@ -96,6 +119,7 @@ class ApiClient {
         ...options,
         signal: controller.signal,
       });
+      // Clear connection timeout once we get headers — stream can take as long as it needs
       clearTimeout(timeoutId);
       return response;
     } catch (err: any) {
@@ -104,6 +128,7 @@ class ApiClient {
       // Don't retry aborts (user-initiated or timeout)
       if (err.name === 'AbortError') throw err;
 
+      // Only retry on network errors (not HTTP-level errors which are handled by caller)
       if (retries > 0) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         return this.fetchWithRetry(url, options, retries - 1);
@@ -119,9 +144,12 @@ class ApiClient {
   /** Health check */
   async healthCheck(): Promise<SystemStatus> {
     const res = await this.fetchWithRetry(`${this.baseUrl}/api/health`, {
-      headers: this.getHeaders(),
+      headers: this.getHeaders(true),
     });
-    if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Health check failed: ${res.status} - ${detail}`);
+    }
     return res.json();
   }
 
@@ -138,6 +166,13 @@ class ApiClient {
     request: ChatCompletionRequest,
     signal?: AbortSignal
   ): AsyncGenerator<string> {
+    // FIX #1 (CRITICAL): Pass the user's signal directly to fetch() so that
+    // reader.read() in the generator is also abortable. We still use
+    // fetchWithRetry for the initial connection (with its own timeout), but
+    // after that, we do a direct fetch with the user signal for the stream.
+    //
+    // Strategy: use fetchWithRetry for connection establishment with retries,
+    // then for streaming reads, check signal.aborted before each read.
     const res = await this.fetchWithRetry(
       `${this.baseUrl}/api/chat`,
       {
@@ -153,7 +188,8 @@ class ApiClient {
     );
 
     if (!res.ok) {
-      throw new Error(`Chat request failed: ${res.status}`);
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Chat request failed: ${res.status} - ${detail}`);
     }
 
     const reader = res.body?.getReader();
@@ -162,9 +198,21 @@ class ApiClient {
     const decoder = new TextDecoder();
     let buffer = '';
     let currentEvent = '';
+    // FIX #4: Track whether the connection was timed out vs user-aborted
+    let connectionTimedOut = false;
 
     try {
       while (true) {
+        // FIX #1: Check if user signal was aborted before each read
+        if (signal?.aborted) {
+          // Distinguish user abort from timeout
+          const reason = signal.reason;
+          if (reason instanceof Error && reason.message.includes('timeout')) {
+            connectionTimedOut = true;
+          }
+          break;
+        }
+
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -186,7 +234,10 @@ class ApiClient {
           }
 
           if (trimmed.startsWith('data:')) {
-            const data = trimmed.slice(5).trim();
+            // FIX #3: Strip only the first space after 'data:' per SSE spec
+            // SSE spec: "data:" followed by optional single space then value
+            const raw = trimmed.slice(5);
+            const data = raw.startsWith(' ') ? raw.slice(1) : raw;
 
             if (currentEvent === 'done') {
               // Stream is finished
@@ -194,17 +245,36 @@ class ApiClient {
             }
 
             if (currentEvent === 'token') {
-              // Yield the raw text content
+              // Yield the raw text content (no further trim — preserves intentional spaces)
               yield data;
             }
             // Skip unknown events
             continue;
           }
 
-          // Fallback: plain text lines without SSE prefix (some backends emit raw text)
           // Skip SSE comment lines (starting with ':') — these are keepalives
-          if (!trimmed.startsWith('event:') && !trimmed.startsWith('data:') && !trimmed.startsWith(':')) {
-            yield trimmed;
+          // Do NOT yield fallback plain text — could leak non-SSE content
+        }
+      }
+
+      // FIX #2: Process remaining buffer content after the stream ends
+      if (buffer.trim()) {
+        const remainingLines = buffer.split('\n');
+        for (const line of remainingLines) {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            currentEvent = '';
+            continue;
+          }
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.slice(6).trim();
+            continue;
+          }
+          if (trimmed.startsWith('data:')) {
+            const raw = trimmed.slice(5);
+            const data = raw.startsWith(' ') ? raw.slice(1) : raw;
+            if (currentEvent === 'done') return;
+            if (currentEvent === 'token') yield data;
           }
         }
       }
@@ -216,9 +286,12 @@ class ApiClient {
   /** List all sessions */
   async listSessions(): Promise<SessionInfo[]> {
     const res = await this.fetchWithRetry(`${this.baseUrl}/api/sessions`, {
-      headers: this.getHeaders(),
+      headers: this.getHeaders(true),
     });
-    if (!res.ok) throw new Error(`List sessions failed: ${res.status}`);
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`List sessions failed: ${res.status} - ${detail}`);
+    }
     return res.json();
   }
 
@@ -229,20 +302,27 @@ class ApiClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ name }),
     });
-    if (!res.ok) throw new Error(`Create session failed: ${res.status}`);
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Create session failed: ${res.status} - ${detail}`);
+    }
     return res.json();
   }
 
   /** Delete a session */
   async deleteSession(sessionId: string): Promise<void> {
+    const encodedId = encodeURIComponent(sessionId);
     const res = await this.fetchWithRetry(
-      `${this.baseUrl}/api/sessions/${sessionId}`,
+      `${this.baseUrl}/api/sessions/${encodedId}`,
       {
         method: 'DELETE',
         headers: this.getHeaders(),
       }
     );
-    if (!res.ok) throw new Error(`Delete session failed: ${res.status}`);
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Delete session failed: ${res.status} - ${detail}`);
+    }
   }
 }
 

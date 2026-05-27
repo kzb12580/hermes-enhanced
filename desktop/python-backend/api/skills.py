@@ -1,11 +1,9 @@
 """Skills API — list, view, create, update skills."""
 
-import uuid
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -27,14 +25,15 @@ _skills: dict[str, dict] = {
 
 
 class SkillCreate(BaseModel):
-    name: str
-    description: str = ""
+    # FIX: Add min_length/max_length constraints
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=1000)
     enabled: bool = True
-    parameters: dict = {}
+    parameters: dict = Field(default_factory=dict)
 
 
 class SkillUpdate(BaseModel):
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=1000)
     enabled: Optional[bool] = None
     parameters: Optional[dict] = None
 

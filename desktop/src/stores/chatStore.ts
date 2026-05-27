@@ -33,8 +33,8 @@ interface ChatState {
   sessions: Session[];
   currentSessionId: string | null;
   isGenerating: boolean;
+  isSending: boolean;
   error: string | null;
-  abortController: AbortController | null;
 
   // Derived
   currentSession: () => Session | undefined;
@@ -54,8 +54,57 @@ interface ChatState {
   clearError: () => void;
 }
 
+// Module-level abort controller (not persisted in Zustand state)
+let activeAbortController: AbortController | null = null;
+let idleStreamTimer: ReturnType<typeof setTimeout> | null = null;
+
+// FIX #1: Generation counter to prevent isSending race conditions.
+// Each sendMessage() call increments this; only the matching call clears isSending.
+let sendGeneration = 0;
+
+const IDLE_STREAM_TIMEOUT_MS = 60_000;
+
 const generateId = () =>
-  `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+/**
+ * Streaming throttle: batches token appends so React re-renders at most ~30fps.
+ * Uses a simple timer-based approach for maximum compatibility.
+ */
+const STREAM_THROTTLE_MS = 33; // ~30fps
+let pendingTokenBuffer = '';
+let pendingMessageId: string | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushStoreRef: { appendToMessage: (id: string, content: string) => void } | null = null;
+
+function flushPendingTokens() {
+  if (pendingTokenBuffer && pendingMessageId && flushStoreRef) {
+    flushStoreRef.appendToMessage(pendingMessageId, pendingTokenBuffer);
+    pendingTokenBuffer = '';
+  }
+  flushTimer = null;
+}
+
+function scheduleTokenFlush(messageId: string, token: string, store: { appendToMessage: (id: string, content: string) => void }) {
+  pendingTokenBuffer += token;
+  pendingMessageId = messageId;
+  flushStoreRef = store;
+  if (!flushTimer) {
+    flushTimer = setTimeout(flushPendingTokens, STREAM_THROTTLE_MS);
+  }
+}
+
+function resetFlushState() {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  pendingTokenBuffer = '';
+  pendingMessageId = null;
+  flushStoreRef = null;
+}
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -63,8 +112,8 @@ export const useChatStore = create<ChatState>()(
       sessions: [],
       currentSessionId: null,
       isGenerating: false,
+      isSending: false,
       error: null,
-      abortController: null,
 
       currentSession: () => {
         const { sessions, currentSessionId } = get();
@@ -92,10 +141,22 @@ export const useChatStore = create<ChatState>()(
       },
 
       switchSession: (sessionId) => {
+        // FIX #2: Validate that the session exists before switching
+        const session = get().sessions.find((s) => s.id === sessionId);
+        if (!session) {
+          console.warn(`[chatStore] switchSession: session "${sessionId}" not found`);
+          return;
+        }
+        // Don't reset isGenerating — generation may still be running for the old session
         set({ currentSessionId: sessionId, error: null });
       },
 
       deleteSession: (sessionId) => {
+        // Stop generation if deleting the active session
+        const state = get();
+        if (state.isGenerating && state.currentSessionId === sessionId) {
+          state.stopGeneration();
+        }
         set((s) => {
           const sessions = s.sessions.filter((ses) => ses.id !== sessionId);
           const currentSessionId =
@@ -193,6 +254,12 @@ export const useChatStore = create<ChatState>()(
 
       sendMessage: async (content) => {
         const state = get();
+
+        // Guard against concurrent sends
+        if (state.isSending) {
+          return;
+        }
+
         let sessionId = state.currentSessionId;
 
         // Auto-create session if none
@@ -201,10 +268,15 @@ export const useChatStore = create<ChatState>()(
         }
 
         // Abort any previous in-flight request
-        const prevController = get().abortController;
-        if (prevController) {
-          prevController.abort();
+        if (activeAbortController) {
+          activeAbortController.abort();
         }
+        resetFlushState();
+
+        // FIX #1: Increment generation counter and capture it
+        const myGeneration = ++sendGeneration;
+
+        set({ isSending: true });
 
         // Add user message
         get().addMessage({ role: 'user', content });
@@ -232,7 +304,17 @@ export const useChatStore = create<ChatState>()(
         }));
 
         const controller = new AbortController();
-        set({ abortController: controller });
+        activeAbortController = controller;
+
+        // Idle-stream timeout: abort if no token received for 60s
+        const resetIdleTimer = () => {
+          if (idleStreamTimer) clearTimeout(idleStreamTimer);
+          idleStreamTimer = setTimeout(() => {
+            console.warn('[chatStore] Idle stream timeout (60s), aborting');
+            controller.abort();
+          }, IDLE_STREAM_TIMEOUT_MS);
+        };
+        resetIdleTimer();
 
         try {
           const stream = apiClient.chatCompletionStream(
@@ -245,9 +327,14 @@ export const useChatStore = create<ChatState>()(
           );
 
           for await (const token of stream) {
-            get().appendToMessage(assistantMsgId, token);
+            resetIdleTimer();
+            // Throttle: batch tokens and flush at ~30fps
+            scheduleTokenFlush(assistantMsgId, token, get());
           }
+          // Flush any remaining tokens
+          flushPendingTokens();
         } catch (err: any) {
+          // FIX #3: Don't double-flush here — the finally block handles it
           if (err.name === 'AbortError') {
             get().updateMessage(assistantMsgId, {
               isStreaming: false,
@@ -261,8 +348,22 @@ export const useChatStore = create<ChatState>()(
             });
           }
         } finally {
+          // Clear idle timer
+          if (idleStreamTimer) {
+            clearTimeout(idleStreamTimer);
+            idleStreamTimer = null;
+          }
+          // FIX #3: Single flush in finally (removed redundant flush in catch)
+          flushPendingTokens();
+          resetFlushState();
+
           get().updateMessage(assistantMsgId, { isStreaming: false });
-          set({ isGenerating: false, abortController: null });
+
+          // FIX #1: Only clear isSending if we're still the current generation
+          if (myGeneration === sendGeneration) {
+            activeAbortController = null;
+            set({ isGenerating: false, isSending: false });
+          }
 
           // Auto-rename session based on first message
           const s = get();
@@ -278,9 +379,9 @@ export const useChatStore = create<ChatState>()(
       },
 
       stopGeneration: () => {
-        const { abortController } = get();
-        if (abortController) {
-          abortController.abort();
+        if (activeAbortController) {
+          activeAbortController.abort();
+          activeAbortController = null;
         }
       },
 
@@ -297,7 +398,14 @@ export const useChatStore = create<ChatState>()(
         return persistedState;
       },
       partialize: (state) => ({
-        sessions: state.sessions,
+        sessions: state.sessions.map((session) => ({
+          ...session,
+          messages: session.messages.map((msg) => {
+            // Strip transient streaming/error fields from persisted messages
+            const { isStreaming, error, ...rest } = msg;
+            return rest;
+          }),
+        })),
         currentSessionId: state.currentSessionId,
       }),
     }

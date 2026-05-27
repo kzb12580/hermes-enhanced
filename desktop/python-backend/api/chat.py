@@ -2,27 +2,31 @@
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter()
 
 # In-memory session storage (replace with persistent storage later)
 _sessions: dict[str, dict] = {}
+_session_lock = asyncio.Lock()
+
+# Max request body size (1 MB)
+MAX_CONTENT_LENGTH = 1 * 1024 * 1024
 
 
 class ChatMessage(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=MAX_CONTENT_LENGTH)
     session_id: Optional[str] = None
     model: Optional[str] = "default"
 
 
 class SessionCreate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=200)
 
 
 def _create_session(name: Optional[str] = None) -> dict:
@@ -30,7 +34,7 @@ def _create_session(name: Optional[str] = None) -> dict:
     session = {
         "id": sid,
         "name": name or f"Session {sid[:8]}",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "messages": [],
     }
     _sessions[sid] = session
@@ -57,18 +61,23 @@ async def _mock_stream(content: str):
 @router.post("/api/chat")
 async def chat(message: ChatMessage, request: Request):
     """Stream a chat response via Server-Sent Events."""
-    # Resolve or create session
-    session_id = message.session_id
-    if not session_id or session_id not in _sessions:
-        session = _create_session()
-        session_id = session["id"]
+    # Validate content length
+    if len(message.content) > MAX_CONTENT_LENGTH:
+        raise HTTPException(status_code=413, detail="Content too large")
 
-    # Record user message
-    _sessions[session_id]["messages"].append({
-        "role": "user",
-        "content": message.content,
-        "timestamp": datetime.utcnow().isoformat(),
-    })
+    # Resolve or create session (under lock to prevent races)
+    async with _session_lock:
+        session_id = message.session_id
+        if not session_id or session_id not in _sessions:
+            session = _create_session()
+            session_id = session["id"]
+
+        # Record user message
+        _sessions[session_id]["messages"].append({
+            "role": "user",
+            "content": message.content,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     async def event_generator():
         full_response = ""
@@ -86,13 +95,18 @@ async def chat(message: ChatMessage, request: Request):
         finally:
             # Record whatever assistant response we accumulated
             if full_response:
-                _sessions[session_id]["messages"].append({
-                    "role": "assistant",
-                    "content": full_response,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                async with _session_lock:
+                    _sessions[session_id]["messages"].append({
+                        "role": "assistant",
+                        "content": full_response,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
 
-    return EventSourceResponse(event_generator(), ping=15)
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "X-Accel-Buffering": "no",
+    }
+    return EventSourceResponse(event_generator(), ping=15, headers=headers)
 
 
 # ---------------------------------------------------------------------------
@@ -109,16 +123,19 @@ async def list_sessions():
     ]
 
 
+# FIX #1: Add _session_lock to create_session to prevent races
 @router.post("/api/sessions")
 async def create_session(body: SessionCreate):
     """Create a new chat session."""
-    return _create_session(body.name)
+    async with _session_lock:
+        return _create_session(body.name)
 
 
 @router.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a chat session."""
-    if session_id not in _sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    del _sessions[session_id]
+    async with _session_lock:
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+        del _sessions[session_id]
     return {"deleted": session_id}

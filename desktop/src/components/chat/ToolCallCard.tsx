@@ -30,7 +30,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
     parsedArgs = toolCall.arguments || '{}';
   }
 
-  let parsedResult: string;
+  let parsedResult: string = '';
   try {
     if (toolCall.result) {
       parsedResult = JSON.stringify(JSON.parse(toolCall.result), null, 2);

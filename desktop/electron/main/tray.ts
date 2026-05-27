@@ -132,11 +132,11 @@ function getStatusLabel(status: string): string {
 /**
  * 更新托盘图标（可用于状态指示）
  */
-export function updateTrayIcon(isRunning: boolean): void {
+export function updateTrayIcon(_isRunning: boolean): void {
   if (!tray) return
 
-  const iconName = isRunning ? 'icon-active.png' : 'icon.png'
-  const iconPath = resolveIconPath(iconName)
+  // Always use the same icon; icon-active.png does not exist
+  const iconPath = resolveIconPath('icon.png')
   const icon = nativeImage.createFromPath(iconPath)
   const resizedIcon = icon.isEmpty()
     ? nativeImage.createEmpty()

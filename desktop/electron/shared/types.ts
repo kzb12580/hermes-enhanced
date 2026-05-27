@@ -59,7 +59,7 @@ declare module 'electron' {
 }
 
 // ==================== Python 后端状态 ====================
-export type PythonStatus = 'stopped' | 'starting' | 'running' | 'error' | 'restarting'
+export type PythonStatus = 'stopped' | 'starting' | 'running' | 'error' | 'restarting' | 'stopping'
 
 export interface PythonState {
   status: PythonStatus
@@ -97,6 +97,8 @@ export interface UpdateStatusPayload {
   status: string
   info?: UpdateInfo
   error?: string
+  /** Present when status is 'not-available' to convey current version */
+  version?: string
 }
 
 // ==================== 设置 ====================
@@ -131,28 +133,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 // ==================== IPC 消息类型 ====================
-export interface IPCMessage<T = unknown> {
-  channel: string
-  data?: T
-  error?: string
-}
-
 export interface IPCResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
 }
 
-// ==================== API 代理请求 ====================
-export interface ProxyRequest {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  path: string
-  body?: unknown
-  headers?: Record<string, string>
-}
+// ==================== IPC handler types ====================
+/** Signature for ipcMain.handle handlers that return IPCResponse */
+export type IPCHandler<TArgs = unknown, TResult = unknown> = (
+  event: Electron.IpcMainInvokeEvent,
+  ...args: TArgs[]
+) => Promise<IPCResponse<TResult>> | IPCResponse<TResult>
 
-export interface ProxyResponse<T = unknown> {
-  status: number
-  data: T
-  error?: string
-}
+// ==================== Shell / openExternal ====================
+/** Return type for shell.openExternal — resolves to void (not a boolean) */
+export type OpenExternalResult = Promise<void>
+
+// ==================== Settings handler ====================
+/** settings.set returns the updated value wrapped in IPCResponse */
+export type SettingsSetResult = Promise<IPCResponse<boolean>>

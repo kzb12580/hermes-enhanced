@@ -76,7 +76,7 @@ class SettingsStore {
 
   /** 重置所有设置为默认值 */
   reset(): void {
-    this.store.store = DEFAULT_SETTINGS
+    this.store.store = structuredClone(DEFAULT_SETTINGS)
   }
 
   /** 重置单个设置为默认值 */

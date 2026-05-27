@@ -32,7 +32,7 @@ export function SettingsPanel() {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [handleClose]);
+  }, []);
 
   return (
     <div

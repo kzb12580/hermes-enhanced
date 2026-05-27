@@ -18,15 +18,27 @@ interface PythonManagerOptions {
   healthCheckTimeout?: number
 }
 
+/** Sliding window duration for restart count reset (5 minutes) */
+const RESTART_WINDOW_MS = 5 * 60 * 1000
+
 export class PythonManager {
   private process: ChildProcess | null = null
   private state: PythonState
   private healthCheckTimer: ReturnType<typeof setInterval> | null = null
+  private restartTimer: ReturnType<typeof setTimeout> | null = null
   private mainWindow: BrowserWindow | null = null
   private options: Required<PythonManagerOptions>
   private startTime: number | null = null
   private logBuffer: string[] = []
   private readonly maxLogBuffer = 500
+  private consecutiveHealthFailures = 0
+  private readonly maxConsecutiveHealthFailures = 3
+  private lineBuffer = ''
+  private destroyed = false
+  // FIX #5: Prevent concurrent health checks
+  private healthCheckInProgress = false
+  // FIX #2: Track restart timestamps for sliding window
+  private restartTimestamps: number[] = []
 
   constructor(options: PythonManagerOptions = {}) {
     const port = options.port ?? settingsStore.get('pythonPort')
@@ -46,6 +58,11 @@ export class PythonManager {
       lastError: null,
       restartCount: 0
     }
+
+    // Register cleanup on app quit so Python backend is properly destroyed
+    app.on('will-quit', () => {
+      this.destroy()
+    })
   }
 
   /** 设置主窗口引用，用于发送事件 */
@@ -132,6 +149,8 @@ export class PythonManager {
       return
     }
 
+    this.destroyed = false
+    this.consecutiveHealthFailures = 0
     this.updateStatus('starting')
     this.addLog('[管理器] 正在启动 Python 后端...')
 
@@ -160,19 +179,11 @@ export class PythonManager {
       })
 
       this.process.stdout?.on('data', (data: Buffer) => {
-        const msg = data.toString().trim()
-        if (msg) {
-          this.addLog(`[stdout] ${msg}`)
-          this.sendToRenderer(IPC_CHANNELS.PYTHON_LOG_STREAM, { type: 'stdout', message: msg })
-        }
+        this.processLogData(data, 'stdout')
       })
 
       this.process.stderr?.on('data', (data: Buffer) => {
-        const msg = data.toString().trim()
-        if (msg) {
-          this.addLog(`[stderr] ${msg}`)
-          this.sendToRenderer(IPC_CHANNELS.PYTHON_LOG_STREAM, { type: 'stderr', message: msg })
-        }
+        this.processLogData(data, 'stderr')
       })
 
       this.process.on('error', (err) => {
@@ -184,8 +195,12 @@ export class PythonManager {
 
       this.process.on('exit', (code, signal) => {
         this.addLog(`[退出] 进程退出，code=${code}, signal=${signal}`)
+
+        // FIX #4: Flush remaining lineBuffer on process exit
+        this.flushLineBuffer()
+
         this.state.pid = null
-        if (this.state.status !== 'stopping' && this.state.status !== 'stopped') {
+        if (!this.destroyed && this.state.status !== 'stopping' && this.state.status !== 'stopped') {
           this.state.lastError = `意外退出: code=${code}, signal=${signal}`
           this.updateStatus('error')
           this.handleUnexpectedExit()
@@ -205,6 +220,7 @@ export class PythonManager {
         this.updateStatus('running')
         this.state.lastError = null
         this.state.restartCount = 0
+        this.restartTimestamps = []
         this.startHealthCheck()
         this.addLog(`[管理器] Python 后端已启动，端口: ${this.options.port}`)
       } else {
@@ -228,17 +244,26 @@ export class PythonManager {
       return
     }
 
+    this.updateStatus('stopping')
     this.addLog('[管理器] 正在停止 Python 后端...')
     this.stopHealthCheck()
+    this.clearRestartTimer()
 
     return new Promise<void>((resolve) => {
+      const proc = this.process
+      if (!proc) {
+        this.updateStatus('stopped')
+        resolve()
+        return
+      }
+
       const timeout = setTimeout(() => {
         this.addLog('[管理器] 强制终止进程')
-        this.process?.kill('SIGKILL')
+        try { proc.kill('SIGKILL') } catch { /* already dead */ }
         resolve()
       }, 5000)
 
-      this.process!.on('exit', () => {
+      proc.on('exit', () => {
         clearTimeout(timeout)
         this.process = null
         this.state.pid = null
@@ -249,7 +274,7 @@ export class PythonManager {
       })
 
       // 优雅关闭
-      this.process!.kill('SIGTERM')
+      try { proc.kill('SIGTERM') } catch { /* already dead */ }
     })
   }
 
@@ -257,6 +282,8 @@ export class PythonManager {
   async restart(): Promise<void> {
     this.addLog('[管理器] 正在重启 Python 后端...')
     this.state.restartCount++
+    // FIX #2: Track restart timestamp for sliding window
+    this.restartTimestamps.push(Date.now())
     this.updateStatus('restarting')
     await this.stop()
     await this.start()
@@ -276,6 +303,14 @@ export class PythonManager {
       }, this.options.healthCheckTimeout)
 
       request.on('response', (response) => {
+        // Verify status code is 200
+        const statusCode = response.statusCode
+        if (statusCode !== 200) {
+          clearTimeout(timeout)
+          resolve(null)
+          return
+        }
+
         let body = ''
         response.on('data', (chunk) => {
           body += chunk.toString()
@@ -315,13 +350,33 @@ export class PythonManager {
   /** 启动定时健康检查 */
   private startHealthCheck(): void {
     this.stopHealthCheck()
+    this.consecutiveHealthFailures = 0
+    this.healthCheckInProgress = false
     this.healthCheckTimer = setInterval(async () => {
-      const health = await this.checkHealth()
-      if (!health && this.state.status === 'running') {
-        this.addLog('[健康检查] 服务无响应')
-        this.state.lastError = '健康检查失败'
-        this.updateStatus('error')
-        this.handleUnexpectedExit()
+      // FIX #5: Don't run concurrent health checks
+      if (this.healthCheckInProgress) {
+        this.addLog('[健康检查] 跳过——上一次检查仍在进行中')
+        return
+      }
+      this.healthCheckInProgress = true
+      try {
+        const health = await this.checkHealth()
+        if (!health && this.state.status === 'running') {
+          this.consecutiveHealthFailures++
+          this.addLog(`[健康检查] 服务无响应 (连续失败: ${this.consecutiveHealthFailures}/${this.maxConsecutiveHealthFailures})`)
+
+          if (this.consecutiveHealthFailures >= this.maxConsecutiveHealthFailures) {
+            this.state.lastError = '健康检查失败'
+            this.updateStatus('error')
+            this.consecutiveHealthFailures = 0
+            this.handleUnexpectedExit()
+          }
+        } else if (health) {
+          // Reset counter on successful check
+          this.consecutiveHealthFailures = 0
+        }
+      } finally {
+        this.healthCheckInProgress = false
       }
     }, this.options.healthCheckInterval)
   }
@@ -332,15 +387,50 @@ export class PythonManager {
       clearInterval(this.healthCheckTimer)
       this.healthCheckTimer = null
     }
+    this.consecutiveHealthFailures = 0
+    this.healthCheckInProgress = false
+  }
+
+  /** 清除待执行的重启计时器 */
+  private clearRestartTimer(): void {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
+  }
+
+  // FIX #2: Get effective restart count within the sliding window
+  private getEffectiveRestartCount(): number {
+    const now = Date.now()
+    // Prune timestamps outside the window
+    this.restartTimestamps = this.restartTimestamps.filter(
+      (ts) => now - ts < RESTART_WINDOW_MS
+    )
+    return this.restartTimestamps.length
   }
 
   /** 处理意外退出（自动重启） */
+  // FIX #3: Make handleUnexpectedExit async to await restart()
   private async handleUnexpectedExit(): Promise<void> {
-    if (this.state.restartCount < this.options.maxRestarts) {
+    if (this.destroyed) return
+
+    // FIX #2: Use sliding window count instead of simple counter
+    const effectiveCount = this.getEffectiveRestartCount()
+
+    if (effectiveCount < this.options.maxRestarts) {
       this.addLog(
-        `[管理器] 将在 3 秒后尝试重启 (${this.state.restartCount + 1}/${this.options.maxRestarts})`
+        `[管理器] 将在 3 秒后尝试重启 (${effectiveCount + 1}/${this.options.maxRestarts})`
       )
-      setTimeout(() => this.restart(), 3000)
+      this.restartTimer = setTimeout(async () => {
+        this.restartTimer = null
+        // FIX #3: Await the restart to properly sequence operations
+        try {
+          await this.restart()
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          this.addLog(`[错误] 重启失败: ${msg}`)
+        }
+      }, 3000)
     } else {
       this.addLog('[管理器] 已达到最大重启次数，停止重启')
     }
@@ -361,6 +451,31 @@ export class PythonManager {
     }
   }
 
+  /** Process stdout/stderr data with line buffering to handle partial lines */
+  private processLogData(data: Buffer, source: 'stdout' | 'stderr'): void {
+    this.lineBuffer += data.toString()
+    const lines = this.lineBuffer.split('\n')
+    // Keep the last element as it may be an incomplete line
+    this.lineBuffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed) {
+        this.addLog(`[${source}] ${trimmed}`)
+        this.sendToRenderer(IPC_CHANNELS.PYTHON_LOG_STREAM, { type: source, message: trimmed })
+      }
+    }
+  }
+
+  // FIX #4: Flush any remaining content in the line buffer
+  private flushLineBuffer(): void {
+    if (this.lineBuffer.trim()) {
+      const remaining = this.lineBuffer.trim()
+      this.addLog(`[stdout] ${remaining}`)
+      this.sendToRenderer(IPC_CHANNELS.PYTHON_LOG_STREAM, { type: 'stdout', message: remaining })
+    }
+    this.lineBuffer = ''
+  }
+
   /** 添加日志到缓冲区 */
   private addLog(message: string): void {
     const timestamp = new Date().toISOString()
@@ -372,12 +487,22 @@ export class PythonManager {
     console.log(logEntry)
   }
 
-  /** 销毁管理器 */
+  /** 销毁管理器 — safe for app quit, does NOT trigger handleUnexpectedExit */
   destroy(): void {
+    this.destroyed = true
     this.stopHealthCheck()
+    this.clearRestartTimer()
+    // FIX #1: Don't remove exit listeners — let them fire naturally.
+    // The exit handler checks `this.destroyed` and skips handleUnexpectedExit.
+    // Removing listeners could cause the process to become a zombie if the
+    // exit event is lost. Just kill the process and let the exit handler clean up.
     if (this.process) {
-      this.process.kill('SIGKILL')
-      this.process = null
+      try { this.process.kill('SIGKILL') } catch { /* already dead */ }
+      // Don't null out this.process here — the exit handler will do it
     }
+    // FIX #4: Flush any remaining line buffer on destroy
+    this.flushLineBuffer()
   }
 }
+
+

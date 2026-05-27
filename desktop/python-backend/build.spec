@@ -10,12 +10,15 @@ dist/hermes-backend/.
 
 from pathlib import Path
 
+_spec_dir = Path(__file__).resolve().parent
+
 a = Analysis(
-    [str(Path("main.py").resolve())],
-    pathex=[str(Path(".").resolve())],
+    [str(_spec_dir / "main.py")],
+    pathex=[str(_spec_dir)],
     binaries=[],
     datas=[],
     hiddenimports=[
+        # uvicorn
         "uvicorn.logging",
         "uvicorn.loops",
         "uvicorn.loops.auto",
@@ -26,16 +29,25 @@ a = Analysis(
         "uvicorn.protocols.websockets.auto",
         "uvicorn.lifespan",
         "uvicorn.lifespan.on",
+        # sse-starlette
         "sse_starlette",
         "sse_starlette.sse",
-        "httpx",
-        "httpx._client",
-        "httpx._transports",
+        # starlette sub-modules needed at runtime
+        "starlette.middleware.cors",
+        "starlette.routing",
+        "starlette.responses",
+        "starlette.requests",
+        "starlette.exceptions",
+        # pydantic sub-modules needed at runtime
+        "pydantic",
+        "pydantic.deprecated",
+        "pydantic.deprecated.decorator",
+        "pydantic_core",
+        "pydantic_core._pydantic_core",
+        "pydantic.json_schema",
+        # network libraries
         "h11",
         "httptools",
-        "httpcore",
-        "httpcore._sync",
-        "httpcore._async",
         "anyio._backends._asyncio",
         "sniffio",
     ],
@@ -57,8 +69,8 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,
-    upx=True,
-    console=True,
+    upx=False,
+    console=False,
     disable_windowed_traceback=False,
 )
 
@@ -68,7 +80,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=True,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="hermes-backend",
 )

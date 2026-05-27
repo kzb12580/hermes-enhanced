@@ -4,7 +4,6 @@ Listens on 127.0.0.1:9876 and exposes REST + SSE endpoints consumed by the
 Electron frontend.
 """
 
-import argparse
 import logging
 import os
 import signal
@@ -30,12 +29,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("hermes-backend")
 
+
 # ---------------------------------------------------------------------------
-# CLI argument parsing
+# CLI argument parsing — only used when run directly
 # ---------------------------------------------------------------------------
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args():
     """Parse CLI args, falling back to env vars, then defaults."""
+    import argparse
+
     parser = argparse.ArgumentParser(description="Hermes Desktop Python Backend")
     parser.add_argument(
         "--port",
@@ -52,7 +54,12 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-_args = _parse_args()
+# ---------------------------------------------------------------------------
+# Defaults for module-level use (when imported, not run directly)
+# ---------------------------------------------------------------------------
+_host = os.environ.get("HERMES_HOST", "127.0.0.1")
+_port = int(os.environ.get("HERMES_PORT", "9876"))
+
 
 # ---------------------------------------------------------------------------
 # Lifespan (startup / shutdown)
@@ -60,7 +67,7 @@ _args = _parse_args()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Hermes Desktop backend starting on %s:%d", _args.host, _args.port)
+    logger.info("Hermes Desktop backend starting on %s:%d", _host, _port)
     yield
     logger.info("Hermes Desktop backend shutting down")
 
@@ -76,10 +83,12 @@ app = FastAPI(
 )
 
 # CORS — allow the Electron renderer (localhost)
+# Per CORS spec, allow_credentials=True is NOT allowed with allow_origins=['*'].
+# Since we use wildcard origins, credentials must be False.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -107,10 +116,13 @@ signal.signal(signal.SIGTERM, _handle_signal)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    _args = _parse_args()
+    _host = _args.host
+    _port = _args.port
     uvicorn.run(
         "main:app",
-        host=_args.host,
-        port=_args.port,
+        host=_host,
+        port=_port,
         log_level="info",
         reload=False,
     )

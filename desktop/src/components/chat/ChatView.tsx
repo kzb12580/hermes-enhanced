@@ -28,11 +28,12 @@ export function ChatView() {
     if (isNearBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messageCount, messages]);
+  }, [messageCount]);
 
   // Also scroll when streaming content changes (last message is streaming)
   const lastMessage = messages[messages.length - 1];
   const isStreaming = lastMessage?.isStreaming ?? false;
+  const lastContent = lastMessage?.content;
   useEffect(() => {
     if (isStreaming) {
       const container = scrollContainerRef.current;
@@ -40,10 +41,13 @@ export function ChatView() {
       const isNearBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight < 100;
       if (isNearBottom) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const rafId = requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        });
+        return () => cancelAnimationFrame(rafId);
       }
     }
-  }, [isStreaming, lastMessage?.content]);
+  }, [isStreaming, lastContent]);
 
   // Scroll to bottom when switching sessions
   useEffect(() => {

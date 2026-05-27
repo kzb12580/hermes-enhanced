@@ -49,12 +49,12 @@ function setupEventHandlers(): void {
       releaseDate: info.releaseDate?.toISOString() ?? new Date().toISOString(),
       releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined
     }
-    sendToRenderer(IPC_CHANNELS.UPDATE_AVAILABLE, updateInfo)
     sendToRenderer(IPC_CHANNELS.UPDATE_STATUS, { status: 'available', info: updateInfo })
 
     // 弹窗询问是否下载
+    if (!mainWindow || mainWindow.isDestroyed()) return
     dialog
-      .showMessageBox(mainWindow!, {
+      .showMessageBox(mainWindow, {
         type: 'info',
         title: '发现新版本',
         message: `Hermes Desktop ${info.version} 可用`,
@@ -99,12 +99,12 @@ function setupEventHandlers(): void {
       releaseDate: info.releaseDate?.toISOString() ?? new Date().toISOString(),
       releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined
     }
-    sendToRenderer(IPC_CHANNELS.UPDATE_DOWNLOADED, updateInfo)
     sendToRenderer(IPC_CHANNELS.UPDATE_STATUS, { status: 'downloaded', info: updateInfo })
 
     // 弹窗询问是否立即安装
+    if (!mainWindow || mainWindow.isDestroyed()) return
     dialog
-      .showMessageBox(mainWindow!, {
+      .showMessageBox(mainWindow, {
         type: 'info',
         title: '更新已下载',
         message: `版本 ${info.version} 已准备就绪`,
