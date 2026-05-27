@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Copy, Scissors, ClipboardPaste, SelectAll, Undo2, Redo2 } from 'lucide-react';
+import { Copy, Scissors, ClipboardPaste, TextCursorInput, Undo2, Redo2 } from 'lucide-react';
 
 interface ContextMenuItem {
   label: string;
@@ -186,7 +186,7 @@ export function createEditMenuItems({
     items.push({ label: '', divider: true, action: () => {} });
     items.push({
       label: '全选',
-      icon: <SelectAll size={14} />,
+      icon: <TextCursorInput size={14} />,
       shortcut: 'Ctrl+A',
       action: onSelectAll,
     });
