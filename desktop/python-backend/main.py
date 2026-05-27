@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.chat import router as chat_router
 from api.config import router as config_router
+from api.models import router as models_router
 from api.health import router as health_router
 from api.memory import router as memory_router
 from api.skills import router as skills_router
@@ -99,6 +100,7 @@ app.include_router(chat_router)
 app.include_router(skills_router)
 app.include_router(memory_router)
 app.include_router(config_router)
+app.include_router(models_router)
 
 # ---------------------------------------------------------------------------
 # Graceful shutdown via signal

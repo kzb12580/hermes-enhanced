@@ -14,71 +14,36 @@ import {
   Loader2,
 } from 'lucide-react';
 
-// 从 API 获取可用模型列表
+// 从后端代理获取可用模型列表（避免前端 CORS 限制）
+const BACKEND_URL = 'http://127.0.0.1:9876';
+
 async function fetchModels(
   baseUrl: string,
   apiKey: string
 ): Promise<{ success: boolean; models: string[]; error?: string }> {
   try {
-    // 标准化 base URL — 移除尾部斜杠和 /v1 后缀
-    let url = baseUrl.replace(/\/+$/, '');
-    if (url.endsWith('/v1')) {
-      url = url.slice(0, -3);
-    }
-    // 确保有 /v1 前缀路径
-    const modelsUrl = `${url}/v1/models`;
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
+    const params = new URLSearchParams({ base_url: baseUrl });
+    if (apiKey) params.set('api_key', apiKey);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    const res = await fetch(modelsUrl, {
+    const res = await fetch(`${BACKEND_URL}/api/models?${params}`, {
       method: 'GET',
-      headers,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => '');
-      return {
-        success: false,
-        models: [],
-        error: `HTTP ${res.status}: ${errorText || res.statusText}`,
-      };
-    }
-
     const data = await res.json();
-
-    // OpenAI 格式: { data: [{ id: "model-name", ... }] }
-    if (data.data && Array.isArray(data.data)) {
-      const models = data.data
-        .map((m: any) => m.id || m.name)
-        .filter((m: any) => typeof m === 'string' && m.length > 0)
-        .sort();
-      return { success: true, models };
-    }
-
-    // 某些 API 返回数组格式: [{ id: "model-name" }]
-    if (Array.isArray(data)) {
-      const models = data
-        .map((m: any) => (typeof m === 'string' ? m : m.id || m.name))
-        .filter((m: any) => typeof m === 'string' && m.length > 0)
-        .sort();
-      return { success: true, models };
-    }
-
-    return { success: false, models: [], error: '无法解析模型列表格式' };
+    return {
+      success: data.success ?? false,
+      models: data.models ?? [],
+      error: data.error,
+    };
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      return { success: false, models: [], error: '请求超时 (15秒)' };
+      return { success: false, models: [], error: '请求超时 (20秒)' };
     }
     return {
       success: false,
