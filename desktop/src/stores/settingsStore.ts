@@ -1,0 +1,172 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import apiClient from '../lib/api';
+
+export interface ModelProvider {
+  id: string;
+  name: string;
+  type: 'openai' | 'anthropic' | 'ollama' | 'custom';
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  enabled: boolean;
+}
+
+export interface AppSettings {
+  /** Current selected model ID */
+  currentModel: string;
+  /** Current provider ID */
+  currentProvider: string;
+  /** UI language */
+  language: 'zh' | 'en';
+  /** Font size */
+  fontSize: number;
+  /** Send shortcut: 'enter' | 'ctrl+enter' */
+  sendShortcut: 'enter' | 'ctrl+enter';
+  /** Show system messages */
+  showSystemMessages: boolean;
+  /** Auto-scroll to bottom */
+  autoScroll: boolean;
+  /** Model providers */
+  providers: ModelProvider[];
+  /** System prompt */
+  systemPrompt: string;
+  /** Temperature */
+  temperature: number;
+  /** Max tokens */
+  maxTokens: number;
+  /** Backend URL */
+  backendUrl: string;
+  /** API key for backend auth */
+  apiKey: string;
+}
+
+interface SettingsState extends AppSettings {
+  updateSettings: (settings: Partial<AppSettings>) => void;
+  addProvider: (provider: ModelProvider) => void;
+  updateProvider: (id: string, updates: Partial<ModelProvider>) => void;
+  removeProvider: (id: string) => void;
+  setCurrentModel: (model: string, provider: string) => void;
+  resetSettings: () => void;
+  /** Call once at app start to sync persisted backendUrl → apiClient */
+  initApiClient: () => void;
+}
+
+const defaultProviders: ModelProvider[] = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    type: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    enabled: true,
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    type: 'anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    apiKey: '',
+    models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
+    enabled: true,
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama (本地)',
+    type: 'ollama',
+    baseUrl: 'http://127.0.0.1:11434',
+    apiKey: '',
+    models: [],
+    enabled: false,
+  },
+];
+
+const defaultSettings: AppSettings = {
+  currentModel: 'gpt-4o',
+  currentProvider: 'openai',
+  language: 'zh',
+  fontSize: 14,
+  sendShortcut: 'enter',
+  showSystemMessages: false,
+  autoScroll: true,
+  providers: defaultProviders,
+  systemPrompt: '',
+  temperature: 0.7,
+  maxTokens: 4096,
+  backendUrl: 'http://127.0.0.1:9876',
+  apiKey: '',
+};
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set, get) => ({
+      ...defaultSettings,
+
+      updateSettings: (settings) => {
+        set(settings);
+        if (settings.backendUrl || settings.apiKey !== undefined) {
+          const s = get();
+          apiClient.updateConfig({
+            baseUrl: s.backendUrl,
+            apiKey: s.apiKey,
+          });
+        }
+      },
+
+      addProvider: (provider) =>
+        set((s) => ({ providers: [...s.providers, provider] })),
+
+      updateProvider: (id, updates) =>
+        set((s) => ({
+          providers: s.providers.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        })),
+
+      removeProvider: (id) =>
+        set((s) => ({
+          providers: s.providers.filter((p) => p.id !== id),
+        })),
+
+      setCurrentModel: (model, provider) =>
+        set({ currentModel: model, currentProvider: provider }),
+
+      resetSettings: () => {
+        set(defaultSettings);
+        apiClient.updateConfig({
+          baseUrl: defaultSettings.backendUrl,
+          apiKey: defaultSettings.apiKey,
+        });
+      },
+
+      initApiClient: () => {
+        const s = get();
+        apiClient.updateConfig({
+          baseUrl: s.backendUrl,
+          apiKey: s.apiKey,
+        });
+      },
+    }),
+    {
+      name: 'hermes-settings',
+      partialize: (state) => ({
+        currentModel: state.currentModel,
+        currentProvider: state.currentProvider,
+        language: state.language,
+        fontSize: state.fontSize,
+        sendShortcut: state.sendShortcut,
+        showSystemMessages: state.showSystemMessages,
+        autoScroll: state.autoScroll,
+        providers: state.providers,
+        systemPrompt: state.systemPrompt,
+        temperature: state.temperature,
+        maxTokens: state.maxTokens,
+        backendUrl: state.backendUrl,
+        apiKey: state.apiKey,
+      }),
+    }
+  )
+);
+
+export default useSettingsStore;

@@ -1,0 +1,103 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: linux-unpacked
+          - os: macos-latest
+            platform: mac
+            artifact_name: mac
+          - os: windows-latest
+            platform: win
+            artifact_name: win-unpacked
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---- Node / Electron ----
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/Library/Caches/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-${{ matrix.os }}-${{ hashFiles('desktop/package-lock.json') }}
+
+      # ---- Python backend ----
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r python-backend/requirements.txt pyinstaller
+
+      - name: Build Python backend
+        working-directory: desktop/python-backend
+        run: pyinstaller build.spec --distpath ../dist-backend --workpath ../build-backend
+
+      # ---- macOS code signing (conditional) ----
+      - name: Electron builder (macOS, with signing)
+        if: matrix.platform == 'mac'
+        run: npx electron-builder --${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Electron builder (non-macOS)
+        if: matrix.platform != 'mac'
+        run: npx electron-builder --${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-desktop-${{ matrix.platform }}
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.AppImage
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+            desktop/dist/*.snap
+            desktop/dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
