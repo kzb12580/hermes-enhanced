@@ -13,6 +13,9 @@ on:
       - '.github/workflows/desktop-build.yml'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build ${{ matrix.os }}
