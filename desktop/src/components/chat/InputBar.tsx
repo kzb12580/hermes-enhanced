@@ -1,13 +1,62 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { SendHorizonal, Square, Paperclip } from 'lucide-react';
+import {
+  SendHorizonal,
+  Square,
+  Paperclip,
+  ChevronDown,
+  Brain,
+  BrainCircuit,
+  Zap,
+} from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 
+// 思考模式配置
+const THINKING_MODES = [
+  { value: 'off' as const, label: '关闭', icon: Zap, desc: '标准模式，快速响应' },
+  { value: 'auto' as const, label: '自动', icon: Brain, desc: '复杂问题自动深度思考' },
+  { value: 'on' as const, label: '深度', icon: BrainCircuit, desc: '强制深度思考，更准确但更慢' },
+];
+
 export function InputBar() {
   const [input, setInput] = useState('');
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showThinkingPicker, setShowThinkingPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  const thinkingPickerRef = useRef<HTMLDivElement>(null);
+
   const { sendMessage, isGenerating, stopGeneration } = useChatStore();
-  const { sendShortcut } = useSettingsStore();
+  const {
+    sendShortcut,
+    providers,
+    currentModel,
+    currentProvider,
+    setCurrentModel,
+    thinkingMode,
+    thinkingBudget,
+    updateSettings,
+  } = useSettingsStore();
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        modelPickerRef.current &&
+        !modelPickerRef.current.contains(e.target as Node)
+      ) {
+        setShowModelPicker(false);
+      }
+      if (
+        thinkingPickerRef.current &&
+        !thinkingPickerRef.current.contains(e.target as Node)
+      ) {
+        setShowThinkingPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Auto-resize textarea
   const adjustHeight = useCallback(() => {
@@ -27,7 +76,6 @@ export function InputBar() {
     if (!trimmed || isGenerating) return;
     sendMessage(trimmed);
     setInput('');
-    // Reset height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -35,13 +83,11 @@ export function InputBar() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (sendShortcut === 'enter') {
-      // Enter to send, Shift+Enter for newline
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     } else {
-      // Ctrl+Enter to send, Enter for newline
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         handleSend();
@@ -53,13 +99,170 @@ export function InputBar() {
     stopGeneration();
   }, [stopGeneration]);
 
+  // 获取当前供应商名称和模型简称
+  const currentProviderObj = providers.find((p) => p.id === currentProvider);
+  const currentProviderName = currentProviderObj?.name || currentProvider;
+  const modelShort = currentModel.length > 20
+    ? currentModel.slice(0, 18) + '...'
+    : currentModel;
+
+  // 获取当前思考模式信息
+  const currentThinking = THINKING_MODES.find((m) => m.value === thinkingMode) || THINKING_MODES[0];
+  const ThinkingIcon = currentThinking.icon;
+
+  // 判断是否支持思考模式（DeepSeek、Claude等）
+  const supportsThinking =
+    currentModel.includes('deepseek') ||
+    currentModel.includes('claude') ||
+    currentModel.includes('o1') ||
+    currentModel.includes('o3') ||
+    currentModel.includes('reasoner') ||
+    currentModel.includes('thinking');
+
   const canSend = input.trim().length > 0 && !isGenerating;
 
   return (
     <div className="border-t border-[var(--border)] bg-[var(--bg-secondary)] p-4">
       <div className="max-w-3xl mx-auto relative">
+        {/* 模型切换栏 */}
+        <div className="flex items-center gap-2 mb-2">
+          {/* 供应商/模型选择器 */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
+                bg-[var(--bg-tertiary)] text-[var(--text-secondary)]
+                hover:bg-[var(--bg-surface)] transition-colors border border-[var(--border)]"
+            >
+              <span className="text-[var(--accent)] font-medium">
+                {currentProviderName}
+              </span>
+              <span className="text-[var(--text-muted)]">/</span>
+              <span>{modelShort}</span>
+              <ChevronDown size={12} className={`transition-transform ${showModelPicker ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* 模型下拉菜单 */}
+            {showModelPicker && (
+              <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto
+                bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-xl z-50">
+                {providers
+                  .filter((p) => p.enabled && p.models.length > 0)
+                  .map((provider) => (
+                    <div key={provider.id}>
+                      <div className="px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-tertiary)] sticky top-0">
+                        {provider.name}
+                      </div>
+                      {provider.models.map((model) => (
+                        <button
+                          key={`${provider.id}-${model}`}
+                          onClick={() => {
+                            setCurrentModel(model, provider.id);
+                            setShowModelPicker(false);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors
+                            ${model === currentModel && provider.id === currentProvider
+                              ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                            }`}
+                        >
+                          {model}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                {providers.filter((p) => p.enabled && p.models.length > 0).length === 0 && (
+                  <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
+                    暂无可用模型，请在设置中添加
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 思考模式选择器 */}
+          {supportsThinking && (
+            <div className="relative" ref={thinkingPickerRef}>
+              <button
+                onClick={() => setShowThinkingPicker(!showThinkingPicker)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
+                  border transition-colors
+                  ${thinkingMode === 'on'
+                    ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/30'
+                    : thinkingMode === 'auto'
+                      ? 'bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/30'
+                      : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border)]'
+                  }`}
+              >
+                <ThinkingIcon size={12} />
+                <span>{currentThinking.label}</span>
+                <ChevronDown size={10} className={`transition-transform ${showThinkingPicker ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* 思考模式下拉 */}
+              {showThinkingPicker && (
+                <div className="absolute bottom-full left-0 mb-1 w-56
+                  bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-xl z-50">
+                  <div className="px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-tertiary)]">
+                    思考模式
+                  </div>
+                  {THINKING_MODES.map((mode) => {
+                    const Icon = mode.icon;
+                    return (
+                      <button
+                        key={mode.value}
+                        onClick={() => {
+                          updateSettings({ thinkingMode: mode.value });
+                          setShowThinkingPicker(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-start gap-2
+                          ${mode.value === thinkingMode
+                            ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                          }`}
+                      >
+                        <Icon size={14} className="mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium">{mode.label}</div>
+                          <div className="text-[var(--text-muted)] text-[10px] mt-0.5">
+                            {mode.desc}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* 思考预算 */}
+                  {thinkingMode !== 'off' && (
+                    <div className="px-3 py-2 border-t border-[var(--border)]">
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-1">
+                        思考预算: {thinkingBudget} tokens
+                      </label>
+                      <input
+                        type="range"
+                        min={1024}
+                        max={32768}
+                        step={1024}
+                        value={thinkingBudget}
+                        onChange={(e) =>
+                          updateSettings({ thinkingBudget: parseInt(e.target.value) })
+                        }
+                        className="w-full h-1 accent-[var(--accent)]"
+                      />
+                      <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
+                        <span>1K</span>
+                        <span>32K</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 输入框 */}
         <div className="flex items-end gap-2 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
-          {/* Attach button */}
           <button
             className="flex-shrink-0 p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
             title="添加附件"
@@ -68,7 +271,6 @@ export function InputBar() {
             <Paperclip size={18} />
           </button>
 
-          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -81,7 +283,6 @@ export function InputBar() {
             disabled={isGenerating}
           />
 
-          {/* Send / Stop button */}
           <div className="flex-shrink-0 p-2">
             {isGenerating ? (
               <button

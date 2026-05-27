@@ -27,6 +27,10 @@ export interface AppSettings {
   showSystemMessages: boolean;
   /** Auto-scroll to bottom */
   autoScroll: boolean;
+  /** Thinking/reasoning mode: 'off' | 'auto' | 'on' */
+  thinkingMode: 'off' | 'auto' | 'on';
+  /** Thinking budget tokens (for models that support it) */
+  thinkingBudget: number;
   /** Model providers */
   providers: ModelProvider[];
   /** System prompt */
@@ -90,6 +94,8 @@ const defaultSettings: AppSettings = {
   sendShortcut: 'enter',
   showSystemMessages: false,
   autoScroll: true,
+  thinkingMode: 'off',
+  thinkingBudget: 8192,
   providers: defaultProviders,
   systemPrompt: '',
   temperature: 0.7,
@@ -158,6 +164,8 @@ export const useSettingsStore = create<SettingsState>()(
         sendShortcut: state.sendShortcut,
         showSystemMessages: state.showSystemMessages,
         autoScroll: state.autoScroll,
+        thinkingMode: state.thinkingMode,
+        thinkingBudget: state.thinkingBudget,
         providers: state.providers,
         systemPrompt: state.systemPrompt,
         temperature: state.temperature,

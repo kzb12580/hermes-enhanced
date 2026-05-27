@@ -322,6 +322,8 @@ export const useChatStore = create<ChatState>()(
               content,
               model: settings.currentModel,
               session_id: sessionId ?? undefined,
+              thinking_mode: settings.thinkingMode,
+              thinking_budget: settings.thinkingMode !== 'off' ? settings.thinkingBudget : undefined,
             },
             controller.signal
           );

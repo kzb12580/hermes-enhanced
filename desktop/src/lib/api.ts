@@ -24,6 +24,8 @@ export interface ChatCompletionRequest {
   content: string;
   session_id?: string;
   model?: string;
+  thinking_mode?: 'off' | 'auto' | 'on';
+  thinking_budget?: number;
 }
 
 export interface SessionInfo {
