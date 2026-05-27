@@ -82,5 +82,5 @@ linux:
 publish:
   provider: github
   owner: kzb12580
-  repo: hermes-desktop
+  repo: hermes-enhanced
   releaseType: release
