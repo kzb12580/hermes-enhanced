@@ -35,12 +35,17 @@ interface ChatState {
   isGenerating: boolean;
   isSending: boolean;
   error: string | null;
+  activeSkills: string[];
 
   // Derived
   currentSession: () => Session | undefined;
   currentMessages: () => DisplayMessage[];
 
   // Actions
+  setActiveSkills: (skills: string[]) => void;
+  toggleActiveSkill: (skillId: string) => void;
+  addActiveSkill: (name: string) => void;
+  removeActiveSkill: (name: string) => void;
   createSession: () => string;
   switchSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
@@ -114,6 +119,7 @@ export const useChatStore = create<ChatState>()(
       isGenerating: false,
       isSending: false,
       error: null,
+      activeSkills: [],
 
       currentSession: () => {
         const { sessions, currentSessionId } = get();
@@ -122,6 +128,30 @@ export const useChatStore = create<ChatState>()(
 
       currentMessages: () => {
         return get().currentSession()?.messages || [];
+      },
+
+      setActiveSkills: (skills) => set({ activeSkills: skills }),
+
+      toggleActiveSkill: (skillId) => {
+        set((s) => ({
+          activeSkills: s.activeSkills.includes(skillId)
+            ? s.activeSkills.filter((id) => id !== skillId)
+            : [...s.activeSkills, skillId],
+        }));
+      },
+
+      addActiveSkill: (name) => {
+        set((s) => ({
+          activeSkills: s.activeSkills.includes(name)
+            ? s.activeSkills
+            : [...s.activeSkills, name],
+        }));
+      },
+
+      removeActiveSkill: (name) => {
+        set((s) => ({
+          activeSkills: s.activeSkills.filter((id) => id !== name),
+        }));
       },
 
       createSession: () => {
@@ -332,6 +362,7 @@ export const useChatStore = create<ChatState>()(
               system_prompt: settings.systemPrompt || undefined,
               thinking_mode: settings.thinkingMode,
               thinking_budget: settings.thinkingMode !== 'off' ? settings.thinkingBudget : undefined,
+              skills: get().activeSkills,
             },
             controller.signal
           );

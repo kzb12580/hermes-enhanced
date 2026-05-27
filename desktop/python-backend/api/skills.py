@@ -1,71 +1,109 @@
-"""Skills API — list, view, create, update skills."""
+"""Skills API — list, view, search, and reload skills from Markdown files."""
 
-from typing import Optional
+from typing import List
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 router = APIRouter()
 
-# In-memory skill store
-_skills: dict[str, dict] = {
-    "web-search": {
-        "name": "web-search",
-        "description": "Search the web for information",
-        "enabled": True,
-        "parameters": {"query": "string"},
-    },
-    "code-execution": {
-        "name": "code-execution",
-        "description": "Execute code in a sandboxed environment",
-        "enabled": True,
-        "parameters": {"language": "string", "code": "string"},
-    },
-}
+# ---------------------------------------------------------------------------
+# Lazy singleton for the SkillLoader
+# ---------------------------------------------------------------------------
+
+_skill_loader = None
 
 
-class SkillCreate(BaseModel):
-    # FIX: Add min_length/max_length constraints
-    name: str = Field(..., min_length=1, max_length=100)
-    description: str = Field(default="", max_length=1000)
-    enabled: bool = True
-    parameters: dict = Field(default_factory=dict)
+def get_skill_loader():
+    global _skill_loader
+    if _skill_loader is None:
+        from skills.loader import SkillLoader
+        _skill_loader = SkillLoader()
+    return _skill_loader
 
 
-class SkillUpdate(BaseModel):
-    description: Optional[str] = Field(default=None, max_length=1000)
-    enabled: Optional[bool] = None
-    parameters: Optional[dict] = None
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
+class SkillInfo(BaseModel):
+    name: str
+    description: str
+    category: str
+    tags: List[str]
+    triggers: List[str]
+    is_builtin: bool
 
 
-@router.get("/api/skills")
+class SkillDetail(SkillInfo):
+    content: str
+    tools: List[str]
+
+
+class SearchRequest(BaseModel):
+    query: str
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/skills", response_model=List[SkillInfo])
 async def list_skills():
     """Return all registered skills."""
-    return list(_skills.values())
+    loader = get_skill_loader()
+    return [
+        SkillInfo(
+            name=s.name,
+            description=s.description,
+            category=s.category,
+            tags=s.tags,
+            triggers=s.triggers,
+            is_builtin=s.is_builtin,
+        )
+        for s in loader.get_all()
+    ]
 
 
-@router.get("/api/skills/{name}")
+@router.get("/api/skills/{name}", response_model=SkillDetail)
 async def get_skill(name: str):
-    """Return details for a single skill."""
-    if name not in _skills:
+    """Return full details for a single skill."""
+    loader = get_skill_loader()
+    skill = loader.get_by_name(name)
+    if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-    return _skills[name]
+    return SkillDetail(
+        name=skill.name,
+        description=skill.description,
+        category=skill.category,
+        tags=skill.tags,
+        triggers=skill.triggers,
+        tools=skill.tools,
+        content=skill.content,
+        is_builtin=skill.is_builtin,
+    )
 
 
-@router.post("/api/skills")
-async def create_skill(body: SkillCreate):
-    """Register a new skill."""
-    if body.name in _skills:
-        raise HTTPException(status_code=409, detail="Skill already exists")
-    _skills[body.name] = body.model_dump()
-    return _skills[body.name]
+@router.post("/api/skills/search", response_model=List[SkillInfo])
+async def search_skills(request: SearchRequest):
+    """Search skills by keyword."""
+    loader = get_skill_loader()
+    return [
+        SkillInfo(
+            name=s.name,
+            description=s.description,
+            category=s.category,
+            tags=s.tags,
+            triggers=s.triggers,
+            is_builtin=s.is_builtin,
+        )
+        for s in loader.search(request.query)
+    ]
 
 
-@router.put("/api/skills/{name}")
-async def update_skill(name: str, body: SkillUpdate):
-    """Update an existing skill."""
-    if name not in _skills:
-        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-    updates = body.model_dump(exclude_none=True)
-    _skills[name].update(updates)
-    return _skills[name]
+@router.post("/api/skills/reload")
+async def reload_skills():
+    """Re-scan skill directories and reload all definitions."""
+    loader = get_skill_loader()
+    loader.reload()
+    return {"status": "ok", "count": len(loader.skills)}

@@ -30,6 +30,23 @@ export interface ChatCompletionRequest {
   thinking_mode?: 'off' | 'auto' | 'on';
   thinking_budget?: number;
   proxy_url?: string;
+  skills?: string[];
+}
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  triggers: string[];
+  is_builtin: boolean;
+  enabled?: boolean;
+}
+
+export interface SkillDetail extends SkillInfo {
+  content: string;
+  tools: string[];
 }
 
 export interface SessionInfo {
@@ -196,6 +213,7 @@ class ApiClient {
           thinking_mode: request.thinking_mode,
           thinking_budget: request.thinking_budget,
           proxy_url: request.proxy_url,
+          skills: request.skills,
         }),
         signal,
       }
@@ -350,6 +368,57 @@ class ApiClient {
       const detail = await this.parseErrorResponse(res);
       throw new Error(`Delete session failed: ${res.status} - ${detail}`);
     }
+  }
+
+  /** Fetch available skills */
+  async fetchSkills(): Promise<SkillInfo[]> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills`, {
+      headers: this.getHeaders(true),
+    });
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Fetch skills failed: ${res.status} - ${detail}`);
+    }
+    return res.json();
+  }
+
+  /** Get a single skill by name */
+  async getSkill(name: string): Promise<SkillDetail> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills/${encodeURIComponent(name)}`, {
+      headers: this.getHeaders(true),
+    });
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Get skill failed: ${res.status} - ${detail}`);
+    }
+    return res.json();
+  }
+
+  /** Search skills by query */
+  async searchSkills(query: string): Promise<SkillInfo[]> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills/search`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Search skills failed: ${res.status} - ${detail}`);
+    }
+    return res.json();
+  }
+
+  /** Reload skills from disk */
+  async reloadSkills(): Promise<{ status: string; count: number }> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills/reload`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`Reload skills failed: ${res.status} - ${detail}`);
+    }
+    return res.json();
   }
 }
 
