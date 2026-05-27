@@ -15,15 +15,15 @@ export interface ApiConfig {
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string;
   tool_call_id?: string;
   name?: string;
-}
 
 export interface ChatCompletionRequest {
   content: string;
   session_id?: string;
   model?: string;
+  base_url?: string;
+  api_key?: string;
   thinking_mode?: 'off' | 'auto' | 'on';
   thinking_budget?: number;
 }
@@ -184,6 +184,10 @@ class ApiClient {
           content: request.content,
           session_id: request.session_id,
           model: request.model,
+          base_url: request.base_url,
+          api_key: request.api_key,
+          thinking_mode: request.thinking_mode,
+          thinking_budget: request.thinking_budget,
         }),
         signal,
       }
@@ -246,11 +250,16 @@ class ApiClient {
               return;
             }
 
+            if (currentEvent === 'error') {
+              // Provider error — throw so the UI can display it
+              throw new Error(data || 'Provider returned an error');
+            }
+
             if (currentEvent === 'token') {
               // Yield the raw text content (no further trim — preserves intentional spaces)
               yield data;
             }
-            // Skip unknown events
+            // Skip unknown events (thinking, etc.)
             continue;
           }
 

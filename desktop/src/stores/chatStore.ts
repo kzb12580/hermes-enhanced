@@ -317,11 +317,18 @@ export const useChatStore = create<ChatState>()(
         resetIdleTimer();
 
         try {
-          const stream = apiClient.chatCompletionStream(
+          // Find current provider to get base_url and api_key
+        const currentProvider = settings.providers.find(
+          (p) => p.id === settings.currentProvider
+        );
+
+        const stream = apiClient.chatCompletionStream(
             {
               content,
               model: settings.currentModel,
               session_id: sessionId ?? undefined,
+              base_url: currentProvider?.baseUrl,
+              api_key: currentProvider?.apiKey,
               thinking_mode: settings.thinkingMode,
               thinking_budget: settings.thinkingMode !== 'off' ? settings.thinkingBudget : undefined,
             },
