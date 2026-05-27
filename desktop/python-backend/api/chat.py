@@ -71,6 +71,7 @@ async def _call_provider_with_tools(
     api_key: str,
     model: str,
     messages: list[dict],
+    session_id: Optional[str] = None,
     proxy_url: Optional[str] = None,
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
@@ -223,6 +224,16 @@ async def _call_provider_with_tools(
         assistant_msg["tool_calls"] = assistant_tool_calls
         current_messages.append(assistant_msg)
 
+        # 保存 assistant 消息（带 tool_calls）到 session history
+        if session_id:
+            async with _session_lock:
+                _sessions[session_id]["messages"].append({
+                    "role": "assistant",
+                    "content": full_content or None,
+                    "tool_calls": assistant_tool_calls,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+
         # Execute tools concurrently with timeout
         async def _run_one(idx: int, tc: dict):
             tool_name = tc["name"]
@@ -267,6 +278,16 @@ async def _call_provider_with_tools(
                 "tool_call_id": call_id,
                 "content": result[:10000],
             })
+
+            # 保存工具结果到 session history
+            if session_id:
+                async with _session_lock:
+                    _sessions[session_id]["messages"].append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": result[:10000],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
 
     # Exceeded max rounds — try one final call without tools to get a summary
     logger.warning("Exceeded max tool rounds (%d), requesting final summary", MAX_TOOL_ROUNDS)
@@ -330,7 +351,14 @@ async def chat(message: ChatMessage, request: Request):
 
     recent = history[-50:] if len(history) > 50 else history
     for m in recent:
-        api_messages.append({"role": m["role"], "content": m["content"]})
+        msg = {"role": m["role"], "content": m["content"]}
+        # 保留 tool_calls（assistant 消息）
+        if "tool_calls" in m:
+            msg["tool_calls"] = m["tool_calls"]
+        # 保留 tool_call_id（tool 消息）
+        if "tool_call_id" in m:
+            msg["tool_call_id"] = m["tool_call_id"]
+        api_messages.append(msg)
 
     base_url = message.base_url
     api_key = message.api_key
@@ -373,6 +401,7 @@ async def chat(message: ChatMessage, request: Request):
                 api_key=api_key,
                 model=model,
                 messages=api_messages,
+                session_id=session_id,
                 proxy_url=message.proxy_url,
                 thinking_mode=message.thinking_mode,
                 thinking_budget=message.thinking_budget,
