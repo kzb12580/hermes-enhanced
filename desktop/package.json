@@ -1,7 +1,7 @@
 {
   "name": "hermes-desktop",
   "version": "0.1.0",
-  "description": "Hermes Desktop - AI 智能助手桌面客户端",
+  "description": "Hermes Desktop - AI \u667a\u80fd\u52a9\u624b\u684c\u9762\u5ba2\u6237\u7aef",
   "main": "./out/main/index.js",
   "author": "kzb12580",
   "license": "MIT",
@@ -45,7 +45,8 @@
     "@radix-ui/react-scroll-area": "^1.0.5",
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-switch": "^1.0.3",
-    "@radix-ui/react-avatar": "^1.0.4"
+    "@radix-ui/react-avatar": "^1.0.4",
+    "rehype-sanitize": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
