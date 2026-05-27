@@ -10,7 +10,8 @@ dist/hermes-backend/.
 
 from pathlib import Path
 
-_spec_dir = Path(__file__).resolve().parent
+# PyInstaller sets SPEC to the spec file path; use it if available
+_spec_dir = Path(SPEC).resolve().parent if 'SPEC' in dir() else Path('.').resolve()
 
 a = Analysis(
     [str(_spec_dir / "main.py")],
