@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import './context-menu.css';
+
 /* ============================================================
    CSS Custom Properties — Silver-gray gradient theme
    ============================================================ */

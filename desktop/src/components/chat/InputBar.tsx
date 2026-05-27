@@ -13,6 +13,7 @@ import {
 import { useChatStore } from '../../stores/chatStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SkillsPanel } from '../skills/SkillsPanel';
+import { ContextMenu, createEditMenuItems, useContextMenu } from '../ui/ContextMenu';
 
 // 思考模式配置
 const THINKING_MODES = [
@@ -29,6 +30,9 @@ export function InputBar() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const thinkingPickerRef = useRef<HTMLDivElement>(null);
+
+  // 右键菜单
+  const { isOpen, position, menuItems, openMenu, closeMenu } = useContextMenu();
 
   const { sendMessage, isGenerating, stopGeneration, activeSkills, toggleActiveSkill } = useChatStore();
   const {
@@ -98,6 +102,47 @@ export function InputBar() {
       }
     }
   };
+
+  // 右键菜单处理
+  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const hasSelection = textarea.selectionStart !== textarea.selectionEnd;
+    const clipboardText = input;
+
+    const items = createEditMenuItems({
+      onCut: hasSelection
+        ? () => {
+            const selected = input.substring(textarea.selectionStart, textarea.selectionEnd);
+            navigator.clipboard.writeText(selected);
+            setInput(input.substring(0, textarea.selectionStart) + input.substring(textarea.selectionEnd));
+          }
+        : undefined,
+      onCopy: hasSelection
+        ? () => {
+            const selected = input.substring(textarea.selectionStart, textarea.selectionEnd);
+            navigator.clipboard.writeText(selected);
+          }
+        : undefined,
+      onPaste: async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          setInput(input.substring(0, start) + text + input.substring(end));
+        } catch {
+          // Clipboard API 可能被拒绝
+        }
+      },
+      onSelectAll: () => {
+        textarea.select();
+      },
+      hasSelection,
+    });
+
+    openMenu(e, items);
+  }, [input, openMenu]);
 
   const handleStop = useCallback(() => {
     stopGeneration();
@@ -314,6 +359,7 @@ export function InputBar() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onContextMenu={handleContextMenu}
             placeholder="输入消息... (Shift+Enter 换行)"
             rows={1}
             className="flex-1 bg-transparent resize-none py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none max-h-[200px]"
@@ -364,6 +410,16 @@ export function InputBar() {
         activeSkills={activeSkills}
         onToggleActive={toggleActiveSkill}
       />
+
+      {/* Context Menu */}
+      {isOpen && (
+        <ContextMenu
+          x={position.x}
+          y={position.y}
+          items={menuItems}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 }
