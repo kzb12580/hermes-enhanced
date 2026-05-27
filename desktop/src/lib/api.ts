@@ -264,10 +264,14 @@ class ApiClient {
             }
 
             if (currentEvent === 'token') {
-              // Yield the raw text content (no further trim — preserves intentional spaces)
               yield data;
+            } else if (currentEvent === 'tool_call') {
+              yield `[TOOL_CALL]${data}`;
+            } else if (currentEvent === 'tool_result') {
+              yield `[TOOL_RESULT]${data}`;
+            } else if (currentEvent === 'thinking') {
+              yield `[THINKING]${data}`;
             }
-            // Skip unknown events (thinking, etc.)
             continue;
           }
 

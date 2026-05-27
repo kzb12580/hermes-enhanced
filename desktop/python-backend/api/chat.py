@@ -1,4 +1,4 @@
-"""Chat API with SSE streaming — proxies to OpenAI-compatible providers."""
+"""Chat API with SSE streaming + Tool Calling support."""
 
 import asyncio
 import json
@@ -12,16 +12,27 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from tools import openai_tools, execute_tool
+
 logger = logging.getLogger("hermes-backend.chat")
 router = APIRouter()
 
-DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant created to help users with various tasks including coding, research, writing, and general questions. You are knowledgeable, helpful, and respond in the user's language. Be concise and accurate."""
-
-# In-memory session storage
 _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
 
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
+MAX_TOOL_ROUNDS = 10
+
+DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant with access to tools for file operations, terminal commands, and web search.
+
+When the user asks you to:
+- Read/write/create files → use read_file / write_file / list_files
+- Search for code or text → use search_files
+- Run commands → use terminal
+- Look up information online → use web_search / web_extract
+
+Always use tools when needed. Be proactive — don't just say "I can't do that" when tools are available.
+Respond in the user's language. Be concise and helpful."""
 
 
 class ChatMessage(BaseModel):
@@ -30,10 +41,10 @@ class ChatMessage(BaseModel):
     model: Optional[str] = "default"
     base_url: Optional[str] = None
     api_key: Optional[str] = None
+    system_prompt: Optional[str] = None
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
     proxy_url: Optional[str] = None
-    system_prompt: Optional[str] = None
 
 
 class SessionCreate(BaseModel):
@@ -52,21 +63,22 @@ def _create_session(name: Optional[str] = None) -> dict:
     return session
 
 
-# Auto-create a default session
 _create_session("Default Session")
 
 
-async def _call_provider_stream(
+async def _call_provider_with_tools(
     base_url: str,
     api_key: str,
     model: str,
     messages: list[dict],
+    proxy_url: Optional[str] = None,
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
-    proxy_url: Optional[str] = None
-    system_prompt: Optional[str] = None,
 ):
-    """Call an OpenAI-compatible /v1/chat/completions endpoint with streaming."""
+    """Call provider with tool calling loop.
+
+    Yields SSE events: token, tool_call, tool_result, done, error.
+    """
     url = base_url.rstrip("/")
     if not url.endswith("/v1"):
         url = f"{url}/v1"
@@ -77,75 +89,180 @@ async def _call_provider_stream(
         "Authorization": f"Bearer {api_key}",
     }
 
-    body: dict = {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-        "max_tokens": 4096,
-    }
+    tools = openai_tools()
+    current_messages = list(messages)
 
-    # Add thinking/reasoning params if supported
-    if thinking_mode and thinking_mode != "off":
-        if thinking_budget:
+    for round_num in range(MAX_TOOL_ROUNDS):
+        body: dict = {
+            "model": model,
+            "messages": current_messages,
+            "stream": True,
+            "max_tokens": 4096,
+        }
+
+        if tools:
+            body["tools"] = tools
+
+        if thinking_mode and thinking_mode != "off" and thinking_budget:
             body["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
 
-    logger.info("Calling %s model=%s", chat_url, model)
+        logger.info("Round %d: Calling %s model=%s with %d messages, %d tools",
+                     round_num + 1, chat_url, model, len(current_messages), len(tools))
 
-    # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
-    client_kwargs: dict = {"timeout": httpx.Timeout(120.0, connect=15.0)}
-    if proxy_url:
-        client_kwargs["proxy"] = proxy_url
-    else:
-        client_kwargs["trust_env"] = True
+        client_kwargs: dict = {"timeout": httpx.Timeout(120.0, connect=15.0)}
+        if proxy_url:
+            client_kwargs["proxy"] = proxy_url
+        else:
+            client_kwargs["trust_env"] = True
 
-    async with httpx.AsyncClient(**client_kwargs) as client:
-        async with client.stream("POST", chat_url, headers=headers, json=body) as resp:
-            if resp.status_code != 200:
-                error_body = b""
-                async for chunk in resp.aiter_bytes():
-                    error_body += chunk
-                error_text = error_body.decode("utf-8", errors="replace")[:500]
-                logger.error("Provider error %d: %s", resp.status_code, error_text)
-                yield {
-                    "event": "error",
-                    "data": f"Provider error {resp.status_code}: {error_text}",
-                }
-                return
+        try:
+            async with httpx.AsyncClient(**client_kwargs) as client:
+                async with client.stream("POST", chat_url, headers=headers, json=body) as resp:
+                    if resp.status_code != 200:
+                        error_body = b""
+                        async for chunk in resp.aiter_bytes():
+                            error_body += chunk
+                        error_text = error_body.decode("utf-8", errors="replace")[:500]
+                        logger.error("Provider error %d: %s", resp.status_code, error_text)
+                        yield {"event": "error", "data": f"Provider error {resp.status_code}: {error_text}"}
+                        return
 
-            # Parse SSE stream from provider
-            buffer = ""
-            async for raw_chunk in resp.aiter_text():
-                buffer += raw_chunk
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    line = line.strip()
-                    if not line or line == "data: [DONE]":
-                        if line == "data: [DONE]":
-                            yield {"event": "done", "data": ""}
-                        continue
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        try:
-                            data = json.loads(data_str)
+                    # Collect the full response to check for tool calls
+                    full_content = ""
+                    tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments_str}
+                    has_tool_calls = False
+                    thinking_content = ""
+
+                    buffer = ""
+                    async for raw_chunk in resp.aiter_text():
+                        buffer += raw_chunk
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if line == "data: [DONE]":
+                                continue
+                            if not line.startswith("data: "):
+                                continue
+
+                            data_str = line[6:]
+                            try:
+                                data = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
+
                             choices = data.get("choices", [])
-                            if choices:
-                                delta = choices[0].get("delta", {})
-                                content = delta.get("content", "")
-                                reasoning = delta.get("reasoning_content", "")
-                                if reasoning:
-                                    yield {"event": "thinking", "data": reasoning}
-                                if content:
-                                    yield {"event": "token", "data": content}
-                        except json.JSONDecodeError:
-                            continue
+                            if not choices:
+                                continue
 
-            # If we get here without [DONE], send done anyway
+                            delta = choices[0].get("delta", {})
+
+                            # Handle reasoning content
+                            reasoning = delta.get("reasoning_content", "")
+                            if reasoning:
+                                thinking_content += reasoning
+                                yield {"event": "thinking", "data": reasoning}
+
+                            # Handle text content
+                            content = delta.get("content", "")
+                            if content:
+                                full_content += content
+                                yield {"event": "token", "data": content}
+
+                            # Handle tool calls
+                            tc_list = delta.get("tool_calls", [])
+                            if tc_list:
+                                has_tool_calls = True
+                                for tc in tc_list:
+                                    idx = tc.get("index", 0)
+                                    if idx not in tool_calls_map:
+                                        tool_calls_map[idx] = {
+                                            "id": tc.get("id", ""),
+                                            "name": "",
+                                            "arguments_str": "",
+                                        }
+                                    if tc.get("id"):
+                                        tool_calls_map[idx]["id"] = tc["id"]
+                                    fn = tc.get("function", {})
+                                    if fn.get("name"):
+                                        tool_calls_map[idx]["name"] = fn["name"]
+                                    if fn.get("arguments"):
+                                        tool_calls_map[idx]["arguments_str"] += fn["arguments"]
+
+        except httpx.ConnectError as e:
+            yield {"event": "error", "data": f"连接失败: {e}"}
+            return
+        except httpx.TimeoutException:
+            yield {"event": "error", "data": "请求超时 (120秒)"}
+            return
+        except Exception as e:
+            logger.error("Unexpected error: %s", e, exc_info=True)
+            yield {"event": "error", "data": f"错误: {e}"}
+            return
+
+        # If no tool calls, we're done — the tokens were already streamed
+        if not has_tool_calls:
             yield {"event": "done", "data": ""}
+            return
+
+        # ─── Execute tool calls ───
+        # Add assistant message with tool calls to history
+        assistant_msg: dict = {"role": "assistant", "content": full_content or None}
+        assistant_tool_calls = []
+        for idx in sorted(tool_calls_map.keys()):
+            tc = tool_calls_map[idx]
+            assistant_tool_calls.append({
+                "id": tc["id"],
+                "type": "function",
+                "function": {"name": tc["name"], "arguments": tc["arguments_str"]},
+            })
+        assistant_msg["tool_calls"] = assistant_tool_calls
+        current_messages.append(assistant_msg)
+
+        # Execute each tool and add results
+        for idx in sorted(tool_calls_map.keys()):
+            tc = tool_calls_map[idx]
+            tool_name = tc["name"]
+            args_str = tc["arguments_str"]
+            call_id = tc["id"]
+
+            # Parse arguments
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except json.JSONDecodeError:
+                args = {}
+
+            # Notify frontend
+            yield {"event": "tool_call", "data": json.dumps({
+                "id": call_id, "name": tool_name, "args": args
+            })}
+
+            # Execute
+            logger.info("Executing tool: %s(%s)", tool_name, json.dumps(args, ensure_ascii=False)[:200])
+            result = await execute_tool(tool_name, args)
+            logger.info("Tool %s result: %s...", tool_name, result[:200])
+
+            # Notify frontend
+            yield {"event": "tool_result", "data": json.dumps({
+                "id": call_id, "name": tool_name, "result": result[:5000]
+            })}
+
+            # Add tool result to messages
+            current_messages.append({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": result[:10000],  # Limit result size
+            })
+
+    # Exceeded max rounds
+    yield {"event": "error", "data": f"Exceeded maximum tool calling rounds ({MAX_TOOL_ROUNDS})"}
+    yield {"event": "done", "data": ""}
 
 
 @router.post("/api/chat")
 async def chat(message: ChatMessage, request: Request):
-    """Stream a chat response via Server-Sent Events."""
+    """Stream a chat response via SSE with tool calling support."""
     if len(message.content) > MAX_CONTENT_LENGTH:
         raise HTTPException(status_code=413, detail="Content too large")
 
@@ -161,67 +278,61 @@ async def chat(message: ChatMessage, request: Request):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-    # Build message history for the provider
+    # Build message history
     history = _sessions[session_id]["messages"]
     api_messages = []
 
-    # Prepend system prompt
+    # System prompt
     sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
     api_messages.append({"role": "system", "content": sys_prompt})
 
     for m in history:
         api_messages.append({"role": m["role"], "content": m["content"]})
 
-    # Determine provider credentials
     base_url = message.base_url
     api_key = message.api_key
     model = message.model or "default"
 
-    # Fallback: echo mode if no provider configured
+    # Fallback: echo mode if no provider
     if not base_url or not api_key:
-        logger.warning("No provider configured, using echo mode")
         async def echo_stream():
-            response_text = f"Echo: {message.content}"
-            for char in response_text:
-                yield {"event": "token", "data": char}
-                await asyncio.sleep(0.02)
+            yield {"event": "token", "data": f"⚠️ 未配置 API 密钥。请在设置中添加供应商和密钥。\n\nEcho: {message.content}"}
             yield {"event": "done", "data": ""}
 
-        async def echo_generator():
-            full_response = ""
+        async def echo_gen():
+            full = ""
             try:
-                async for event in echo_stream():
+                async for ev in echo_stream():
                     if await request.is_disconnected():
                         break
-                    if event["event"] == "token":
-                        full_response += event["event"]
-                    yield event
+                    if ev["event"] == "token":
+                        full += ev["data"]
+                    yield ev
             finally:
-                if full_response:
+                if full:
                     async with _session_lock:
                         _sessions[session_id]["messages"].append({
-                            "role": "assistant",
-                            "content": f"Echo: {message.content}",
+                            "role": "assistant", "content": full,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         })
 
-        return EventSourceResponse(echo_generator(), ping=15, headers={
+        return EventSourceResponse(echo_gen(), ping=15, headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "X-Accel-Buffering": "no",
         })
 
-    # Real provider call
+    # Real provider call with tool loop
     async def event_generator():
         full_response = ""
         try:
-            async for event in _call_provider_stream(
+            async for event in _call_provider_with_tools(
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
                 messages=api_messages,
+                proxy_url=message.proxy_url,
                 thinking_mode=message.thinking_mode,
                 thinking_budget=message.thinking_budget,
-                proxy_url=message.proxy_url,
             ):
                 if await request.is_disconnected():
                     break
@@ -230,38 +341,24 @@ async def chat(message: ChatMessage, request: Request):
                 yield event
         except asyncio.CancelledError:
             pass
-        except httpx.ConnectError as e:
-            logger.error("Connection error: %s", e)
-            yield {"event": "error", "data": f"连接失败: {e}"}
-        except httpx.TimeoutException:
-            logger.error("Request timeout")
-            yield {"event": "error", "data": "请求超时 (120秒)"}
-        except Exception as e:
-            logger.error("Unexpected error: %s", e, exc_info=True)
-            yield {"event": "error", "data": f"错误: {e}"}
         finally:
             if full_response:
                 async with _session_lock:
                     _sessions[session_id]["messages"].append({
-                        "role": "assistant",
-                        "content": full_response,
+                        "role": "assistant", "content": full_response,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
 
-    headers = {
+    return EventSourceResponse(event_generator(), ping=15, headers={
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "X-Accel-Buffering": "no",
-    }
-    return EventSourceResponse(event_generator(), ping=15, headers=headers)
+    })
 
 
-# ---------------------------------------------------------------------------
-# Session management
-# ---------------------------------------------------------------------------
+# ─── Session management ───
 
 @router.get("/api/sessions")
 async def list_sessions():
-    """List all chat sessions."""
     return [
         {"id": s["id"], "name": s["name"], "created_at": s["created_at"],
          "message_count": len(s["messages"])}
@@ -271,14 +368,12 @@ async def list_sessions():
 
 @router.post("/api/sessions")
 async def create_session(body: SessionCreate):
-    """Create a new chat session."""
     async with _session_lock:
         return _create_session(body.name)
 
 
 @router.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """Delete a chat session."""
     async with _session_lock:
         if session_id not in _sessions:
             raise HTTPException(status_code=404, detail="Session not found")

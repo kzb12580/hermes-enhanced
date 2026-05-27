@@ -338,7 +338,30 @@ export const useChatStore = create<ChatState>()(
 
           for await (const token of stream) {
             resetIdleTimer();
-            // Throttle: batch tokens and flush at ~30fps
+            // Handle tool call/result events
+            if (token.startsWith('[TOOL_CALL]')) {
+              try {
+                const tc = JSON.parse(token.slice(12));
+                const toolLabel = `\n\n🔧 **Calling tool: ${tc.name}**\n\`\`\`json\n${JSON.stringify(tc.args, null, 2)}\n\`\`\`\n`;
+                scheduleTokenFlush(assistantMsgId, toolLabel, get());
+              } catch { /* ignore parse errors */ }
+              continue;
+            }
+            if (token.startsWith('[TOOL_RESULT]')) {
+              try {
+                const tr = JSON.parse(token.slice(13));
+                const resultText = tr.result || '';
+                const truncated = resultText.length > 500 ? resultText.slice(0, 500) + '...' : resultText;
+                const resultLabel = `\n📋 **Result from ${tr.name}:**\n\`\`\`\n${truncated}\n\`\`\`\n`;
+                scheduleTokenFlush(assistantMsgId, resultLabel, get());
+              } catch { /* ignore parse errors */ }
+              continue;
+            }
+            if (token.startsWith('[THINKING]')) {
+              // Skip thinking tokens for now (could add UI later)
+              continue;
+            }
+            // Regular token
             scheduleTokenFlush(assistantMsgId, token, get());
           }
           // Flush any remaining tokens
