@@ -297,6 +297,10 @@ class ApiClient {
             const raw = trimmed.slice(5);
             const data = raw.startsWith(' ') ? raw.slice(1) : raw;
             if (currentEvent === 'done') return;
+            if (currentEvent === 'error') throw new Error(data);
+            if (currentEvent === 'tool_call') { yield `[TOOL_CALL]${data}`; continue; }
+            if (currentEvent === 'tool_result') { yield `[TOOL_RESULT]${data}`; continue; }
+            if (currentEvent === 'thinking') { yield `[THINKING]${data}`; continue; }
             if (currentEvent === 'token') yield data;
           }
         }

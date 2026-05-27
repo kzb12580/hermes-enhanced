@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import shutil
 import subprocess
 
 from .base import BaseTool
@@ -18,6 +19,10 @@ BLOCKED_PATTERNS = [
     "rm -rf /", "format ", "del /f /s /q C:", "rmdir /s /q C:",
     "shutdown", "bcdedit", "diskpart", "reg delete",
     "rm -rf /*", ":(){ :|:& };:", "mkfs",
+    # Extended blocklist
+    "rm -rf /", "format ", "del /s", "rd /s", "shutdown", "reboot",
+    "reg delete", "reg add", "net user", "net localgroup",
+    "Invoke-WebRequest", "certutil", "bitsadmin", "powershell -enc", "cmd /c",
 ]
 
 
@@ -47,11 +52,18 @@ class TerminalTool(BaseTool):
         # Determine shell
         is_windows = platform.system() == "Windows"
         if is_windows:
-            shell_cmd = ["powershell", "-NoProfile", "-Command", command]
+            # Prefer pwsh (PowerShell 7) over Windows PowerShell
+            shell = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+            shell_cmd = [shell, "-NoProfile", "-Command", command]
         else:
             shell_cmd = ["bash", "-c", command]
 
         cwd = workdir if workdir and os.path.isdir(workdir) else None
+
+        # Windows subprocess flags
+        kwargs_subprocess: dict = {}
+        if is_windows:
+            kwargs_subprocess["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -59,6 +71,7 @@ class TerminalTool(BaseTool):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
+                **kwargs_subprocess,
             )
 
             try:

@@ -338,22 +338,49 @@ export const useChatStore = create<ChatState>()(
 
           for await (const token of stream) {
             resetIdleTimer();
-            // Handle tool call/result events
+            // Handle tool call/result events — populate ToolCallCard data
             if (token.startsWith('[TOOL_CALL]')) {
               try {
                 const tc = JSON.parse(token.slice(12));
-                const toolLabel = `\n\n🔧 **Calling tool: ${tc.name}**\n\`\`\`json\n${JSON.stringify(tc.args, null, 2)}\n\`\`\`\n`;
-                scheduleTokenFlush(assistantMsgId, toolLabel, get());
+                const toolCallId = tc.id || tc.tool_call_id || generateId();
+                const newToolCall: ParsedToolCall = {
+                  id: toolCallId,
+                  name: tc.name || 'unknown',
+                  arguments: typeof tc.arguments === 'string'
+                    ? tc.arguments
+                    : JSON.stringify(tc.args || tc.arguments || {}),
+                  status: 'running',
+                  result: '',
+                };
+                const currentMsg = get().currentMessages()?.find(m => m.id === assistantMsgId);
+                const existingToolCalls = currentMsg?.toolCalls || [];
+                get().updateMessage(assistantMsgId, {
+                  toolCalls: [...existingToolCalls, newToolCall],
+                });
               } catch { /* ignore parse errors */ }
               continue;
             }
             if (token.startsWith('[TOOL_RESULT]')) {
               try {
                 const tr = JSON.parse(token.slice(13));
-                const resultText = tr.result || '';
-                const truncated = resultText.length > 500 ? resultText.slice(0, 500) + '...' : resultText;
-                const resultLabel = `\n📋 **Result from ${tr.name}:**\n\`\`\`\n${truncated}\n\`\`\`\n`;
-                scheduleTokenFlush(assistantMsgId, resultLabel, get());
+                const toolCallId = tr.id || tr.tool_call_id;
+                const currentMsg = get().currentMessages()?.find(m => m.id === assistantMsgId);
+                if (currentMsg?.toolCalls) {
+                  const updatedToolCalls = currentMsg.toolCalls.map(tc => {
+                    const match = toolCallId
+                      ? tc.id === toolCallId
+                      : (tr.name && tc.name === tr.name && tc.status === 'running');
+                    if (match) {
+                      return {
+                        ...tc,
+                        result: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result || ''),
+                        status: tr.error ? ('error' as const) : ('completed' as const),
+                      };
+                    }
+                    return tc;
+                  });
+                  get().updateMessage(assistantMsgId, { toolCalls: updatedToolCalls });
+                }
               } catch { /* ignore parse errors */ }
               continue;
             }

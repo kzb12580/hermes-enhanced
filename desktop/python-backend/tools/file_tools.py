@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import fnmatch
+import glob as globmod
 import os
 import re
+import sys
+import tempfile
 from pathlib import Path
 
 from .base import BaseTool
@@ -12,6 +16,52 @@ from . import register
 MAX_READ_LINES = 2000
 MAX_WRITE_SIZE = 1_000_000  # 1MB
 MAX_SEARCH_RESULTS = 50
+
+# ─── Path sandbox ───
+
+_ALLOWED_ROOTS: list[Path] = [
+    Path(os.path.expanduser("~")).resolve(),
+    Path.cwd().resolve(),
+    Path(tempfile.gettempdir()).resolve(),
+]
+
+_BLOCKED_PREFIXES: list[Path] = [
+    Path("/etc"), Path("/root/.ssh"), Path("/proc"), Path("/sys"), Path("/dev"),
+    Path("/boot"), Path("/sbin"), Path("/usr/sbin"),
+]
+
+# Windows blocked paths
+if sys.platform == "win32":
+    _win = os.environ.get("SystemRoot", r"C:\Windows")
+    _BLOCKED_PREFIXES.extend([
+        Path(_win),
+        Path(r"C:\Program Files"),
+        Path(r"C:\Program Files (x86)"),
+        Path(r"C:\ProgramData"),
+    ])
+
+
+def _resolve_safe_path(path_str: str) -> Path | str:
+    """Resolve *path_str* and verify it is inside an allowed directory.
+
+    Returns the resolved ``Path`` on success, or an error string on failure.
+    """
+    try:
+        resolved = Path(path_str).expanduser().resolve()
+    except (OSError, ValueError) as exc:
+        return f"Access denied: cannot resolve path ({exc})"
+
+    # Check blocked system directories
+    for blocked in _BLOCKED_PREFIXES:
+        if resolved == blocked or blocked in resolved.parents:
+            return f"Access denied: path outside allowed directories ({blocked})"
+
+    # Must be under at least one allowed root
+    for root in _ALLOWED_ROOTS:
+        if resolved == root or root in resolved.parents:
+            return resolved
+
+    return "Access denied: path outside allowed directories"
 
 
 class ReadFileTool(BaseTool):
@@ -28,7 +78,11 @@ class ReadFileTool(BaseTool):
     }
 
     async def execute(self, path: str, offset: int = 1, limit: int = 500, **kwargs) -> str:
-        p = Path(path)
+        checked = _resolve_safe_path(path)
+        if isinstance(checked, str):
+            return checked  # error message
+        p = checked
+
         if not p.exists():
             return f"Error: File not found: {path}"
         if not p.is_file():
@@ -65,8 +119,12 @@ class WriteFileTool(BaseTool):
         if len(content) > MAX_WRITE_SIZE:
             return f"Error: Content too large ({len(content)} chars)"
 
+        checked = _resolve_safe_path(path)
+        if isinstance(checked, str):
+            return checked  # error message
+        p = checked
+
         try:
-            p = Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
             return f"Written {len(content)} chars to {path}"
@@ -88,7 +146,11 @@ class SearchFilesTool(BaseTool):
     }
 
     async def execute(self, pattern: str, path: str = ".", file_glob: str = "", **kwargs) -> str:
-        target = Path(path)
+        checked = _resolve_safe_path(path)
+        if isinstance(checked, str):
+            return checked  # error message
+        target = checked
+
         if not target.exists():
             return f"Error: Path not found: {path}"
 
@@ -108,7 +170,6 @@ class SearchFilesTool(BaseTool):
                 dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {'node_modules', '__pycache__', '.git', 'venv', '.venv'}]
                 for fname in files:
                     if file_glob:
-                        import fnmatch
                         if not fnmatch.fnmatch(fname, file_glob):
                             continue
                     files_to_search.append(Path(root) / fname)
@@ -142,13 +203,16 @@ class ListFilesTool(BaseTool):
     }
 
     async def execute(self, path: str = ".", pattern: str = "", **kwargs) -> str:
-        target = Path(path)
+        checked = _resolve_safe_path(path)
+        if isinstance(checked, str):
+            return checked  # error message
+        target = checked
+
         if not target.exists():
             return f"Error: Path not found: {path}"
 
         try:
             if pattern:
-                import glob as globmod
                 entries = sorted(globmod.glob(str(target / pattern)))
             else:
                 entries = sorted(str(p) for p in target.iterdir())

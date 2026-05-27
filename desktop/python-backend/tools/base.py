@@ -7,6 +7,11 @@ from typing import Any
 class BaseTool(ABC):
     """Abstract base class for tools that can be invoked by the LLM."""
 
+    # Security & performance attributes (subclasses can override)
+    requires_network: bool = False
+    dangerous: bool = False
+    timeout: int = 60  # default execution timeout in seconds
+
     @property
     @abstractmethod
     def name(self) -> str:

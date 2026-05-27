@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -38,8 +39,11 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     if not tool:
         return f"Error: Unknown tool '{name}'"
     try:
-        result = await tool.execute(**arguments)
-        return result
+        timeout = getattr(tool, "timeout", 60)
+        return await asyncio.wait_for(tool.execute(**arguments), timeout=timeout)
+    except asyncio.TimeoutError:
+        timeout = getattr(tool, "timeout", 60)
+        return f"Error: tool '{name}' timed out after {timeout}s"
     except Exception as e:
         logger.error("Tool %s failed: %s", name, e, exc_info=True)
         return f"Error executing {name}: {e}"
@@ -58,7 +62,10 @@ def _auto_register():
         TerminalTool,
         WebSearchTool, WebExtractTool,
     ]:
-        register(tool_cls())
+        try:
+            register(tool_cls())
+        except Exception as e:
+            logger.warning("Failed to register %s: %s", tool_cls.__name__, e)
 
 
 _auto_register()

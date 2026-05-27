@@ -80,7 +80,7 @@ async def _call_provider_with_tools(
     Yields SSE events: token, tool_call, tool_result, done, error.
     """
     url = base_url.rstrip("/")
-    if not url.endswith("/v1"):
+    if not url.endswith("/v1") and "/v1/" not in url:
         url = f"{url}/v1"
     chat_url = f"{url}/chat/completions"
 
@@ -178,7 +178,7 @@ async def _call_provider_with_tools(
                                     idx = tc.get("index", 0)
                                     if idx not in tool_calls_map:
                                         tool_calls_map[idx] = {
-                                            "id": tc.get("id", ""),
+                                            "id": tc.get("id") or f"call_{uuid.uuid4().hex[:12]}",
                                             "name": "",
                                             "arguments_str": "",
                                         }
@@ -220,27 +220,37 @@ async def _call_provider_with_tools(
         assistant_msg["tool_calls"] = assistant_tool_calls
         current_messages.append(assistant_msg)
 
-        # Execute each tool and add results
-        for idx in sorted(tool_calls_map.keys()):
-            tc = tool_calls_map[idx]
+        # Execute tools concurrently with timeout
+        async def _run_one(idx: int, tc: dict):
             tool_name = tc["name"]
             args_str = tc["arguments_str"]
             call_id = tc["id"]
-
-            # Parse arguments
             try:
                 args = json.loads(args_str) if args_str else {}
             except json.JSONDecodeError:
                 args = {}
+            try:
+                result = await asyncio.wait_for(
+                    execute_tool(tool_name, args), timeout=60
+                )
+            except asyncio.TimeoutError:
+                result = f"Error: tool {tool_name} timed out after 60 seconds"
+            return idx, call_id, tool_name, args, result
+
+        tasks = [_run_one(idx, tc) for idx, tc in sorted(tool_calls_map.items())]
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for item in results_list:
+            if isinstance(item, Exception):
+                logger.error("Tool execution exception: %s", item)
+                continue
+            idx, call_id, tool_name, args, result = item
 
             # Notify frontend
             yield {"event": "tool_call", "data": json.dumps({
                 "id": call_id, "name": tool_name, "args": args
             })}
 
-            # Execute
-            logger.info("Executing tool: %s(%s)", tool_name, json.dumps(args, ensure_ascii=False)[:200])
-            result = await execute_tool(tool_name, args)
             logger.info("Tool %s result: %s...", tool_name, result[:200])
 
             # Notify frontend
@@ -252,7 +262,7 @@ async def _call_provider_with_tools(
             current_messages.append({
                 "role": "tool",
                 "tool_call_id": call_id,
-                "content": result[:10000],  # Limit result size
+                "content": result[:10000],
             })
 
     # Exceeded max rounds
@@ -286,7 +296,8 @@ async def chat(message: ChatMessage, request: Request):
     sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
     api_messages.append({"role": "system", "content": sys_prompt})
 
-    for m in history:
+    recent = history[-50:] if len(history) > 50 else history
+    for m in recent:
         api_messages.append({"role": m["role"], "content": m["content"]})
 
     base_url = message.base_url
