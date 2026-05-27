@@ -7,7 +7,15 @@ interface ToolCallCardProps {
 }
 
 export function ToolCallCard({ toolCall }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  // 执行中时自动展开，完成后自动收起
+  const [expanded, setExpanded] = useState(toolCall.status === 'running');
+
+  // 状态变化时自动展开/收起
+  React.useEffect(() => {
+    if (toolCall.status === 'running') {
+      setExpanded(true);
+    }
+  }, [toolCall.status]);
 
   const statusIcon = {
     pending: <Loader2 size={14} className="animate-spin text-[var(--text-muted)]" />,

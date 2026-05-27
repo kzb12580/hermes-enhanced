@@ -92,8 +92,8 @@ const defaultSettings: AppSettings = {
   language: 'zh',
   fontSize: 14,
   sendShortcut: 'enter',
-  showSystemMessages: false,
-  autoScroll: true,
+  showSystemMessages: false, // 锁死：永久不显示
+  autoScroll: true, // 锁死：永远滚动到底部
   thinkingMode: 'off',
   thinkingBudget: 8192,
   providers: defaultProviders,

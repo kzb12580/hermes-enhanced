@@ -96,7 +96,6 @@ async def _call_provider_with_tools(
     for round_num in range(MAX_TOOL_ROUNDS):
         if round_num >= 20:
             logger.warning("Tool calling round %d/%d — approaching limit", round_num + 1, MAX_TOOL_ROUNDS)
-            yield {"event": "token", "data": f"\n⏳ 工具调用轮次 {round_num + 1}/{MAX_TOOL_ROUNDS}...\n"}
         body: dict = {
             "model": model,
             "messages": current_messages,

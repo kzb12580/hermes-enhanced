@@ -216,46 +216,6 @@ function GeneralSettings() {
           className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2 outline-none border border-[var(--border)] focus:border-[var(--accent)] transition-colors resize-none"
         />
       </div>
-
-      {/* Toggles */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[var(--text-secondary)]">显示系统消息</span>
-          <button
-            type="button"
-            onClick={() => updateSettings({ showSystemMessages: !showSystemMessages })}
-            className={`
-              w-10 h-6 rounded-full transition-colors relative cursor-pointer
-              ${showSystemMessages ? 'bg-[var(--accent)]' : 'bg-[var(--bg-surface)]'}
-            `}
-          >
-            <span
-              className={`
-                absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform
-                ${showSystemMessages ? 'translate-x-[18px]' : 'translate-x-0.5'}
-              `}
-            />
-          </button>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[var(--text-secondary)]">自动滚动到底部</span>
-          <button
-            type="button"
-            onClick={() => updateSettings({ autoScroll: !autoScroll })}
-            className={`
-              w-10 h-6 rounded-full transition-colors relative cursor-pointer
-              ${autoScroll ? 'bg-[var(--accent)]' : 'bg-[var(--bg-surface)]'}
-            `}
-          >
-            <span
-              className={`
-                absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform
-                ${autoScroll ? 'translate-x-[18px]' : 'translate-x-0.5'}
-              `}
-            />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
