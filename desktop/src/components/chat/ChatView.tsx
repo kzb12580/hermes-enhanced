@@ -122,15 +122,6 @@ export function ChatView() {
             </span>
           </div>
 
-          {/* Settings */}
-          <button
-            onClick={toggleSettings}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="设置"
-          >
-            <Settings size={18} />
-          </button>
-
           {/* Window control buttons (Electron only) */}
           {isElectron && (
             <div className="flex items-center gap-0.5 ml-2 app-no-drag">

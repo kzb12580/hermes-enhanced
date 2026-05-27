@@ -219,12 +219,13 @@ function GeneralSettings() {
 
       {/* Toggles */}
       <div className="space-y-3">
-        <label className="flex items-center justify-between cursor-pointer">
+        <div className="flex items-center justify-between">
           <span className="text-sm text-[var(--text-secondary)]">显示系统消息</span>
           <button
+            type="button"
             onClick={() => updateSettings({ showSystemMessages: !showSystemMessages })}
             className={`
-              w-10 h-6 rounded-full transition-colors relative
+              w-10 h-6 rounded-full transition-colors relative cursor-pointer
               ${showSystemMessages ? 'bg-[var(--accent)]' : 'bg-[var(--bg-surface)]'}
             `}
           >
@@ -235,13 +236,14 @@ function GeneralSettings() {
               `}
             />
           </button>
-        </label>
-        <label className="flex items-center justify-between cursor-pointer">
+        </div>
+        <div className="flex items-center justify-between">
           <span className="text-sm text-[var(--text-secondary)]">自动滚动到底部</span>
           <button
+            type="button"
             onClick={() => updateSettings({ autoScroll: !autoScroll })}
             className={`
-              w-10 h-6 rounded-full transition-colors relative
+              w-10 h-6 rounded-full transition-colors relative cursor-pointer
               ${autoScroll ? 'bg-[var(--accent)]' : 'bg-[var(--bg-surface)]'}
             `}
           >
@@ -252,7 +254,7 @@ function GeneralSettings() {
               `}
             />
           </button>
-        </label>
+        </div>
       </div>
     </div>
   );
