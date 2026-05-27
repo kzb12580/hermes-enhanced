@@ -17,6 +17,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   tool_call_id?: string;
   name?: string;
+  content?: string;
+}
 
 export interface ChatCompletionRequest {
   content: string;

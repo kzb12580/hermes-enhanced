@@ -304,7 +304,7 @@ function AboutSection() {
           </div>
           <div>
             <h4 className="text-base font-semibold text-[var(--text-primary)]">Hermes Desktop</h4>
-            <p className="text-sm text-[var(--text-muted)]">v{import("../../../package.json").version}</p>
+            <p className="text-sm text-[var(--text-muted)]">{version}</p>
           </div>
         </div>
 
