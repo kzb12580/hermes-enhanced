@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -6,6 +6,8 @@ import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { DisplayMessage } from '../../stores/chatStore';
 import { User, Bot, AlertCircle } from 'lucide-react';
+import { ContextMenu, useContextMenu } from '../ui/ContextMenu';
+import { Copy, ClipboardPaste } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: DisplayMessage;
@@ -15,6 +17,22 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isTool = message.role === 'tool';
+
+  // 右键菜单
+  const { isOpen, position, menuItems, openMenu, closeMenu } = useContextMenu();
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const items = [
+      {
+        label: '复制',
+        icon: <Copy size={14} />,
+        shortcut: 'Ctrl+C',
+        action: () => navigator.clipboard.writeText(message.content),
+      },
+    ];
+    openMenu(e, items);
+  }, [message.content, openMenu]);
 
   if (isSystem) {
     return (
@@ -55,7 +73,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
 
       {/* Content */}
-      <div className={`min-w-0 flex-1 max-w-[80%] ${isUser ? 'flex flex-col items-end' : ''}`}>
+      <div
+        className={`min-w-0 flex-1 max-w-[80%] ${isUser ? 'flex flex-col items-end' : ''}`}
+        onContextMenu={handleContextMenu}
+      >
         {/* Tool calls */}
         {message.toolCalls?.map((tc) => (
           <ToolCallCard key={tc.id} toolCall={tc} />
@@ -128,6 +149,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           })}
         </div>
       </div>
+
+      {/* Context Menu */}
+      {isOpen && (
+        <ContextMenu
+          x={position.x}
+          y={position.y}
+          items={menuItems}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 }
