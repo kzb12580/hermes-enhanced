@@ -5,9 +5,9 @@ import rehypeSanitize from 'rehype-sanitize';
 import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { DisplayMessage } from '../../stores/chatStore';
-import { User, Bot, AlertCircle } from 'lucide-react';
+import { User, Bot, AlertCircle, Loader2 } from 'lucide-react';
 import { ContextMenu, useContextMenu } from '../ui/ContextMenu';
-import { Copy, ClipboardPaste } from 'lucide-react';
+import { Copy } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: DisplayMessage;
@@ -130,6 +130,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.isStreaming && (
               <span className="inline-block w-2 h-4 bg-[var(--accent)] ml-0.5 animate-pulse" />
             )}
+          </div>
+        )}
+
+        {/* Thinking indicator — show when streaming but no content yet */}
+        {message.isStreaming && !message.content && (!message.toolCalls || message.toolCalls.length === 0) && (
+          <div className="flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-muted)]">
+            <Loader2 size={12} className="animate-spin" />
+            <span>AI 正在思考...</span>
           </div>
         )}
 

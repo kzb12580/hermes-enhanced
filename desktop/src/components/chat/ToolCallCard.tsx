@@ -31,6 +31,19 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
     error: '出错',
   };
 
+  // 工具中文名称映射
+  const toolNameCN: Record<string, string> = {
+    read_file: '读取文件',
+    write_file: '写入文件',
+    list_files: '列出文件',
+    search_files: '搜索文件',
+    terminal: '执行命令',
+    web_search: '网页搜索',
+    web_extract: '提取网页',
+  };
+
+  const displayName = toolNameCN[toolCall.name] || toolCall.name;
+
   let parsedArgs: string;
   try {
     parsedArgs = JSON.stringify(JSON.parse(toolCall.arguments), null, 2);
@@ -61,8 +74,13 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
         )}
         <Wrench size={14} className="text-[var(--accent)] flex-shrink-0" />
         <span className="text-sm font-medium text-[var(--text-primary)] truncate">
-          {toolCall.name}
+          {displayName}
         </span>
+        {toolCall.status === 'running' && (
+          <span className="text-xs text-[var(--accent)] animate-pulse">
+            正在{displayName}...
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
           {statusIcon[toolCall.status]}
           <span>{statusText[toolCall.status]}</span>
