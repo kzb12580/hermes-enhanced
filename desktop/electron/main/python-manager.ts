@@ -271,7 +271,89 @@ export class PythonManager {
     return { mode: 'none', pythonPath: '', serverScript: null }
   }
 
-  // ─── 启动后端 ───
+    // ─── 尝试用指定模式启动后端 ───
+  private async tryStart(pythonPath: string, serverScript: string | null, mode: string): Promise<boolean> {
+    const args: string[] = []
+    if (serverScript) args.push(serverScript)
+    args.push('--port', String(this.options.port))
+    args.push('--host', this.options.host)
+
+    this.process = spawn(pythonPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        HERMES_PORT: String(this.options.port),
+        HERMES_HOST: this.options.host,
+        HERMES_LOG_LEVEL: settingsStore.get('logLevel'),
+        PYTHONUNBUFFERED: '1'
+      },
+      windowsHide: true,
+      ...(serverScript ? { cwd: this.getBackendSourceDir() } : {})
+    })
+
+    // 收集 stderr 用于判断是否立即失败
+    let earlyExit = false
+    let exitCode: number | null = null
+
+    this.process.stdout?.on('data', (data: Buffer) => this.processLogData(data, 'stdout'))
+    this.process.stderr?.on('data', (data: Buffer) => this.processLogData(data, 'stderr'))
+
+    this.process.on('error', (err) => {
+      this.addLog(`[错误] 进程错误: ${err.message}`)
+    })
+
+    this.process.on('exit', (code, signal) => {
+      this.addLog(`[退出] 进程退出，code=${code}, signal=${signal}`)
+      this.flushLineBuffer()
+      exitCode = code
+      earlyExit = true
+      this.process = null
+    })
+
+    this.state.pid = this.process.pid ?? null
+    this.startTime = Date.now()
+
+    // 等待服务就绪（最多 15 秒）
+    const ready = await this.waitForReady(15000)
+    if (ready) {
+      // 成功！注册正常的退出处理器
+      this.setupExitHandlers()
+      return true
+    }
+
+    // 没有就绪，检查是否是立即失败（3秒内退出）
+    if (earlyExit && exitCode !== 0) {
+      this.addLog(`[启动] ${mode} 模式立即失败 (code=${exitCode})`)
+      return false
+    }
+
+    // 超时
+    this.addLog(`[启动] ${mode} 模式超时`)
+    return false
+  }
+
+  // ─── 注册正常的退出/重启处理器（后端成功启动后调用） ───
+  private setupExitHandlers(): void {
+    if (!this.process) return
+    // 移除旧的监听器，注册正式的
+    this.process.removeAllListeners('exit')
+    this.process.on('exit', (code, signal) => {
+      this.addLog(`[退出] 进程退出，code=${code}, signal=${signal}`)
+      this.flushLineBuffer()
+      this.state.pid = null
+      if (!this.destroyed && this.state.status !== 'stopping' && this.state.status !== 'stopped') {
+        this.state.lastError = `意外退出: code=${code}, signal=${signal}`
+        this.updateStatus('error')
+        this.handleUnexpectedExit()
+      } else {
+        this.updateStatus('stopped')
+      }
+      this.process = null
+      this.stopHealthCheck()
+    })
+  }
+
+  // ─── 启动后端（带 fallback） ───
   async start(): Promise<void> {
     if (this.process) {
       this.addLog('[管理器] Python 后端已在运行中')
@@ -284,9 +366,9 @@ export class PythonManager {
     this.addLog('[管理器] 正在启动 Python 后端...')
 
     // 检测启动模式
-    const { mode, pythonPath, serverScript } = this.detectBackendMode()
+    const detection = this.detectBackendMode()
 
-    if (mode === 'none') {
+    if (detection.mode === 'none') {
       const errorMsg = '无法启动后端：未找到 PyInstaller 二进制，也未找到系统 Python (>= 3.9)。请安装 Python 3.9+ 后重试。'
       this.addLog(`[错误] ${errorMsg}`)
       this.state.lastError = errorMsg
@@ -294,13 +376,56 @@ export class PythonManager {
       return
     }
 
-    this.addLog(`[启动] 模式: ${mode}`)
-    this.addLog(`[启动] Python: ${pythonPath}`)
-    this.addLog(`[启动] 脚本: ${serverScript ?? '(sidecar 模式)'}`)
+    // ── 策略1: 尝试 sidecar ──
+    if (detection.mode === 'sidecar') {
+      this.addLog(`[启动] 尝试 sidecar 模式: ${detection.pythonPath}`)
+      const sidecarOk = await this.tryStart(detection.pythonPath, null, 'sidecar')
+      if (sidecarOk) {
+        this.updateStatus('running')
+        this.state.lastError = null
+        this.state.restartCount = 0
+        this.restartTimestamps = []
+        this.startHealthCheck()
+        this.addLog(`[管理器] ✅ 后端已启动 (sidecar 模式)，端口: ${this.options.port}`)
+        return
+      }
+      // sidecar 失败，清除缓存，fallback 到系统 Python
+      this.addLog('[启动] ❌ sidecar 失败，尝试 fallback 到系统 Python...')
+      this.cachedBackendMode = null
+      this.cachedPythonPath = null
+    }
 
-    // 系统 Python 模式：先安装依赖
-    if (mode === 'system-python' && !this.depsInstalled) {
-      const ok = await this.installDependencies(pythonPath)
+    // ── 策略2: 系统 Python + 源码 ──
+    const sysPython = this.findSystemPython()
+    const sourceDir = this.getBackendSourceDir()
+    const mainPy = join(sourceDir, 'main.py')
+
+    if (!sysPython) {
+      this.addLog('[启动] ❌ 未找到系统 Python')
+      this.state.lastError = '后端启动失败：sidecar 不可用且未安装 Python 3.9+'
+      this.updateStatus('error')
+      return
+    }
+
+    if (!this.validatePython(sysPython)) {
+      this.addLog('[启动] ❌ Python 版本过低 (需要 >= 3.9)')
+      this.state.lastError = '后端启动失败：Python 版本过低，需要 3.9+'
+      this.updateStatus('error')
+      return
+    }
+
+    if (!existsSync(mainPy)) {
+      this.addLog(`[启动] ❌ 后端源码不存在: ${mainPy}`)
+      this.state.lastError = '后端启动失败：源码文件缺失'
+      this.updateStatus('error')
+      return
+    }
+
+    this.addLog(`[启动] 使用系统 Python: ${sysPython}`)
+
+    // 安装依赖
+    if (!this.depsInstalled) {
+      const ok = await this.installDependencies(sysPython)
       if (!ok) {
         this.state.lastError = 'Python 依赖安装失败，请检查网络连接'
         this.updateStatus('error')
@@ -308,81 +433,17 @@ export class PythonManager {
       }
     }
 
-    // 构建启动参数
-    const args: string[] = []
-    if (serverScript) {
-      args.push(serverScript)
-    }
-    args.push('--port', String(this.options.port))
-    args.push('--host', this.options.host)
-
-    try {
-      this.process = spawn(pythonPath, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          HERMES_PORT: String(this.options.port),
-          HERMES_HOST: this.options.host,
-          HERMES_LOG_LEVEL: settingsStore.get('logLevel'),
-          PYTHONUNBUFFERED: '1'
-        },
-        windowsHide: true,
-        // 系统 Python 模式：设置 cwd 为源码目录
-        ...(serverScript ? { cwd: this.getBackendSourceDir() } : {})
-      })
-
-      this.process.stdout?.on('data', (data: Buffer) => {
-        this.processLogData(data, 'stdout')
-      })
-
-      this.process.stderr?.on('data', (data: Buffer) => {
-        this.processLogData(data, 'stderr')
-      })
-
-      this.process.on('error', (err) => {
-        this.addLog(`[错误] 进程错误: ${err.message}`)
-        this.state.lastError = err.message
-        this.updateStatus('error')
-        this.handleUnexpectedExit()
-      })
-
-      this.process.on('exit', (code, signal) => {
-        this.addLog(`[退出] 进程退出，code=${code}, signal=${signal}`)
-        this.flushLineBuffer()
-        this.state.pid = null
-        if (!this.destroyed && this.state.status !== 'stopping' && this.state.status !== 'stopped') {
-          this.state.lastError = `意外退出: code=${code}, signal=${signal}`
-          this.updateStatus('error')
-          this.handleUnexpectedExit()
-        } else {
-          this.updateStatus('stopped')
-        }
-        this.process = null
-        this.stopHealthCheck()
-      })
-
-      this.state.pid = this.process.pid ?? null
-      this.startTime = Date.now()
-
-      // 等待服务就绪
-      const ready = await this.waitForReady(15000)
-      if (ready) {
-        this.updateStatus('running')
-        this.state.lastError = null
-        this.state.restartCount = 0
-        this.restartTimestamps = []
-        this.startHealthCheck()
-        this.addLog(`[管理器] ✅ Python 后端已启动 (${mode} 模式)，端口: ${this.options.port}`)
-      } else {
-        this.addLog('[管理器] Python 后端启动超时')
-        this.state.lastError = '服务启动超时'
-        this.updateStatus('error')
-        await this.stop()
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      this.addLog(`[错误] 启动失败: ${msg}`)
-      this.state.lastError = msg
+    // 启动
+    const ok = await this.tryStart(sysPython, mainPy, 'system-python')
+    if (ok) {
+      this.updateStatus('running')
+      this.state.lastError = null
+      this.state.restartCount = 0
+      this.restartTimestamps = []
+      this.startHealthCheck()
+      this.addLog(`[管理器] ✅ 后端已启动 (系统 Python 模式)，端口: ${this.options.port}`)
+    } else {
+      this.state.lastError = '后端启动失败：sidecar 和系统 Python 均无法启动'
       this.updateStatus('error')
     }
   }
