@@ -25,6 +25,7 @@ class ModelsResponse(BaseModel):
 async def list_models(
     base_url: str = Query(..., description="Provider base URL (e.g. https://api.openai.com/v1)"),
     api_key: str = Query("", description="API key for authentication"),
+    proxy_url: str = Query("", description="Optional proxy URL (e.g. http://127.0.0.1:7890)"),
 ):
     """Fetch available models from an OpenAI-compatible /v1/models endpoint."""
     # Normalize URL
@@ -40,7 +41,14 @@ async def list_models(
     logger.info("Fetching models from %s", models_url)
 
     try:
-        async with httpx.AsyncClient(timeout=15.0, verify=True) as client:
+        # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
+        client_kwargs: dict = {"timeout": 15.0, "verify": True}
+        if proxy_url:
+            client_kwargs["proxy"] = proxy_url
+        else:
+            client_kwargs["trust_env"] = True
+
+        async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.get(models_url, headers=headers)
 
         if resp.status_code != 200:

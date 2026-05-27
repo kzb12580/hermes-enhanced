@@ -30,6 +30,7 @@ class ChatMessage(BaseModel):
     api_key: Optional[str] = None
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
+    proxy_url: Optional[str] = None
 
 
 class SessionCreate(BaseModel):
@@ -59,6 +60,7 @@ async def _call_provider_stream(
     messages: list[dict],
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
+    proxy_url: Optional[str] = None,
 ):
     """Call an OpenAI-compatible /v1/chat/completions endpoint with streaming."""
     url = base_url.rstrip("/")
@@ -85,7 +87,14 @@ async def _call_provider_stream(
 
     logger.info("Calling %s model=%s", chat_url, model)
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
+    # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
+    client_kwargs: dict = {"timeout": httpx.Timeout(120.0, connect=15.0)}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+    else:
+        client_kwargs["trust_env"] = True
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
         async with client.stream("POST", chat_url, headers=headers, json=body) as resp:
             if resp.status_code != 200:
                 error_body = b""
@@ -201,6 +210,7 @@ async def chat(message: ChatMessage, request: Request):
                 messages=api_messages,
                 thinking_mode=message.thinking_mode,
                 thinking_budget=message.thinking_budget,
+                proxy_url=message.proxy_url,
             ):
                 if await request.is_disconnected():
                     break

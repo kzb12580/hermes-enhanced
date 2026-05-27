@@ -11,6 +11,8 @@ import { app, BrowserWindow } from 'electron'
 import { net } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, appendFileSync, writeFileSync } from 'fs'
+import { createServer } from 'net'
+import treeKill = require('tree-kill')
 import { IPC_CHANNELS, PythonState, PythonHealthResponse, PythonStatus } from '../shared/types'
 import { settingsStore } from './store'
 
@@ -213,6 +215,43 @@ export class PythonManager {
     } catch {
       return false
     }
+  }
+
+  // ─── 检测端口是否可用 (P1: 端口碰撞检测) ───
+  private checkPortAvailable(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const server = createServer()
+      server.once('error', () => resolve(false))
+      server.once('listening', () => {
+        server.close(() => resolve(true))
+      })
+      server.listen(port, '127.0.0.1')
+    })
+  }
+
+  // ─── 寻找可用端口 (从指定端口递增检测) ───
+  private async findAvailablePort(startPort: number): Promise<number> {
+    for (let port = startPort; port < startPort + 20; port++) {
+      const available = await this.checkPortAvailable(port)
+      if (available) return port
+    }
+    return startPort // fallback: 尝试原端口
+  }
+
+  // ─── 用 tree-kill 杀掉整个进程树 (P1) ───
+  private killProcessTree(proc: ChildProcess, signal: string = 'SIGTERM'): Promise<void> {
+    return new Promise((resolve) => {
+      const pid = proc.pid
+      if (!pid) { resolve(); return }
+      treeKill(pid, signal, (err) => {
+        if (err) {
+          this.addLog(`[tree-kill] 杀进程树失败 (pid=${pid}): ${err.message}`)
+          // fallback: 直接 kill
+          try { proc.kill('SIGKILL') } catch { /* already dead */ }
+        }
+        resolve()
+      })
+    })
   }
 
   // ─── 安装后端依赖 ───
@@ -428,6 +467,13 @@ export class PythonManager {
     this.updateStatus('starting')
     this.addLog('[管理器] 正在启动 Python 后端...')
 
+    // ── P1: 端口碰撞检测，自动递增 ──
+    const originalPort = this.options.port
+    this.options.port = await this.findAvailablePort(this.options.port)
+    if (this.options.port !== originalPort) {
+      this.addLog(`[端口] 原端口 ${originalPort} 被占用，自动切换到 ${this.options.port}`)
+    }
+
     // 检测启动模式
     const detection = this.detectBackendMode()
 
@@ -531,9 +577,13 @@ export class PythonManager {
         return
       }
 
-      const timeout = setTimeout(() => {
-        this.addLog('[管理器] 强制终止进程')
-        try { proc.kill('SIGKILL') } catch { /* already dead */ }
+      const timeout = setTimeout(async () => {
+        this.addLog('[管理器] SIGTERM 超时，强制终止进程树')
+        await this.killProcessTree(proc, 'SIGKILL')
+        this.process = null
+        this.state.pid = null
+        this.startTime = null
+        this.updateStatus('stopped')
         resolve()
       }, 5000)
 
@@ -547,7 +597,10 @@ export class PythonManager {
         resolve()
       })
 
-      try { proc.kill('SIGTERM') } catch { /* already dead */ }
+      // P1: 用 tree-kill 杀掉整个进程树
+      this.killProcessTree(proc, 'SIGTERM').catch(() => {
+        try { proc.kill('SIGTERM') } catch { /* already dead */ }
+      })
     })
   }
 
@@ -677,8 +730,10 @@ export class PythonManager {
     const effectiveCount = this.getEffectiveRestartCount()
 
     if (effectiveCount < this.options.maxRestarts) {
+      // P1: 指数退避重试 (1s, 2s, 4s)
+      const backoffMs = Math.min(1000 * Math.pow(2, effectiveCount), 4000)
       this.addLog(
-        `[管理器] 将在 3 秒后尝试重启 (${effectiveCount + 1}/${this.options.maxRestarts})`
+        `[管理器] 将在 ${backoffMs / 1000} 秒后尝试重启 (${effectiveCount + 1}/${this.options.maxRestarts})`
       )
       this.restartTimer = setTimeout(async () => {
         this.restartTimer = null
@@ -688,7 +743,7 @@ export class PythonManager {
           const msg = err instanceof Error ? err.message : String(err)
           this.addLog(`[错误] 重启失败: ${msg}`)
         }
-      }, 3000)
+      }, backoffMs)
     } else {
       this.addLog('[管理器] 已达到最大重启次数，停止重启')
     }
@@ -752,7 +807,14 @@ export class PythonManager {
     this.stopHealthCheck()
     this.clearRestartTimer()
     if (this.process) {
-      try { this.process.kill('SIGKILL') } catch { /* already dead */ }
+      const proc = this.process
+      const pid = proc.pid
+      if (pid) {
+        // P1: 用 tree-kill 杀掉整个进程树
+        try { treeKill(pid, 'SIGKILL') } catch { /* already dead */ }
+      } else {
+        try { proc.kill('SIGKILL') } catch { /* already dead */ }
+      }
     }
     this.flushLineBuffer()
   }

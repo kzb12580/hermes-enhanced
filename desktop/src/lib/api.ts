@@ -6,7 +6,7 @@
 const DEFAULT_BASE_URL = 'http://127.0.0.1:9876';
 const CONNECTION_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+const RETRY_BASE_DELAY_MS = 1000;
 
 export interface ApiConfig {
   baseUrl?: string;
@@ -28,6 +28,7 @@ export interface ChatCompletionRequest {
   api_key?: string;
   thinking_mode?: 'off' | 'auto' | 'on';
   thinking_budget?: number;
+  proxy_url?: string;
 }
 
 export interface SessionInfo {
@@ -134,7 +135,9 @@ class ApiClient {
 
       // Only retry on network errors (not HTTP-level errors which are handled by caller)
       if (retries > 0) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        // Exponential backoff: 1s, 2s, 4s (for retries 3, 2, 1)
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, MAX_RETRIES - retries);
+        await new Promise((r) => setTimeout(r, delay));
         return this.fetchWithRetry(url, options, retries - 1);
       }
       throw err;
@@ -190,6 +193,7 @@ class ApiClient {
           api_key: request.api_key,
           thinking_mode: request.thinking_mode,
           thinking_budget: request.thinking_budget,
+          proxy_url: request.proxy_url,
         }),
         signal,
       }

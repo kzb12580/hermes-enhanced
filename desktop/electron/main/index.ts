@@ -11,6 +11,27 @@ import { settingsStore } from './store'
 import { IPC_CHANNELS, IPCResponse } from '../shared/types'
 import type { AppSettings } from '../shared/types'
 
+// ─── 顶层进程信号处理 (P0: 防止僵尸进程/孤儿进程) ───
+process.on('SIGTERM', () => {
+  console.log('[主进程] 收到 SIGTERM，正在优雅退出...')
+  app.quit()
+})
+
+process.on('SIGINT', () => {
+  console.log('[主进程] 收到 SIGINT (Ctrl+C)，正在优雅退出...')
+  app.quit()
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('[主进程] 未捕获异常:', err)
+  // 给日志写入一点时间，然后退出
+  setTimeout(() => process.exit(1), 1000)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[主进程] 未处理的 Promise 拒绝:', reason)
+})
+
 // 单实例锁
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
