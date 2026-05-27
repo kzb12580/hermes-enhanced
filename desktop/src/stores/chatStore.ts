@@ -329,6 +329,7 @@ export const useChatStore = create<ChatState>()(
               session_id: sessionId ?? undefined,
               base_url: currentProvider?.baseUrl,
               api_key: currentProvider?.apiKey,
+              system_prompt: settings.systemPrompt || undefined,
               thinking_mode: settings.thinkingMode,
               thinking_budget: settings.thinkingMode !== 'off' ? settings.thinkingBudget : undefined,
             },

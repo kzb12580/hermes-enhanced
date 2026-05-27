@@ -15,6 +15,8 @@ from sse_starlette.sse import EventSourceResponse
 logger = logging.getLogger("hermes-backend.chat")
 router = APIRouter()
 
+DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant created to help users with various tasks including coding, research, writing, and general questions. You are knowledgeable, helpful, and respond in the user's language. Be concise and accurate."""
+
 # In-memory session storage
 _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
@@ -31,6 +33,7 @@ class ChatMessage(BaseModel):
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
     proxy_url: Optional[str] = None
+    system_prompt: Optional[str] = None
 
 
 class SessionCreate(BaseModel):
@@ -60,7 +63,8 @@ async def _call_provider_stream(
     messages: list[dict],
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
-    proxy_url: Optional[str] = None,
+    proxy_url: Optional[str] = None
+    system_prompt: Optional[str] = None,
 ):
     """Call an OpenAI-compatible /v1/chat/completions endpoint with streaming."""
     url = base_url.rstrip("/")
@@ -159,7 +163,14 @@ async def chat(message: ChatMessage, request: Request):
 
     # Build message history for the provider
     history = _sessions[session_id]["messages"]
-    api_messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    api_messages = []
+
+    # Prepend system prompt
+    sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
+    api_messages.append({"role": "system", "content": sys_prompt})
+
+    for m in history:
+        api_messages.append({"role": m["role"], "content": m["content"]})
 
     # Determine provider credentials
     base_url = message.base_url

@@ -26,6 +26,7 @@ export interface ChatCompletionRequest {
   model?: string;
   base_url?: string;
   api_key?: string;
+  system_prompt?: string;
   thinking_mode?: 'off' | 'auto' | 'on';
   thinking_budget?: number;
   proxy_url?: string;
@@ -191,6 +192,7 @@ class ApiClient {
           model: request.model,
           base_url: request.base_url,
           api_key: request.api_key,
+          system_prompt: request.system_prompt,
           thinking_mode: request.thinking_mode,
           thinking_budget: request.thinking_budget,
           proxy_url: request.proxy_url,

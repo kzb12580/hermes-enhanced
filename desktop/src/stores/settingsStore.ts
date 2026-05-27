@@ -97,7 +97,7 @@ const defaultSettings: AppSettings = {
   thinkingMode: 'off',
   thinkingBudget: 8192,
   providers: defaultProviders,
-  systemPrompt: '',
+  systemPrompt: 'You are Hermes, an AI assistant. Be helpful, concise, and respond in the user\'s language. You can help with coding, research, writing, and general questions.',
   temperature: 0.7,
   maxTokens: 4096,
   backendUrl: 'http://127.0.0.1:9876',
