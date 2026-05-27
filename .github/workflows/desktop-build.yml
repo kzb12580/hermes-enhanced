@@ -82,7 +82,7 @@ jobs:
       # ---- macOS code signing (conditional) ----
       - name: Electron builder (macOS, with signing)
         if: matrix.platform == 'mac'
-        run: npx electron-builder --${{ matrix.platform }}
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Electron builder (non-macOS)
         if: matrix.platform != 'mac'
-        run: npx electron-builder --${{ matrix.platform }}
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
