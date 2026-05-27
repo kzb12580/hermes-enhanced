@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -288,6 +288,11 @@ function ApiKeysSettings() {
 }
 
 function AboutSection() {
+  const [version, setVersion] = useState("v...");
+  useEffect(() => {
+    // @ts-ignore - window.api injected by preload
+    window.api?.app?.getVersion?.()?.then((v: string) => { if (v) setVersion("v" + v) })?.catch(() => {});
+  }, []);
   return (
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-[var(--text-primary)]">关于 Hermes Desktop</h3>
@@ -299,7 +304,7 @@ function AboutSection() {
           </div>
           <div>
             <h4 className="text-base font-semibold text-[var(--text-primary)]">Hermes Desktop</h4>
-            <p className="text-sm text-[var(--text-muted)]">v0.1.0</p>
+            <p className="text-sm text-[var(--text-muted)]">v{import("../../../package.json").version}</p>
           </div>
         </div>
 

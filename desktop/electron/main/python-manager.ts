@@ -115,23 +115,86 @@ export class PythonManager {
 
   // ─── 检测系统 Python ───
   private findSystemPython(): string | null {
-    try {
-      if (process.platform === 'win32') {
-        // Windows: 优先 python3，再 python
-        const result = execSync('where python3 2>nul || where python', {
+    this.addLog('[检测] 正在搜索系统 Python...')
+
+    if (process.platform === 'win32') {
+      // 方法1: py launcher (Python 官方安装器会注册)
+      try {
+        const pyResult = execSync('py -3 -c "import sys; print(sys.executable)"', {
           encoding: 'utf-8',
           timeout: 5000
-        }).trim().split('\n')[0]?.trim()
-        if (result && existsSync(result)) return result
-      } else {
-        // Linux/macOS
+        }).trim()
+        if (pyResult && existsSync(pyResult)) {
+          this.addLog(`[检测] 通过 py launcher 找到: ${pyResult}`)
+          return pyResult
+        }
+      } catch { /* py launcher not available */ }
+
+      // 方法2: where python（过滤掉 Windows Store stub）
+      try {
+        const whereResult = execSync('where python 2>nul', {
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim()
+        for (const line of whereResult.split('\n')) {
+          const p = line.trim()
+          if (!p || p.includes('WindowsApps')) continue // 跳过 Store stub
+          if (existsSync(p)) {
+            this.addLog(`[检测] 通过 where 找到: ${p}`)
+            return p
+          }
+        }
+      } catch { /* where failed */ }
+
+      // 方法3: 常见安装路径
+      const username = process.env.USERNAME || process.env.USER || 'Administrator'
+      const commonPaths = [
+        `C:\\Python312\\python.exe`,
+        `C:\\Python311\\python.exe`,
+        `C:\\Python310\\python.exe`,
+        `C:\\Python39\\python.exe`,
+        `C:\\Program Files\\Python312\\python.exe`,
+        `C:\\Program Files\\Python311\\python.exe`,
+        `C:\\Program Files\\Python310\\python.exe`,
+        `C:\\Program Files\\Python39\\python.exe`,
+        `C:\\Users\\${username}\\AppData\\Local\\Programs\\Python\\Python312\\python.exe`,
+        `C:\\Users\\${username}\\AppData\\Local\\Programs\\Python\\Python311\\python.exe`,
+        `C:\\Users\\${username}\\AppData\\Local\\Programs\\Python\\Python310\\python.exe`,
+        `C:\\Users\\${username}\\AppData\\Local\\Programs\\Python\\Python39\\python.exe`,
+      ]
+      for (const p of commonPaths) {
+        if (existsSync(p)) {
+          this.addLog(`[检测] 通过常见路径找到: ${p}`)
+          return p
+        }
+      }
+
+      // 方法4: 从 PATH 中搜索
+      const pathEnv = process.env.PATH || ''
+      for (const dir of pathEnv.split(';')) {
+        if (!dir || dir.includes('WindowsApps')) continue
+        const candidate = join(dir, 'python.exe')
+        if (existsSync(candidate)) {
+          this.addLog(`[检测] 通过 PATH 找到: ${candidate}`)
+          return candidate
+        }
+      }
+
+      this.addLog('[检测] ❌ Windows 上未找到 Python (尝试了 py launcher / where / 常见路径 / PATH)')
+    } else {
+      // Linux/macOS
+      try {
         const result = execSync('which python3 || which python', {
           encoding: 'utf-8',
           timeout: 5000
         }).trim()
-        if (result && existsSync(result)) return result
-      }
-    } catch { /* not found */ }
+        if (result && existsSync(result)) {
+          this.addLog(`[检测] 找到: ${result}`)
+          return result
+        }
+      } catch { /* not found */ }
+    }
+
     return null
   }
 
