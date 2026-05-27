@@ -180,7 +180,12 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
     });
   }, [skills, search, filterCategory]);
 
-  const selected = skills.find((s) => s.id === selectedId || s.name === selectedId) || filtered[0] || null;
+  // Reset selectedId when category changes
+  useEffect(() => {
+    setSelectedId(null);
+  }, [filterCategory]);
+
+  const selected = filtered.find((s) => s.id === selectedId || s.name === selectedId) || filtered[0] || null;
 
   // Reload skills handler
   const handleReload = async () => {

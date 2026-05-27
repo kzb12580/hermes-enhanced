@@ -27,6 +27,7 @@ def get_skill_loader():
 # ---------------------------------------------------------------------------
 
 class SkillInfo(BaseModel):
+    id: str
     name: str
     description: str
     category: str
@@ -54,6 +55,7 @@ async def list_skills():
     loader = get_skill_loader()
     return [
         SkillInfo(
+            id=s.name,
             name=s.name,
             description=s.description,
             category=s.category,
@@ -73,6 +75,7 @@ async def get_skill(name: str):
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
     return SkillDetail(
+        id=skill.name,
         name=skill.name,
         description=skill.description,
         category=skill.category,
@@ -90,6 +93,7 @@ async def search_skills(request: SearchRequest):
     loader = get_skill_loader()
     return [
         SkillInfo(
+            id=s.name,
             name=s.name,
             description=s.description,
             category=s.category,
