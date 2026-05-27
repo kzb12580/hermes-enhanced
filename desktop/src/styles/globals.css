@@ -3,42 +3,42 @@
 @tailwind utilities;
 
 /* ============================================================
-   CSS Custom Properties — Catppuccin Mocha dark theme defaults
+   CSS Custom Properties — Silver-gray gradient theme
    ============================================================ */
 :root {
   /* Background layers */
-  --bg-primary: #1e1e2e;       /* Base */
-  --bg-secondary: #181825;     /* Mantle */
-  --bg-tertiary: #313244;      /* Surface 0 */
-  --bg-surface: #45475a;       /* Surface 1 */
+  --bg-primary: #e8e8e8;          /* Silver base */
+  --bg-secondary: #f5f5f5;        /* Light silver */
+  --bg-tertiary: #d8d8d8;         /* Medium silver */
+  --bg-surface: #c8c8c8;          /* Dark silver */
 
   /* Text */
-  --text-primary: #cdd6f4;     /* Text */
-  --text-secondary: #a6adc8;   /* Subtext 0 */
-  --text-muted: #6c7086;       /* Overlay 0 */
+  --text-primary: #2a2a2a;        /* Dark charcoal */
+  --text-secondary: #555555;      /* Medium gray */
+  --text-muted: #888888;          /* Light gray */
 
   /* Accent */
-  --accent: #cba6f7;           /* Mauve */
-  --accent-hover: #b4befe;     /* Lavender */
+  --accent: #5b9bd5;              /* Steel blue */
+  --accent-hover: #4a8bc5;        /* Darker steel blue */
 
   /* Semantic */
-  --success: #a6e3a1;          /* Green */
-  --error: #f38ba8;            /* Red */
+  --success: #4caf50;             /* Green */
+  --error: #e53935;               /* Red */
 
   /* User message bubble */
-  --user-bubble: #45475a;      /* Surface 1 */
+  --user-bubble: #d5d5d5;         /* Silver bubble */
 
   /* Borders & shadows */
-  --border: #313244;           /* Surface 0 */
-  --shadow: rgba(0, 0, 0, 0.3);
+  --border: #c0c0c0;              /* Silver border */
+  --shadow: rgba(0, 0, 0, 0.1);
 
   /* Legacy HSL vars (used by scrollbar / selection) */
-  --muted: 240 5% 65%;
-  --muted-foreground: 240 5% 65%;
-  --primary: 267 84% 81%;
-  --primary-foreground: 240 20% 12%;
-  --background: 240 21% 15%;
-  --foreground: 226 64% 88%;
+  --muted: 0 0% 70%;
+  --muted-foreground: 0 0% 60%;
+  --primary: 210 55% 60%;
+  --primary-foreground: 0 0% 100%;
+  --background: 0 0% 90%;
+  --foreground: 0 0% 15%;
 }
 
 /* ============================================================

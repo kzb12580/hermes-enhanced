@@ -31,7 +31,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="flex h-screen overflow-hidden text-[var(--text-primary)]" style={{ background: 'linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 50%, #b8b8b8 100%)' }}>
       {/* Sidebar - collapsible */}
       <aside
         className={`flex-shrink-0 h-full transition-all duration-300 ease-in-out ${

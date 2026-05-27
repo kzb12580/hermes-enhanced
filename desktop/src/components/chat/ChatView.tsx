@@ -1,68 +1,104 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { InputBar } from './InputBar';
 import { useChatStore } from '../../stores/chatStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { Bot, PanelLeftClose, PanelLeft, AlertCircle, Settings } from 'lucide-react';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useWindowControls } from '../../hooks/useIpc';
+import { Bot, PanelLeftClose, PanelLeft, AlertCircle, Settings, Minus, Square, X } from 'lucide-react';
 
 export function ChatView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const { currentMessages, currentSession, isGenerating, error } = useChatStore();
-  const { sidebarCollapsed, toggleSidebar, toggleSettings, isBackendOnline } = useSystemStore();
+  const { sidebarCollapsed, toggleSidebar, toggleSettings, isBackendOnline, setSettingsOpen } = useSystemStore();
+  const { autoScroll } = useSettingsStore();
+  const { minimize, maximize, close, isElectron } = useWindowControls();
 
   const messages = currentMessages();
   const session = currentSession();
+
+  // Helper: scroll to bottom
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    if (behavior === 'instant') {
+      // For instant scroll, use scrollTop directly (more reliable)
+      const container = scrollContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Track whether user has manually scrolled away from bottom
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+      userScrolledUpRef.current = !isNearBottom;
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Auto-scroll to bottom on new messages (use messages.length to avoid
   // unnecessary re-renders from reference changes — fixes #21)
   const messageCount = messages.length;
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!autoScroll) return;
+    if (userScrolledUpRef.current) return;
 
-    // Check if user is near bottom (within 100px)
-    const isNearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-
-    if (isNearBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messageCount]);
+    // Use requestAnimationFrame to ensure DOM has updated
+    const rafId = requestAnimationFrame(() => {
+      scrollToBottom('smooth');
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [messageCount, autoScroll, scrollToBottom]);
 
   // Also scroll when streaming content changes (last message is streaming)
   const lastMessage = messages[messages.length - 1];
   const isStreaming = lastMessage?.isStreaming ?? false;
   const lastContent = lastMessage?.content;
   useEffect(() => {
-    if (isStreaming) {
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      const isNearBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-      if (isNearBottom) {
-        const rafId = requestAnimationFrame(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        });
-        return () => cancelAnimationFrame(rafId);
-      }
+    if (!autoScroll) return;
+    if (isStreaming && !userScrolledUpRef.current) {
+      const rafId = requestAnimationFrame(() => {
+        scrollToBottom('smooth');
+      });
+      return () => cancelAnimationFrame(rafId);
     }
-  }, [isStreaming, lastContent]);
+  }, [isStreaming, lastContent, autoScroll, scrollToBottom]);
 
   // Scroll to bottom when switching sessions
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-  }, [session?.id]);
+    userScrolledUpRef.current = false;
+    scrollToBottom('instant');
+  }, [session?.id, scrollToBottom]);
+
+  // Listen for show-about event from tray menu
+  useEffect(() => {
+    const api = (window as any).api;
+    if (!api?.app?.onShowAbout) return;
+    const cleanup = api.app.onShowAbout(() => {
+      setSettingsOpen(true);
+    });
+    return cleanup;
+  }, [setSettingsOpen]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-secondary)] flex-shrink-0">
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-secondary)] flex-shrink-0 app-drag">
         <div className="flex items-center gap-2">
           {/* Toggle sidebar */}
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors app-no-drag"
             title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
           >
             {sidebarCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
@@ -94,6 +130,33 @@ export function ChatView() {
           >
             <Settings size={18} />
           </button>
+
+          {/* Window control buttons (Electron only) */}
+          {isElectron && (
+            <div className="flex items-center gap-0.5 ml-2 app-no-drag">
+              <button
+                onClick={minimize}
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                title="最小化"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                onClick={maximize}
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                title="最大化"
+              >
+                <Square size={12} />
+              </button>
+              <button
+                onClick={close}
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--error)]/80 hover:text-white text-[var(--text-muted)] transition-colors"
+                title="关闭"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

@@ -1,11 +1,10 @@
 /**
  * Hermes Desktop - 系统托盘管理
  */
-import { Tray, Menu, nativeImage, app, BrowserWindow } from 'electron'
+import { Tray, Menu, nativeImage, app, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
 import { showMainWindow, toggleMainWindow } from './window'
 import { PythonManager } from './python-manager'
-import { IPC_CHANNELS } from '../shared/types'
 
 let tray: Tray | null = null
 
@@ -80,8 +79,18 @@ export function createTray(pythonManager: PythonManager): Tray {
         label: '关于',
         click: () => {
           const windows = BrowserWindow.getAllWindows()
-          if (windows.length > 0) {
-            windows[0].webContents.send(IPC_CHANNELS.SHOW_ABOUT)
+          const parentWindow = windows.length > 0 ? windows[0] : undefined
+          const options: Electron.MessageBoxOptions = {
+            type: 'info',
+            title: '关于 Hermes Desktop',
+            message: 'Hermes Desktop',
+            detail: `版本: ${app.getVersion()}\nAI 智能助手桌面客户端\n\nCopyright © 2025 kzb12580`,
+            buttons: ['确定']
+          }
+          if (parentWindow && !parentWindow.isDestroyed()) {
+            dialog.showMessageBox(parentWindow, options)
+          } else {
+            dialog.showMessageBox(options)
           }
           showMainWindow()
         }
