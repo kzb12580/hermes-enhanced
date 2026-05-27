@@ -101,10 +101,14 @@ export class PythonManager {
     }
 
     // 2. 开发模式：查找 python 后端目录
+    // python-backend/ is a child directory of the app root (app.getAppPath())
+    const appRoot = app.getAppPath()
+    const backendDir = join(appRoot, 'python-backend')
     const devPaths = [
-      join(app.getAppPath(), '..', '..', 'python-backend', 'venv', 'bin', 'python'),
-      join(app.getAppPath(), '..', '..', 'python-backend', '.venv', 'Scripts', 'python.exe'),
-      join(app.getAppPath(), '..', '..', 'python-backend', 'venv', 'Scripts', 'python.exe')
+      join(backendDir, '.venv', 'bin', 'python'),
+      join(backendDir, 'venv', 'bin', 'python'),
+      join(backendDir, '.venv', 'Scripts', 'python.exe'),
+      join(backendDir, 'venv', 'Scripts', 'python.exe')
     ]
 
     for (const p of devPaths) {
@@ -130,10 +134,12 @@ export class PythonManager {
       return null
     }
 
+    const appRoot = app.getAppPath()
+    const backendDir = join(appRoot, 'python-backend')
     const candidates = [
-      join(app.getAppPath(), '..', '..', 'python-backend', 'main.py'),
-      join(app.getAppPath(), '..', '..', 'python-backend', 'server.py'),
-      join(app.getAppPath(), '..', '..', 'python-backend', 'app.py')
+      join(backendDir, 'main.py'),
+      join(backendDir, 'server.py'),
+      join(backendDir, 'app.py')
     ]
 
     for (const p of candidates) {

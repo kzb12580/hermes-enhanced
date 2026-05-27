@@ -20,6 +20,8 @@ extraResources:
     to: python-backend
     filter:
       - '**/*'
+  - from: buildResources/icon.png
+    to: icon.png
 
 win:
   executableName: hermes-desktop

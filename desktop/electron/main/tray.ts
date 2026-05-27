@@ -11,13 +11,16 @@ let tray: Tray | null = null
 
 /**
  * Resolve the icon path, handling both dev and packaged modes.
+ *
+ * Dev mode:      __dirname is out/main/ → ../../buildResources/icon.png
+ * Packaged mode: icon.png is copied to process.resourcesPath via extraResources
  */
 function resolveIconPath(iconName: string): string {
-  // In dev mode __dirname is electron/main/, icons are at projectRoot/buildResources/
-  // In packaged mode resources are under process.resourcesPath
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'buildResources', iconName)
+    // In packaged builds, electron-builder copies extraResources into process.resourcesPath
+    return join(process.resourcesPath, iconName)
   }
+  // In dev mode, __dirname is out/main/ (electron-vite build output)
   return join(__dirname, '../../buildResources', iconName)
 }
 

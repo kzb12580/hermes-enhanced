@@ -1,7 +1,7 @@
 /**
  * Hermes Desktop - 主窗口管理
  */
-import { BrowserWindow, shell, app } from 'electron'
+import { BrowserWindow, shell, app, Menu } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -36,6 +36,28 @@ export function createMainWindow(): BrowserWindow {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
     mainWindow?.focus()
+  })
+
+  // Right-click context menu (Cut, Copy, Paste, Select All)
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template: Electron.MenuItemConstructorOptions[] = []
+
+    if (params.isEditable) {
+      template.push(
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { type: 'separator' },
+        { role: 'selectAll', label: '全选' }
+      )
+    } else if (params.selectionText) {
+      template.push({ role: 'copy', label: '复制' })
+    }
+
+    if (template.length > 0) {
+      const menu = Menu.buildFromTemplate(template)
+      menu.popup({ window: mainWindow! })
+    }
   })
 
   // 处理新窗口打开请求（在默认浏览器中打开）
