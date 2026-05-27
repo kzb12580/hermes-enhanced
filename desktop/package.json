@@ -51,7 +51,6 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
-    "@types/tree-kill": "^1.2.3",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
