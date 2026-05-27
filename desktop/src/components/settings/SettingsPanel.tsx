@@ -231,7 +231,7 @@ function GeneralSettings() {
             <span
               className={`
                 absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform
-                ${showSystemMessages ? 'translate-x-4.5' : 'translate-x-0.5'}
+                ${showSystemMessages ? 'translate-x-[18px]' : 'translate-x-0.5'}
               `}
             />
           </button>
@@ -248,7 +248,7 @@ function GeneralSettings() {
             <span
               className={`
                 absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform
-                ${autoScroll ? 'translate-x-4.5' : 'translate-x-0.5'}
+                ${autoScroll ? 'translate-x-[18px]' : 'translate-x-0.5'}
               `}
             />
           </button>

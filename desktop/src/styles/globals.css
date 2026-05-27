@@ -2,7 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 自定义标题栏拖拽区域 */
+/* ============================================================
+   CSS Custom Properties — Catppuccin Mocha dark theme defaults
+   ============================================================ */
+:root {
+  /* Background layers */
+  --bg-primary: #1e1e2e;       /* Base */
+  --bg-secondary: #181825;     /* Mantle */
+  --bg-tertiary: #313244;      /* Surface 0 */
+  --bg-surface: #45475a;       /* Surface 1 */
+
+  /* Text */
+  --text-primary: #cdd6f4;     /* Text */
+  --text-secondary: #a6adc8;   /* Subtext 0 */
+  --text-muted: #6c7086;       /* Overlay 0 */
+
+  /* Accent */
+  --accent: #cba6f7;           /* Mauve */
+  --accent-hover: #b4befe;     /* Lavender */
+
+  /* Semantic */
+  --success: #a6e3a1;          /* Green */
+  --error: #f38ba8;            /* Red */
+
+  /* User message bubble */
+  --user-bubble: #45475a;      /* Surface 1 */
+
+  /* Borders & shadows */
+  --border: #313244;           /* Surface 0 */
+  --shadow: rgba(0, 0, 0, 0.3);
+
+  /* Legacy HSL vars (used by scrollbar / selection) */
+  --muted: 240 5% 65%;
+  --muted-foreground: 240 5% 65%;
+  --primary: 267 84% 81%;
+  --primary-foreground: 240 20% 12%;
+  --background: 240 21% 15%;
+  --foreground: 226 64% 88%;
+}
+
+/* ============================================================
+   App window drag regions (Electron)
+   ============================================================ */
 .app-drag {
   -webkit-app-region: drag;
 }
@@ -11,7 +52,9 @@
   -webkit-app-region: no-drag;
 }
 
-/* 自定义滚动条 */
+/* ============================================================
+   Custom scrollbar
+   ============================================================ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -30,22 +73,149 @@
   background-color: hsl(var(--muted-foreground));
 }
 
-/* 选中文本颜色 */
+/* ============================================================
+   Text selection
+   ============================================================ */
 ::selection {
   background-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
 }
 
-/* 禁用文本选择（标题栏和按钮区域） */
+/* ============================================================
+   Utility: disable text selection
+   ============================================================ */
 .no-select {
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* 等宽字体 */
+/* ============================================================
+   Monospace fonts
+   ============================================================ */
 code,
 pre {
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Source Code Pro',
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes pulseDot {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pulse-dot {
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+.pulse-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.pulse-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ============================================================
+   Markdown body styles
+   ============================================================ */
+.markdown-body {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.markdown-body p {
+  margin-bottom: 0.5em;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body li {
+  margin-bottom: 0.25em;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body a:hover {
+  color: var(--accent-hover);
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: var(--text-secondary);
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.25em; }
+.markdown-body h3 { font-size: 1.125em; }
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.8em;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
 }

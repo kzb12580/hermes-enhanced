@@ -7,6 +7,7 @@ import { IPC_CHANNELS, UpdateStatus, UpdateInfo, UpdateProgress } from '../share
 
 let mainWindow: BrowserWindow | null = null
 let currentStatus: UpdateStatus = 'idle'
+let handlersRegistered = false
 
 /**
  * 初始化自动更新器
@@ -35,6 +36,9 @@ export function initUpdater(window: BrowserWindow): void {
  * 注册更新器事件处理
  */
 function setupEventHandlers(): void {
+  if (handlersRegistered) return
+  handlersRegistered = true
+
   // 检查更新中
   autoUpdater.on('checking-for-update', () => {
     updateStatus('checking')
@@ -44,9 +48,10 @@ function setupEventHandlers(): void {
   // 发现新版本
   autoUpdater.on('update-available', (info: ElectronUpdateInfo) => {
     updateStatus('available')
+    const rd = info.releaseDate as unknown
     const updateInfo: UpdateInfo = {
       version: info.version,
-      releaseDate: info.releaseDate?.toISOString() ?? new Date().toISOString(),
+      releaseDate: typeof rd === 'string' ? rd : rd instanceof Date ? rd.toISOString() : new Date().toISOString(),
       releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined
     }
     sendToRenderer(IPC_CHANNELS.UPDATE_STATUS, { status: 'available', info: updateInfo })
@@ -94,9 +99,10 @@ function setupEventHandlers(): void {
   // 下载完成
   autoUpdater.on('update-downloaded', (info: ElectronUpdateInfo) => {
     updateStatus('downloaded')
+    const rd = info.releaseDate as unknown
     const updateInfo: UpdateInfo = {
       version: info.version,
-      releaseDate: info.releaseDate?.toISOString() ?? new Date().toISOString(),
+      releaseDate: typeof rd === 'string' ? rd : rd instanceof Date ? rd.toISOString() : new Date().toISOString(),
       releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined
     }
     sendToRenderer(IPC_CHANNELS.UPDATE_STATUS, { status: 'downloaded', info: updateInfo })

@@ -51,6 +51,10 @@ a = Analysis(
         "httptools",
         "anyio._backends._asyncio",
         "sniffio",
+        # fastapi / starlette runtime deps
+        "multipart",          # python-multipart — form body parsing
+        "colorama",           # uvicorn colored output on Windows
+        "uvicorn.supervisors",  # newer uvicorn versions
     ],
     hookspath=[],
     hooksconfig={},
@@ -71,7 +75,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=True,
     upx=False,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
 )
 

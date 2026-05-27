@@ -120,9 +120,8 @@ if __name__ == "__main__":
     _host = _args.host
     _port = _args.port
     uvicorn.run(
-        "main:app",
+        app,
         host=_host,
         port=_port,
         log_level="info",
-        reload=False,
     )
