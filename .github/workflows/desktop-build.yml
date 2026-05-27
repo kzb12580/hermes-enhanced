@@ -81,12 +81,19 @@ jobs:
 
       # ---- macOS code signing (conditional) ----
       - name: Electron builder (macOS, with signing)
-        if: matrix.platform == 'mac'
+        if: matrix.platform == 'mac' && secrets.CSC_LINK != ''
         run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Electron builder (macOS, unsigned)
+        if: matrix.platform == 'mac' && secrets.CSC_LINK == ''
+        run: npx electron-builder --${{ matrix.platform }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Electron builder (non-macOS)
         if: matrix.platform != 'mac'
