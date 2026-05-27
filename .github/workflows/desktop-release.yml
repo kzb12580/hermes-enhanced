@@ -52,6 +52,10 @@ jobs:
             ~/AppData/Local/electron/Cache
           key: electron-${{ matrix.os }}-${{ hashFiles('desktop/package-lock.json') }}
 
+      - name: Build frontend
+        working-directory: desktop
+        run: npx electron-vite build
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
