@@ -95,8 +95,21 @@ export class PythonManager {
         'python-backend',
         `hermes-backend${ext}`
       )
+      this.addLog(`[调试] 查找后端: ${sidecarPath} (存在: ${existsSync(sidecarPath)})`)
+      this.addLog(`[调试] resourcesPath: ${process.resourcesPath}`)
       if (existsSync(sidecarPath)) {
         return sidecarPath
+      }
+      // 尝试嵌套路径 (PyInstaller COLLECT 输出的目录结构)
+      const nestedPath = join(
+        process.resourcesPath,
+        'python-backend',
+        'hermes-backend',
+        `hermes-backend${ext}`
+      )
+      this.addLog(`[调试] 尝试嵌套路径: ${nestedPath} (存在: ${existsSync(nestedPath)})`)
+      if (existsSync(nestedPath)) {
+        return nestedPath
       }
     }
 
@@ -162,6 +175,9 @@ export class PythonManager {
 
     const pythonPath = this.findPythonPath()
     const serverScript = this.findServerScript()
+    this.addLog(`[调试] Python路径: ${pythonPath}`)
+    this.addLog(`[调试] 脚本路径: ${serverScript ?? '无 (sidecar模式)'}`)
+    this.addLog(`[调试] isPackaged: ${app.isPackaged}`)
 
     const args: string[] = []
     if (serverScript) {
