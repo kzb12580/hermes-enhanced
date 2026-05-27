@@ -5,7 +5,7 @@ import { useSystemStore } from '../../stores/systemStore';
 import {
   Plus,
   Settings,
-  MessageSquareText,
+  MessageSquare,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -17,7 +17,7 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
-          <MessageSquareText size={18} className="text-[var(--accent)]" />
+          <MessageSquare size={18} className="text-[var(--accent)]" />
           {!sidebarCollapsed && (
             <>
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">对话</h2>
