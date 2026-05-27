@@ -78,58 +78,204 @@ class WebSearchTool(BaseTool):
     }
 
     async def execute(self, query: str, limit: int = MAX_SEARCH_RESULTS, **kwargs) -> str:
-        # Validate the DuckDuckGo URL (hardcoded, but validate for good measure)
-        ddg_url = "https://html.duckduckgo.com/html/"
-        err = _validate_url(ddg_url)
-        if err:
-            return err
+        """Search using DuckDuckGo Lite (more reliable than HTML endpoint)."""
+        results = []
 
+        # Strategy 1: DuckDuckGo Lite (lightweight, stable)
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                resp = await client.get(
-                    ddg_url,
-                    params={"q": query},
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                )
+            results = await self._search_ddg_lite(query, limit)
+            if results:
+                return f"Search results for: {query}\n\n" + "\n".join(results)
+        except Exception as e:
+            pass  # Fall through to next strategy
 
-            if resp.status_code != 200:
-                return f"Error: Search returned HTTP {resp.status_code}"
+        # Strategy 2: DuckDuckGo HTML (fallback)
+        try:
+            results = await self._search_ddg_html(query, limit)
+            if results:
+                return f"Search results for: {query}\n\n" + "\n".join(results)
+        except Exception as e:
+            pass
 
-            html = resp.text
+        # Strategy 3: Basic web scraping (last resort)
+        try:
+            results = await self._search_basic(query, limit)
+            if results:
+                return f"Search results for: {query}\n\n" + "\n".join(results)
+        except Exception as e:
+            pass
 
-            # Parse results from DuckDuckGo HTML
-            results = []
-            result_blocks = re.findall(
-                r'<a[^>]+class="result__a"[^>]+href="([^"]*)"[^>]*>(.*?)</a>.*?'
-                r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
-                html, re.DOTALL,
+        if not results:
+            return f"No search results found for: {query}. DuckDuckGo may be temporarily unavailable."
+        return f"Search results for: {query}\n\n" + "\n".join(results)
+
+    async def _search_ddg_lite(self, query: str, limit: int) -> list[str]:
+        """Search using DuckDuckGo Lite endpoint."""
+        url = "https://lite.duckduckgo.com/lite/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+        }
+
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.post(
+                url,
+                data={"q": query, "b": ""},
+                headers=headers,
             )
 
-            for result_url, title, snippet in result_blocks[:limit]:
-                title = re.sub(r'<[^>]+>', '', title).strip()
-                snippet = re.sub(r'<[^>]+>', '', snippet).strip()
-                url_match = re.search(r'uddg=([^&]+)', result_url)
+        if resp.status_code != 200:
+            return []
+
+        html = resp.text
+        results = []
+
+        # Parse DuckDuckGo Lite HTML (simpler structure)
+        # Result links are in <a> tags with class="result-link"
+        link_pattern = re.compile(r'<a[^>]+class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', re.DOTALL)
+        snippet_pattern = re.compile(r'<td[^>]+class="result-snippet"[^>]*>(.*?)</td>', re.DOTALL)
+
+        links = link_pattern.findall(html)
+        snippets = snippet_pattern.findall(html)
+
+        for i, (url, title) in enumerate(links[:limit]):
+            title = re.sub(r'<[^>]+>', '', title).strip()
+            snippet = ""
+            if i < len(snippets):
+                snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
+
+            # Extract real URL from DuckDuckGo redirect
+            if "uddg=" in url:
+                url_match = re.search(r'uddg=([^&]+)', url)
                 if url_match:
-                    result_url = unquote(url_match.group(1))
-                if title and result_url:
-                    results.append(f"**{title}**\n{result_url}\n{snippet}\n")
+                    url = unquote(url_match.group(1))
 
-            if not results:
-                links = re.findall(r'href="(https?://[^"]+)"', html)
-                titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.DOTALL)
-                for i, (link, title) in enumerate(zip(links[:limit], titles[:limit])):
+            if title and url:
+                result_text = f"**{title}**\n{url}"
+                if snippet:
+                    result_text += f"\n{snippet}"
+                results.append(result_text)
+
+        return results
+
+    async def _search_ddg_html(self, query: str, limit: int) -> list[str]:
+        """Search using DuckDuckGo HTML endpoint (fallback)."""
+        url = "https://html.duckduckgo.com/html/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.post(
+                url,
+                data={"q": query, "b": ""},
+                headers=headers,
+            )
+
+        if resp.status_code != 200:
+            return []
+
+        html = resp.text
+        results = []
+
+        # Try multiple parsing patterns (DuckDuckGo changes frequently)
+        patterns = [
+            # Pattern 1: Classic result__a
+            (
+                r'<a[^>]+class="result__a"[^>]+href="([^"]*)"[^>]*>(.*?)</a>.*?'
+                r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
+                re.DOTALL
+            ),
+            # Pattern 2: Newer structure
+            (
+                r'<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
+                0
+            ),
+            # Pattern 3: Generic links
+            (
+                r'<a[^>]+href="(https?://[^"]+)"[^>]*class="[^"]*result[^"]*"[^>]*>(.*?)</a>',
+                re.DOTALL
+            ),
+        ]
+
+        for pattern, flags in patterns:
+            matches = re.findall(pattern, html, flags)
+            if matches:
+                for match in matches[:limit]:
+                    if len(match) == 3:
+                        result_url, title, snippet = match
+                    else:
+                        result_url, title = match
+                        snippet = ""
+
                     title = re.sub(r'<[^>]+>', '', title).strip()
-                    results.append(f"**{title}**\n{link}\n")
+                    snippet = re.sub(r'<[^>]+>', '', snippet).strip()
 
-            if not results:
-                return "No search results found."
+                    # Extract real URL
+                    if "uddg=" in result_url:
+                        url_match = re.search(r'uddg=([^&]+)', result_url)
+                        if url_match:
+                            result_url = unquote(url_match.group(1))
 
-            return f"Search results for: {query}\n\n" + "\n".join(results)
+                    if title and result_url:
+                        result_text = f"**{title}**\n{result_url}"
+                        if snippet:
+                            result_text += f"\n{snippet}"
+                        results.append(result_text)
 
-        except httpx.ConnectError:
-            return "Error: Cannot connect to search engine. Check your internet connection."
-        except Exception as e:
-            return f"Error: {e}"
+                if results:
+                    break
+
+        return results
+
+    async def _search_basic(self, query: str, limit: int) -> list[str]:
+        """Basic search using DuckDuckGo API (last resort)."""
+        url = "https://api.duckduckgo.com/"
+        params = {
+            "q": query,
+            "format": "json",
+            "no_html": 1,
+            "skip_disambig": 1,
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        }
+
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+
+        if resp.status_code != 200:
+            return []
+
+        try:
+            data = resp.json()
+        except Exception:
+            return []
+
+        results = []
+
+        # Extract results from different fields
+        if data.get("Abstract"):
+            results.append(f"**{data.get('Heading', 'Result')}**\n{data.get('AbstractURL', '')}\n{data['Abstract']}")
+
+        if data.get("RelatedTopics"):
+            for topic in data["RelatedTopics"][:limit]:
+                if isinstance(topic, dict) and topic.get("Text"):
+                    title = topic.get("Text", "").split(". ")[0] if ". " in topic.get("Text", "") else topic.get("Text", "")
+                    url = topic.get("FirstURL", "")
+                    if title and url:
+                        results.append(f"**{title}**\n{url}")
+
+        return results[:limit]
 
 
 class WebExtractTool(BaseTool):
