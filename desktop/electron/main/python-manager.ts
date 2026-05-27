@@ -1,6 +1,10 @@
 /**
  * Hermes Desktop - Python 后端进程管理器
  * 负责启动、停止、重启 Python 后端服务，健康检查和日志流
+ *
+ * 启动策略（按优先级）：
+ * 1. PyInstaller sidecar (hermes-backend.exe) — 打包好的独立二进制
+ * 2. 系统 Python + 源码 — 自动检测 Python、自动安装依赖
  */
 import { ChildProcess, spawn, execSync } from 'child_process'
 import { app, BrowserWindow } from 'electron'
@@ -21,6 +25,9 @@ interface PythonManagerOptions {
 /** Sliding window duration for restart count reset (5 minutes) */
 const RESTART_WINDOW_MS = 5 * 60 * 1000
 
+/** 后端启动模式 */
+type BackendMode = 'sidecar' | 'system-python' | 'none'
+
 export class PythonManager {
   private process: ChildProcess | null = null
   private state: PythonState
@@ -35,10 +42,13 @@ export class PythonManager {
   private readonly maxConsecutiveHealthFailures = 3
   private lineBuffer = ''
   private destroyed = false
-  // FIX #5: Prevent concurrent health checks
   private healthCheckInProgress = false
-  // FIX #2: Track restart timestamps for sliding window
   private restartTimestamps: number[] = []
+
+  // 缓存：避免重复检测
+  private cachedPythonPath: string | null = null
+  private cachedBackendMode: BackendMode | null = null
+  private depsInstalled = false
 
   constructor(options: PythonManagerOptions = {}) {
     const port = options.port ?? settingsStore.get('pythonPort')
@@ -59,18 +69,15 @@ export class PythonManager {
       restartCount: 0
     }
 
-    // Register cleanup on app quit so Python backend is properly destroyed
     app.on('will-quit', () => {
       this.destroy()
     })
   }
 
-  /** 设置主窗口引用，用于发送事件 */
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window
   }
 
-  /** 获取当前状态 */
   getState(): PythonState {
     return {
       ...this.state,
@@ -78,90 +85,179 @@ export class PythonManager {
     }
   }
 
-  /** 获取日志缓冲区 */
   getLogs(): string[] {
     return [...this.logBuffer]
   }
 
-  /** 查找 Python 可执行文件路径 */
-  private findPythonPath(): string {
-    // 1. 优先使用打包后的 sidecar
-    const isDev = !app.isPackaged
-    if (!isDev) {
-      const platform = process.platform
-      const ext = platform === 'win32' ? '.exe' : ''
-      const sidecarPath = join(
-        process.resourcesPath,
-        'python-backend',
-        `hermes-backend${ext}`
-      )
-      this.addLog(`[调试] 查找后端: ${sidecarPath} (存在: ${existsSync(sidecarPath)})`)
-      this.addLog(`[调试] resourcesPath: ${process.resourcesPath}`)
-      if (existsSync(sidecarPath)) {
-        return sidecarPath
-      }
-      // 尝试嵌套路径 (PyInstaller COLLECT 输出的目录结构)
-      const nestedPath = join(
-        process.resourcesPath,
-        'python-backend',
-        'hermes-backend',
-        `hermes-backend${ext}`
-      )
-      this.addLog(`[调试] 尝试嵌套路径: ${nestedPath} (存在: ${existsSync(nestedPath)})`)
-      if (existsSync(nestedPath)) {
-        return nestedPath
-      }
-    }
-
-    // 2. 开发模式：查找 python 后端目录
-    // python-backend/ is a child directory of the app root (app.getAppPath())
-    const appRoot = app.getAppPath()
-    const backendDir = join(appRoot, 'python-backend')
-    const devPaths = [
-      join(backendDir, '.venv', 'bin', 'python'),
-      join(backendDir, 'venv', 'bin', 'python'),
-      join(backendDir, '.venv', 'Scripts', 'python.exe'),
-      join(backendDir, 'venv', 'Scripts', 'python.exe')
-    ]
-
-    for (const p of devPaths) {
-      if (existsSync(p)) return p
-    }
-
-    // 3. 退回系统 Python
-    try {
-      if (process.platform === 'win32') {
-        return execSync('where python', { encoding: 'utf-8' }).trim().split('\n')[0]
-      }
-      return execSync('which python3 || which python', { encoding: 'utf-8' }).trim()
-    } catch {
-      return 'python3'
-    }
+  // ─── 获取后端源码目录（打包在 resources 里） ───
+  private getBackendSourceDir(): string {
+    return join(process.resourcesPath, 'python-backend-source')
   }
 
-  /** 查找后端入口脚本 */
-  private findServerScript(): string | null {
-    const isDev = !app.isPackaged
-    if (!isDev) {
-      // 生产模式使用 sidecar，不需要脚本路径
-      return null
-    }
+  // ─── 获取 requirements.txt 路径 ───
+  private getRequirementsPath(): string {
+    return join(this.getBackendSourceDir(), 'requirements.txt')
+  }
 
-    const appRoot = app.getAppPath()
-    const backendDir = join(appRoot, 'python-backend')
-    const candidates = [
-      join(backendDir, 'main.py'),
-      join(backendDir, 'server.py'),
-      join(backendDir, 'app.py')
-    ]
-
-    for (const p of candidates) {
-      if (existsSync(p)) return p
-    }
+  // ─── 检测系统 Python ───
+  private findSystemPython(): string | null {
+    try {
+      if (process.platform === 'win32') {
+        // Windows: 优先 python3，再 python
+        const result = execSync('where python3 2>nul || where python', {
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim().split('\n')[0]?.trim()
+        if (result && existsSync(result)) return result
+      } else {
+        // Linux/macOS
+        const result = execSync('which python3 || which python', {
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim()
+        if (result && existsSync(result)) return result
+      }
+    } catch { /* not found */ }
     return null
   }
 
-  /** 启动 Python 后端 */
+  // ─── 验证 Python 版本 >= 3.9 ───
+  private validatePython(pythonPath: string): boolean {
+    try {
+      const version = execSync(`"${pythonPath}" --version`, {
+        encoding: 'utf-8',
+        timeout: 5000
+      }).trim()
+      const match = version.match(/Python (\d+)\.(\d+)/)
+      if (!match) return false
+      const major = parseInt(match[1])
+      const minor = parseInt(match[2])
+      return major === 3 && minor >= 9
+    } catch {
+      return false
+    }
+  }
+
+  // ─── 安装后端依赖 ───
+  private async installDependencies(pythonPath: string): Promise<boolean> {
+    const reqPath = this.getRequirementsPath()
+    if (!existsSync(reqPath)) {
+      this.addLog('[依赖] requirements.txt 不存在，跳过安装')
+      return true // 没有 requirements 就当成功
+    }
+
+    this.addLog('[依赖] 正在安装后端依赖（首次运行可能需要 1-2 分钟）...')
+    this.sendToRenderer(IPC_CHANNELS.PYTHON_STATUS_CHANGE, {
+      ...this.getState(),
+      status: 'starting',
+      lastError: '正在安装 Python 依赖...'
+    })
+
+    return new Promise<boolean>((resolve) => {
+      const pip = spawn(pythonPath, ['-m', 'pip', 'install', '-r', reqPath, '--quiet', '--disable-pip-version-check'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        windowsHide: true
+      })
+
+      let stderr = ''
+      pip.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      pip.on('error', (err) => {
+        this.addLog(`[依赖] pip 启动失败: ${err.message}`)
+        resolve(false)
+      })
+
+      pip.on('exit', (code) => {
+        if (code === 0) {
+          this.addLog('[依赖] ✅ 依赖安装完成')
+          this.depsInstalled = true
+          resolve(true)
+        } else {
+          this.addLog(`[依赖] ❌ 安装失败 (code=${code}): ${stderr.slice(-200)}`)
+          resolve(false)
+        }
+      })
+    })
+  }
+
+  // ─── 检测后端启动模式 ───
+  private detectBackendMode(): { mode: BackendMode; pythonPath: string; serverScript: string | null } {
+    // 缓存结果
+    if (this.cachedBackendMode && this.cachedPythonPath) {
+      return {
+        mode: this.cachedBackendMode,
+        pythonPath: this.cachedPythonPath,
+        serverScript: this.cachedBackendMode === 'sidecar' ? null : join(this.getBackendSourceDir(), 'main.py')
+      }
+    }
+
+    const isDev = !app.isPackaged
+
+    // ── 开发模式：直接用 venv ──
+    if (isDev) {
+      const appRoot = app.getAppPath()
+      const backendDir = join(appRoot, 'python-backend')
+      const venvPaths = [
+        join(backendDir, '.venv', 'Scripts', 'python.exe'),
+        join(backendDir, '.venv', 'bin', 'python'),
+        join(backendDir, 'venv', 'Scripts', 'python.exe'),
+        join(backendDir, 'venv', 'bin', 'python')
+      ]
+      for (const p of venvPaths) {
+        if (existsSync(p)) {
+          this.cachedBackendMode = 'sidecar'
+          this.cachedPythonPath = p
+          return { mode: 'sidecar', pythonPath: p, serverScript: join(backendDir, 'main.py') }
+        }
+      }
+    }
+
+    // ── 生产模式 ──
+    // 策略1: PyInstaller sidecar
+    if (!isDev) {
+      const ext = process.platform === 'win32' ? '.exe' : ''
+      const sidecarPath = join(process.resourcesPath, 'python-backend', `hermes-backend${ext}`)
+      this.addLog(`[检测] 查找 sidecar: ${sidecarPath} → ${existsSync(sidecarPath)}`)
+
+      if (existsSync(sidecarPath)) {
+        this.cachedBackendMode = 'sidecar'
+        this.cachedPythonPath = sidecarPath
+        return { mode: 'sidecar', pythonPath: sidecarPath, serverScript: null }
+      }
+    }
+
+    // 策略2: 系统 Python + 源码
+    const sysPython = this.findSystemPython()
+    if (sysPython) {
+      this.addLog(`[检测] 找到系统 Python: ${sysPython}`)
+      if (this.validatePython(sysPython)) {
+        const sourceDir = this.getBackendSourceDir()
+        const mainPy = join(sourceDir, 'main.py')
+        this.addLog(`[检测] 后端源码: ${sourceDir} → main.py=${existsSync(mainPy)}`)
+
+        if (existsSync(mainPy)) {
+          this.cachedBackendMode = 'system-python'
+          this.cachedPythonPath = sysPython
+          return { mode: 'system-python', pythonPath: sysPython, serverScript: mainPy }
+        } else {
+          this.addLog('[检测] ❌ 后端源码目录不存在')
+        }
+      } else {
+        this.addLog(`[检测] ❌ Python 版本过低（需要 >= 3.9）`)
+      }
+    } else {
+      this.addLog('[检测] ❌ 未找到系统 Python')
+    }
+
+    this.cachedBackendMode = 'none'
+    this.cachedPythonPath = null
+    return { mode: 'none', pythonPath: '', serverScript: null }
+  }
+
+  // ─── 启动后端 ───
   async start(): Promise<void> {
     if (this.process) {
       this.addLog('[管理器] Python 后端已在运行中')
@@ -173,12 +269,32 @@ export class PythonManager {
     this.updateStatus('starting')
     this.addLog('[管理器] 正在启动 Python 后端...')
 
-    const pythonPath = this.findPythonPath()
-    const serverScript = this.findServerScript()
-    this.addLog(`[调试] Python路径: ${pythonPath}`)
-    this.addLog(`[调试] 脚本路径: ${serverScript ?? '无 (sidecar模式)'}`)
-    this.addLog(`[调试] isPackaged: ${app.isPackaged}`)
+    // 检测启动模式
+    const { mode, pythonPath, serverScript } = this.detectBackendMode()
 
+    if (mode === 'none') {
+      const errorMsg = '无法启动后端：未找到 PyInstaller 二进制，也未找到系统 Python (>= 3.9)。请安装 Python 3.9+ 后重试。'
+      this.addLog(`[错误] ${errorMsg}`)
+      this.state.lastError = errorMsg
+      this.updateStatus('error')
+      return
+    }
+
+    this.addLog(`[启动] 模式: ${mode}`)
+    this.addLog(`[启动] Python: ${pythonPath}`)
+    this.addLog(`[启动] 脚本: ${serverScript ?? '(sidecar 模式)'}`)
+
+    // 系统 Python 模式：先安装依赖
+    if (mode === 'system-python' && !this.depsInstalled) {
+      const ok = await this.installDependencies(pythonPath)
+      if (!ok) {
+        this.state.lastError = 'Python 依赖安装失败，请检查网络连接'
+        this.updateStatus('error')
+        return
+      }
+    }
+
+    // 构建启动参数
     const args: string[] = []
     if (serverScript) {
       args.push(serverScript)
@@ -196,8 +312,9 @@ export class PythonManager {
           HERMES_LOG_LEVEL: settingsStore.get('logLevel'),
           PYTHONUNBUFFERED: '1'
         },
-        // 生产模式下隐藏控制台窗口
-        windowsHide: true
+        windowsHide: true,
+        // 系统 Python 模式：设置 cwd 为源码目录
+        ...(serverScript ? { cwd: this.getBackendSourceDir() } : {})
       })
 
       this.process.stdout?.on('data', (data: Buffer) => {
@@ -217,10 +334,7 @@ export class PythonManager {
 
       this.process.on('exit', (code, signal) => {
         this.addLog(`[退出] 进程退出，code=${code}, signal=${signal}`)
-
-        // FIX #4: Flush remaining lineBuffer on process exit
         this.flushLineBuffer()
-
         this.state.pid = null
         if (!this.destroyed && this.state.status !== 'stopping' && this.state.status !== 'stopped') {
           this.state.lastError = `意外退出: code=${code}, signal=${signal}`
@@ -244,7 +358,7 @@ export class PythonManager {
         this.state.restartCount = 0
         this.restartTimestamps = []
         this.startHealthCheck()
-        this.addLog(`[管理器] Python 后端已启动，端口: ${this.options.port}`)
+        this.addLog(`[管理器] ✅ Python 后端已启动 (${mode} 模式)，端口: ${this.options.port}`)
       } else {
         this.addLog('[管理器] Python 后端启动超时')
         this.state.lastError = '服务启动超时'
@@ -259,7 +373,7 @@ export class PythonManager {
     }
   }
 
-  /** 停止 Python 后端 */
+  // ─── 停止后端 ───
   async stop(): Promise<void> {
     if (!this.process) {
       this.updateStatus('stopped')
@@ -295,23 +409,21 @@ export class PythonManager {
         resolve()
       })
 
-      // 优雅关闭
       try { proc.kill('SIGTERM') } catch { /* already dead */ }
     })
   }
 
-  /** 重启 Python 后端 */
+  // ─── 重启后端 ───
   async restart(): Promise<void> {
     this.addLog('[管理器] 正在重启 Python 后端...')
     this.state.restartCount++
-    // FIX #2: Track restart timestamp for sliding window
     this.restartTimestamps.push(Date.now())
     this.updateStatus('restarting')
     await this.stop()
     await this.start()
   }
 
-  /** 健康检查 */
+  // ─── 健康检查 ───
   async checkHealth(): Promise<PythonHealthResponse | null> {
     return new Promise((resolve) => {
       const request = net.request({
@@ -325,7 +437,6 @@ export class PythonManager {
       }, this.options.healthCheckTimeout)
 
       request.on('response', (response) => {
-        // Verify status code is 200
         const statusCode = response.statusCode
         if (statusCode !== 200) {
           clearTimeout(timeout)
@@ -356,7 +467,7 @@ export class PythonManager {
     })
   }
 
-  /** 等待服务就绪 */
+  // ─── 等待服务就绪 ───
   private async waitForReady(timeout: number): Promise<boolean> {
     const start = Date.now()
     const interval = 500
@@ -369,23 +480,19 @@ export class PythonManager {
     return false
   }
 
-  /** 启动定时健康检查 */
+  // ─── 健康检查定时器 ───
   private startHealthCheck(): void {
     this.stopHealthCheck()
     this.consecutiveHealthFailures = 0
     this.healthCheckInProgress = false
     this.healthCheckTimer = setInterval(async () => {
-      // FIX #5: Don't run concurrent health checks
-      if (this.healthCheckInProgress) {
-        this.addLog('[健康检查] 跳过——上一次检查仍在进行中')
-        return
-      }
+      if (this.healthCheckInProgress) return
       this.healthCheckInProgress = true
       try {
         const health = await this.checkHealth()
         if (!health && this.state.status === 'running') {
           this.consecutiveHealthFailures++
-          this.addLog(`[健康检查] 服务无响应 (连续失败: ${this.consecutiveHealthFailures}/${this.maxConsecutiveHealthFailures})`)
+          this.addLog(`[健康检查] 服务无响应 (${this.consecutiveHealthFailures}/${this.maxConsecutiveHealthFailures})`)
 
           if (this.consecutiveHealthFailures >= this.maxConsecutiveHealthFailures) {
             this.state.lastError = '健康检查失败'
@@ -394,7 +501,6 @@ export class PythonManager {
             this.handleUnexpectedExit()
           }
         } else if (health) {
-          // Reset counter on successful check
           this.consecutiveHealthFailures = 0
         }
       } finally {
@@ -403,7 +509,6 @@ export class PythonManager {
     }, this.options.healthCheckInterval)
   }
 
-  /** 停止健康检查 */
   private stopHealthCheck(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer)
@@ -413,7 +518,6 @@ export class PythonManager {
     this.healthCheckInProgress = false
   }
 
-  /** 清除待执行的重启计时器 */
   private clearRestartTimer(): void {
     if (this.restartTimer) {
       clearTimeout(this.restartTimer)
@@ -421,22 +525,17 @@ export class PythonManager {
     }
   }
 
-  // FIX #2: Get effective restart count within the sliding window
   private getEffectiveRestartCount(): number {
     const now = Date.now()
-    // Prune timestamps outside the window
     this.restartTimestamps = this.restartTimestamps.filter(
       (ts) => now - ts < RESTART_WINDOW_MS
     )
     return this.restartTimestamps.length
   }
 
-  /** 处理意外退出（自动重启） */
-  // FIX #3: Make handleUnexpectedExit async to await restart()
   private async handleUnexpectedExit(): Promise<void> {
     if (this.destroyed) return
 
-    // FIX #2: Use sliding window count instead of simple counter
     const effectiveCount = this.getEffectiveRestartCount()
 
     if (effectiveCount < this.options.maxRestarts) {
@@ -445,7 +544,6 @@ export class PythonManager {
       )
       this.restartTimer = setTimeout(async () => {
         this.restartTimer = null
-        // FIX #3: Await the restart to properly sequence operations
         try {
           await this.restart()
         } catch (err) {
@@ -458,26 +556,21 @@ export class PythonManager {
     }
   }
 
-  /** 更新状态并通知渲染进程和应用级事件 */
   private updateStatus(status: PythonStatus): void {
     this.state.status = status
     this.sendToRenderer(IPC_CHANNELS.PYTHON_STATUS_CHANGE, this.getState())
-    // Emit app-level event so tray and other listeners can react
     app.emit('python-status-changed', this.getState())
   }
 
-  /** 向渲染进程发送消息 */
   private sendToRenderer(channel: string, data: unknown): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
     }
   }
 
-  /** Process stdout/stderr data with line buffering to handle partial lines */
   private processLogData(data: Buffer, source: 'stdout' | 'stderr'): void {
     this.lineBuffer += data.toString()
     const lines = this.lineBuffer.split('\n')
-    // Keep the last element as it may be an incomplete line
     this.lineBuffer = lines.pop() ?? ''
     for (const line of lines) {
       const trimmed = line.trim()
@@ -488,7 +581,6 @@ export class PythonManager {
     }
   }
 
-  // FIX #4: Flush any remaining content in the line buffer
   private flushLineBuffer(): void {
     if (this.lineBuffer.trim()) {
       const remaining = this.lineBuffer.trim()
@@ -498,7 +590,6 @@ export class PythonManager {
     this.lineBuffer = ''
   }
 
-  /** 添加日志到缓冲区 */
   private addLog(message: string): void {
     const timestamp = new Date().toISOString()
     const logEntry = `[${timestamp}] ${message}`
@@ -509,22 +600,13 @@ export class PythonManager {
     console.log(logEntry)
   }
 
-  /** 销毁管理器 — safe for app quit, does NOT trigger handleUnexpectedExit */
   destroy(): void {
     this.destroyed = true
     this.stopHealthCheck()
     this.clearRestartTimer()
-    // FIX #1: Don't remove exit listeners — let them fire naturally.
-    // The exit handler checks `this.destroyed` and skips handleUnexpectedExit.
-    // Removing listeners could cause the process to become a zombie if the
-    // exit event is lost. Just kill the process and let the exit handler clean up.
     if (this.process) {
       try { this.process.kill('SIGKILL') } catch { /* already dead */ }
-      // Don't null out this.process here — the exit handler will do it
     }
-    // FIX #4: Flush any remaining line buffer on destroy
     this.flushLineBuffer()
   }
 }
-
-

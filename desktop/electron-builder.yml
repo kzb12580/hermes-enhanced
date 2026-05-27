@@ -16,10 +16,23 @@ files:
 
 # Bundle the Python backend as an extra resource
 extraResources:
+  # PyInstaller sidecar (可能在某些系统上不可用)
   - from: dist-backend/hermes-backend
     to: python-backend
     filter:
       - '**/*'
+  # 后端源码 (系统 Python fallback)
+  - from: python-backend
+    to: python-backend-source
+    filter:
+      - '**/*.py'
+      - '**/*.txt'
+      - '!**/.venv/**'
+      - '!**/venv/**'
+      - '!**/__pycache__/**'
+      - '!**/dist/**'
+      - '!**/build/**'
+      - '!**/*.spec'
   - from: buildResources/icon.png
     to: icon.png
 
