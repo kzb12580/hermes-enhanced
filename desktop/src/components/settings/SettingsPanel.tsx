@@ -108,6 +108,7 @@ function GeneralSettings() {
     maxTokens,
     systemPrompt,
     backendUrl,
+    openLinksInExternalBrowser,
     updateSettings,
   } = useSettingsStore();
 
@@ -198,9 +199,30 @@ function GeneralSettings() {
           onChange={(e) => updateSettings({ maxTokens: Number(e.target.value) })}
           min={256}
           max={128000}
-          step={256}
-          className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2 outline-none border border-[var(--border)] focus:border-[var(--accent)] transition-colors"
+          className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2 outline-none border border-[var(--border)] focus:border-[var(--accent)] transition-colors font-mono"
         />
+      </div>
+
+      {/* Open links in external browser */}
+      <div>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <div
+            className={`relative w-10 h-5 rounded-full transition-colors ${
+              openLinksInExternalBrowser ? 'bg-[var(--accent)]' : 'bg-[var(--bg-tertiary)]'
+            }`}
+            onClick={() => updateSettings({ openLinksInExternalBrowser: !openLinksInExternalBrowser })}
+          >
+            <div
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                openLinksInExternalBrowser ? 'translate-x-5' : ''
+              }`}
+            />
+          </div>
+          <div>
+            <span className="text-sm font-medium text-[var(--text-primary)]">使用系统默认浏览器</span>
+            <p className="text-xs text-[var(--text-muted)]">点击链接时在外部浏览器中打开</p>
+          </div>
+        </label>
       </div>
 
       {/* System prompt */}

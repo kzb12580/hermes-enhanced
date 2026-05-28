@@ -118,6 +118,9 @@ export interface AppSettings {
   // 高级设置
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   proxyUrl?: string
+  
+  // 浏览器设置
+  openLinksInExternalBrowser: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -129,7 +132,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pythonPort: 9876,
   pythonAutoStart: true,
   pythonMaxRestarts: 3,
-  logLevel: 'info'
+  logLevel: 'info',
+  openLinksInExternalBrowser: true
 }
 
 // ==================== IPC 消息类型 ====================

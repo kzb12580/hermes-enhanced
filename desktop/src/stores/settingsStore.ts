@@ -43,6 +43,8 @@ export interface AppSettings {
   backendUrl: string;
   /** API key for backend auth */
   apiKey: string;
+  /** Open links in external browser */
+  openLinksInExternalBrowser: boolean;
 }
 
 interface SettingsState extends AppSettings {
@@ -102,6 +104,7 @@ const defaultSettings: AppSettings = {
   maxTokens: 4096,
   backendUrl: 'http://127.0.0.1:9876',
   apiKey: '',
+  openLinksInExternalBrowser: true,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -172,6 +175,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxTokens: state.maxTokens,
         backendUrl: state.backendUrl,
         apiKey: state.apiKey,
+        openLinksInExternalBrowser: state.openLinksInExternalBrowser,
       }),
     }
   )

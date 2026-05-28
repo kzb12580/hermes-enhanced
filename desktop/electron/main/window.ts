@@ -11,6 +11,11 @@ let mainWindow: BrowserWindow | null = null
  * 创建主窗口
  */
 export function createMainWindow(): BrowserWindow {
+  // 解析图标路径（兼容开发和打包模式）
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../buildResources/icon.png')
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -21,6 +26,7 @@ export function createMainWindow(): BrowserWindow {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     trafficLightPosition: { x: 15, y: 10 },
     backgroundColor: '#0a0a0a',
+    icon: iconPath, // 设置窗口图标（任务栏/标题栏）
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       // sandbox must be false for preload to use Node/Electron APIs
@@ -47,7 +53,11 @@ export function createMainWindow(): BrowserWindow {
     try {
       const parsed = new URL(url)
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-        shell.openExternal(url)
+        // 检查是否设置为使用外部浏览器
+        const openExternal = settingsStore.get('openLinksInExternalBrowser')
+        if (openExternal !== false) {
+          shell.openExternal(url)
+        }
       }
     } catch {
       // Invalid URL — ignore
