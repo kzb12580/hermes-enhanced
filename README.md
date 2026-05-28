@@ -1,225 +1,208 @@
-# Hermes 增强版 v2.1 — Claude Code 架构精华移植到 Hermes Agent
+# Hermes Desktop v1.0.0
 
-> 基于 Claude Code 源码分析，将核心架构能力移植到 Hermes Agent 的 Python 生态
-> **v2.1** — 67处BUG修复，压力测试通过，生产就绪
+> 智能 AI 桌面客户端 — 支持多模型、工具调用、技能系统
+> 基于 Electron + React + Python 构建
 
-## 📊 当前状态
+![Hermes Desktop](desktop/buildResources/icon.png)
 
-| 指标 | v2.0 | v2.1 |
-|------|------|------|
-| 源码模块 | 18 个 | 17 个 |
-| 单元测试 | 934/934 ✅ | 980/980 ✅ |
-| 集成测试 | 50/50 ✅ | 33/33 ✅ |
-| 外部依赖 | 0 | 0（纯 stdlib） |
-| 增强模块 | 12 个 | 12 个 |
-| BUG修复 | — | 67 处 |
-| 压力测试 | — | 2轮全通过 |
+## ✨ 功能特性
 
-## 📁 仓库结构
+- **多模型支持** — DeepSeek、GPT、Claude、Gemini 等主流模型
+- **工具调用** — 文件读写、终端执行、搜索、内存管理等 7 个工具
+- **技能系统** — 25 个内置技能，涵盖研究、开发、设计等领域
+- **流式响应** — SSE 实时显示 AI 回复
+- **多会话** — 创建、切换、管理多个对话
+- **自定义设置** — API Key、模型切换、参数调整
 
+## 📥 下载安装
+
+### Windows
+1. 下载 `hermes-desktop-1.0.0-setup.exe`
+2. 双击运行安装程序
+3. 按向导完成安装
+4. 桌面会出现 "Hermes Desktop" 快捷方式
+
+### macOS
+1. 下载 `hermes-desktop-1.0.0.dmg`（Intel）或 `Hermes.Desktop-1.0.0-arm64-mac.zip`（Apple Silicon）
+2. 打开 DMG，将应用拖入 Applications 文件夹
+3. 首次打开可能需要在"系统偏好设置 > 安全性与隐私"中允许运行
+
+### Linux
+1. 下载 `hermes-desktop-1.0.0.AppImage`
+2. 添加执行权限：`chmod +x hermes-desktop-1.0.0.AppImage`
+3. 双击运行或终端执行：`./hermes-desktop-1.0.0.AppImage`
+
+## 🚀 快速开始
+
+### 1. 首次启动
+
+启动应用后，点击左下角 **⚙️ 设置** 按钮配置 API：
+
+### 2. 配置 API Key
+
+在设置面板中：
+
+| 设置项 | 说明 |
+|--------|------|
+| **API 地址** | 模型 API 的 Base URL（如 `https://api.deepseek.com/v1`） |
+| **API Key** | 你的 API 密钥 |
+| **默认模型** | 选择要使用的模型（如 `deepseek-v4-flash`） |
+
+#### 常见 API 配置示例
+
+**DeepSeek:**
 ```
-hermes-enhanced/
-├── analysis/                    # Claude Code 深度架构分析
-│   ├── 01-agent-loop.md        # Agent 循环核心架构
-│   ├── 02-tools-system.md      # 工具系统设计
-│   └── 03-services-infra.md    # 基础设施与服务层
-├── source-map/                  # Claude Code 源码还原 (38万行 TS)
-├── source-study/                # 源码研究版
-├── iteration/                   # 迭代实现
-│   ├── upgrade-plan.md          # 升级方案
-│   └── hermes_upgrades/         # ← Hermes 增强版 核心代码
-│       ├── hermes2_adapter.py   # 主引擎 (Hermes2Engine)
-│       ├── integration.py       # 集成桥接模块
-│       ├── tool_orchestrator.py # 8路并发工具编排
-│       ├── memory_system.py     # TF-IDF 记忆系统
-│       ├── context_compressor_v2.py # 三级上下文压缩
-│       ├── permission_pipeline.py   # 权限管线
-│       ├── smart_retry.py       # 断路器+指数退避
-│       ├── auto_dream.py        # 后台记忆整合
-│       ├── post_turn_hooks.py   # 回合后钩子
-│       ├── mcp_transport.py     # MCP 四种传输
-│       ├── coordinator.py       # 多 Agent 协调
-│       ├── async_pipeline.py    # 异步管线
-│       ├── token_budget_manager.py # Token 预算管理
-│       ├── token_utils.py       # Token 工具函数
-│       ├── tool_result_manager.py  # 结果去重截断
-│       ├── tool_result_summarizer.py # 智能摘要
-│       └── tests/               # 测试套件 (980 个)
-├── README.md
+API 地址: https://api.deepseek.com/v1
+API Key: sk-xxxxxxxxxxxxxxxx
+模型: deepseek-v4-flash
 ```
 
-## 🚀 安装部署
+**OpenAI:**
+```
+API 地址: https://api.openai.com/v1
+API Key: sk-xxxxxxxxxxxxxxxx
+模型: gpt-4o
+```
 
-### 前置条件
+**Claude (通过代理):**
+```
+API 地址: https://your-proxy.com/v1
+API Key: your-key
+模型: claude-sonnet-4
+```
 
-- Python 3.11+
-- Hermes Agent 已安装（`pip install hermes-agent` 或源码安装）
+### 3. 开始对话
 
-### 方式一：源码安装（推荐）
+1. 点击 **➕ 新建会话** 创建对话
+2. 在输入框输入问题或指令
+3. 按 Enter 或点击发送按钮
+4. AI 会实时流式回复
+
+### 4. 使用工具
+
+AI 可以调用以下工具：
+- 📄 **文件读写** — 读取、创建、编辑文件
+- 🔍 **搜索** — 搜索文件和内容
+- 💻 **终端** — 执行命令行操作
+- 🧠 **内存** — 保存和读取记忆
+- ⏰ **定时任务** — 创建定时任务
+- 🌐 **网页** — 搜索和提取网页内容
+
+### 5. 使用技能
+
+点击左侧边栏 **🧩 技能** 按钮打开技能面板：
+
+1. **切换类别** — 点击顶部标签（研究、开发、设计等）
+2. **查看技能** — 点击技能列表中的项目查看详情
+3. **激活技能** — 点击技能右侧的开关按钮激活
+4. **多技能激活** — 可以同时激活多个技能
+5. **发送指令** — 在聊天框输入相关指令，AI 会按激活的技能执行
+
+#### 内置技能分类
+
+| 类别 | 技能数 | 说明 |
+|------|--------|------|
+| 🎯 研究 | 3 | 深度研究、市场调研、论文分析 |
+| 💻 开发 | 8 | 代码审查、TDD、调试、架构设计 |
+| 🎨 设计 | 5 | 设计系统、原型、UI 审查 |
+| 📝 内容 | 4 | 文档撰写、SEO、技术写作 |
+| 🔧 工具 | 5 | Git、CI/CD、部署、监控 |
+
+## ⚙️ 高级配置
+
+### 环境变量
+
+应用数据存储在：
+- **Windows:** `%APPDATA%/hermes-desktop/`
+- **macOS:** `~/Library/Application Support/hermes-desktop/`
+- **Linux:** `~/.config/hermes-desktop/`
+
+### 配置文件
+
+设置保存在 localStorage，包括：
+- API 配置（Base URL、API Key、模型）
+- 界面偏好（主题、字体大小）
+- 会话历史
+
+### 开发模式
 
 ```bash
-# 1. 克隆仓库
+# 克隆仓库
 git clone https://github.com/kzb12580/hermes-enhanced.git
-cd hermes-enhanced
+cd hermes-enhanced/desktop
 
-# 2. 复制 hermes2 模块到 Hermes Agent
-cp -r iteration/hermes_upgrades /usr/local/lib/hermes-agent/agent/hermes2/
+# 安装依赖
+npm install
 
-# 3. 创建 __init__.py（如果不存在）
-touch /usr/local/lib/hermes-agent/agent/hermes2/__init__.py
+# 启动开发模式
+npm run dev
 
-# 4. 重启 Hermes 网关
-hermes gateway restart
+# 构建生产版本
+npm run build:all
 ```
 
-### 方式二：符号链接（开发模式）
+## 🔧 故障排除
 
-```bash
-# 便于开发时实时同步修改
-ln -sf $(pwd)/iteration/hermes_upgrades /usr/local/lib/hermes-agent/agent/hermes2/hermes_upgrades
-```
+### 无法连接 API
 
-### 验证安装
+1. 检查 API 地址是否正确（需要包含 `/v1`）
+2. 检查 API Key 是否有效
+3. 检查网络连接
 
-```bash
-# 检查模块是否加载
-python3 -c "
-import sys
-sys.path.insert(0, '/usr/local/lib/hermes-agent')
-from agent.hermes2.integration import get_engine, get_stats
-e = get_engine()
-print('✅ Engine:', 'ready' if e else '❌ failed')
-import json
-print(json.dumps(get_stats(), indent=2, ensure_ascii=False))
-"
-```
+### 工具调用失败
 
-## ⚙️ 模型配置
+1. 确保 Python 后端已正确启动
+2. 检查终端输出的错误信息
+3. 查看日志文件：`~/.hermes/logs/`
 
-Hermes 增强版 对模型无特殊要求，但推荐使用付费模型以获得最佳效果。
+### 技能面板无法激活
 
-### 推荐配置：DeepSeek V4 Flash（付费）
+1. 确保应用已更新到最新版本
+2. 重启应用后重试
+3. 检查技能文件是否完整：`~/.hermes/skills/builtin/`
 
-在 `~/.hermes/config.yaml` 中配置：
+### Windows 安全警告
 
-```yaml
-model:
-  default: deepseek-v4-flash
-  provider: custom
-  base_url: https://api.deepseek.com
-  api_key: sk-xxxxxxxxxxxxxxxxxxxxxxxx
-```
+首次运行可能触发 Windows Defender 警告：
+1. 点击 "更多信息"
+2. 点击 "仍要运行"
 
-### 通过 CLIProxyAPI 代理池
+## 📊 系统要求
 
-如果使用 CLIProxyAPI 作为代理：
+| 平台 | 最低版本 |
+|------|----------|
+| Windows | Windows 10 (64-bit) |
+| macOS | macOS 10.15 (Catalina) |
+| Linux | Ubuntu 20.04 / Fedora 32 |
 
-```yaml
-model:
-  default: deepseek-v4-flash
-  provider: custom
-  base_url: http://localhost:8317/v1
-  api_key: your-proxy-api-key
-```
-
-### ⚠️ 已知问题
-
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| Telegram 重启后无响应 | Polling offset 卡住 | 重启网关：`hermes gateway restart` |
-
-## 🔌 集成架构
-
-Hermes 增强版 通过 4 个微创注入点集成到 `run_agent.py`（16000 行）：
-
-```
-注入点 1: AIAgent.__init__ (line ~2500)
-  → 初始化 Hermes2Engine，启动 banner
-
-注入点 2: _execute_tool_calls (line ~10600)
-  → Hermes2 智能编排：分类→分批→去重截断→权限检查
-
-注入点 3: _execute_tool_calls 末尾
-  → 每轮工具执行后自动跑 Post-Turn Hooks
-
-注入点 4: run_conversation 返回前 (line ~15800)
-  → 后台 AutoDream 记忆巩固检查
-```
-
-**回退方式：** 在 `AIAgent.__init__` 中注释掉 `_hermes2_enabled = True` 即可回退到纯原生模式。
-
-## ✨ 12 大增强模块
-
-| 模块 | 功能 | 性能 |
-|------|------|------|
-| ToolOrchestrator | 8路并发，文件冲突检测 | 分批 <100μs |
-| ToolResultManager | SHA256去重+智能截断+磁盘缓存 | 去重 ~1μs |
-| ContextCompressorV2 | 三级压缩(微/反应/全量) | 微压缩 <1ms |
-| MemorySystem | TF-IDF四类记忆+持久化 | 搜索 <5ms |
-| HookPipeline ×4 | 记忆提取/用量追踪/提示建议/上下文健康 | - |
-| AutoDream | 后台自省巩固记忆(5次会话触发) | - |
-| SmartRetryManager | 断路器+指数退避+错误分类 | - |
-| PermissionPipeline | 三层权限+危险命令检测(30+模式) | 检查 <50μs |
-| AsyncPipeline | 异步流式管线架构 | - |
-| Coordinator | 多智能体计划-分配-执行-审核 | - |
-| MCPTransport | STDIO/SSE/HTTP/WS四种传输 | - |
-| TokenUtils | 统一token估算和内容提取 | 估算 <1μs |
-
-## 🔍 与 Claude Code 对比
-
-| 维度 | Claude Code | Hermes 增强版 |
-|------|------------|------------|
-| 语言 | TypeScript | Python |
-| Agent循环 | AsyncGenerator流水线 | 同步+异步混合 |
-| 工具系统 | 工厂模式+并发分区 | ToolOrchestrator 8路并发 |
-| 权限 | 7层管线 | PermissionPipeline 3层 |
-| 压缩 | 5层自适应 | ContextCompressorV2 3级 |
-| MCP | 6种传输 | MCPTransport 4种 |
-| 记忆 | 双系统+后台提取 | MemorySystem + AutoDream |
-| 多Agent | Coordinator模式 | Coordinator 计划-分配-执行-审核 |
+- 内存：4GB+ 推荐
+- 磁盘：500MB+ 可用空间
+- 网络：需要互联网连接
 
 ## 📝 更新日志
 
-### 2026-05-27 — v2.1 BUG修复版
+### v1.0.0 (2026-05-28)
 
-**67处BUG修复，压力测试通过，生产就绪**
+**首个正式版本**
 
-- 🔴 CRITICAL: PermissionPipeline 空规则列表→catch-all规则
-- 🔴 CRITICAL: `allow_tool("*")` 确保增强版生效
-- 🔴 CRITICAL: `__init__` 语法修复 (`all`→`__all__`)
-- 🟡 HIGH: Token估算统一（4处→`token_utils.estimate_tokens`）
-- 🟡 HIGH: MemorySystem Unicode过滤、零token除零、脏标记持久化
-- 🟡 HIGH: MCP JSON异常处理、stderr读取、版本化二进制绕过
-- 🟡 HIGH: ToolOrchestrator future超时、并发竞态修复
-- 🟡 HIGH: Coordinator 过期状态清理、空任务防御
-- 🟡 HIGH: SmartRetry 断路器重复错误退出
-- 🟡 HIGH: AutoDream 死锁修复、_hook_loop关闭
-- 🟡 HIGH: PostTurnHooks deepcopy线程安全、内联正则预编译
-- 🟡 HIGH: ContextCompressorV2 history无限增长限制、stats_ratios修剪
-- 🟢 MEDIUM: run_agent denied按ID匹配修复
-- ✅ 980单元测试 + 33集成测试 全部通过
-- ✅ 2轮压力测试: 18µs/权限检查, 165并发/秒, 27.5MB峰值RSS
+- ✅ 聊天功能 — 多模型支持、流式响应
+- ✅ 工具调用 — 7 个工具（文件、终端、搜索、内存等）
+- ✅ 技能系统 — 25 个内置技能
+- ✅ 会话管理 — 多会话、切换、删除
+- ✅ 设置面板 — API 配置、模型选择
+- ✅ 全平台支持 — Windows、macOS、Linux
+- ✅ 新图标 — 专业级 Hermes 翼形 H 图标
 
-### 2026-05-25 — v2.0 Round 30 最终版
+## 🔗 相关链接
 
-- ✅ 934 单元测试 + 50 集成测试全部通过
-- ✅ 4 个注入点确认正确接线
-- ✅ 测试服务器部署验证通过（DeepSeek V4 Flash）
-- ✅ 修复 Telegram polling offset 问题
-- ✅ 修复模型配置切换问题
+- [GitHub 仓库](https://github.com/kzb12580/hermes-enhanced)
+- [问题反馈](https://github.com/kzb12580/hermes-enhanced/issues)
+- [发布页面](https://github.com/kzb12580/hermes-enhanced/releases)
 
-### 2026-05-24 — Round 28-29
+## 📄 许可证
 
-- 10 模型压力审查，修复 8 个 HIGH 级 bug
-- 线程安全、资源泄漏、逻辑错误修复
+MIT License
 
-### 2026-05-24 — 初始版本
+---
 
-- 12 个核心模块实现
-- 零外部依赖，纯 Python stdlib
-
-## 来源
-
-- [ChinaSiro/claude-code-sourcemap](https://github.com/ChinaSiro/claude-code-sourcemap) (9.2K ⭐)
-- [luyao618/Claude-Code-Source-Study](https://github.com/luyao618/Claude-Code-Source-Study) (1.4K ⭐)
-- [anthropics/claude-code](https://github.com/anthropics/claude-code) (126K ⭐) — 官方开源
+**Hermes Desktop** — 您的智能 AI 助手桌面客户端
