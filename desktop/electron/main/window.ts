@@ -4,6 +4,7 @@
 import { BrowserWindow, shell, app } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import { settingsStore } from './store'
 
 let mainWindow: BrowserWindow | null = null
 

@@ -24,7 +24,7 @@ export function initUpdater(window: BrowserWindow): void {
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: 'kzb12580',
-    repo: 'hermes-desktop',
+    repo: 'hermes-enhanced',
     releaseType: 'release'
   })
 

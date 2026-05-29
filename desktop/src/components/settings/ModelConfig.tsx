@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 
 // 从后端代理获取可用模型列表（避免前端 CORS 限制）
-const BACKEND_URL = 'http://127.0.0.1:9876';
+// 使用 settingsStore 中的 backendUrl，不再硬编码
+const getBackendUrl = () => { try { return useSettingsStore.getState().backendUrl || 'http://127.0.0.1:9876' } catch { return 'http://127.0.0.1:9876' } };
 
 async function fetchModels(
   baseUrl: string,
