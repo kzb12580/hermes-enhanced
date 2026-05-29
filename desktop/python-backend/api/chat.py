@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from tools import openai_tools, execute_tool
+from api.memory import get_memory_context
 
 logger = logging.getLogger("hermes-backend.chat")
 router = APIRouter()
@@ -488,8 +489,11 @@ async def chat(message: ChatMessage, request: Request):
     api_key = message.api_key
     model = message.model or "default"
 
-    # System prompt
+    # System prompt with memory context
     sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
+    memory_ctx = get_memory_context()
+    if memory_ctx:
+        sys_prompt = sys_prompt + memory_ctx
     api_messages.append({"role": "system", "content": sys_prompt})
 
     # Auto-adjust context based on model
