@@ -11,6 +11,8 @@ router = APIRouter()
 # In-memory store (replace with vector DB / file storage later)
 _memories: dict[str, dict] = {}
 
+MAX_MEMORIES = 1000
+
 
 class MemoryCreate(BaseModel):
     # FIX: Add min_length/max_length constraints
@@ -38,6 +40,11 @@ async def save_memory(body: MemoryCreate):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     _memories[mid] = memory
+    # Evict oldest entries when over limit
+    if len(_memories) > MAX_MEMORIES:
+        sorted_ids = sorted(_memories, key=lambda k: _memories[k]["created_at"])
+        for old_id in sorted_ids[: len(_memories) - MAX_MEMORIES]:
+            del _memories[old_id]
     return memory
 
 

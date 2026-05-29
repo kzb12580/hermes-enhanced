@@ -11,6 +11,7 @@ export function ChatView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const lastScrollTimeRef = useRef(0);
   const { currentMessages, currentSession, isGenerating, error } = useChatStore();
   const { sidebarCollapsed, toggleSidebar, toggleSettings, isBackendOnline, setSettingsOpen } = useSystemStore();
   const { autoScroll } = useSettingsStore();
@@ -61,16 +62,26 @@ export function ChatView() {
   }, [messageCount, autoScroll, scrollToBottom]);
 
   // Also scroll when streaming content changes (last message is streaming)
+  // Throttled to once per 100ms to avoid excessive DOM reflows
   const lastMessage = messages[messages.length - 1];
   const isStreaming = lastMessage?.isStreaming ?? false;
   const lastContent = lastMessage?.content;
   useEffect(() => {
     if (!autoScroll) return;
     if (isStreaming && !userScrolledUpRef.current) {
-      const rafId = requestAnimationFrame(() => {
+      const now = Date.now();
+      if (now - lastScrollTimeRef.current >= 100) {
+        lastScrollTimeRef.current = now;
         scrollToBottom('smooth');
-      });
-      return () => cancelAnimationFrame(rafId);
+      } else {
+        // Schedule a trailing scroll at the throttle boundary
+        const delay = 100 - (now - lastScrollTimeRef.current);
+        const timer = setTimeout(() => {
+          lastScrollTimeRef.current = Date.now();
+          scrollToBottom('smooth');
+        }, delay);
+        return () => clearTimeout(timer);
+      }
     }
   }, [isStreaming, lastContent, autoScroll, scrollToBottom]);
 

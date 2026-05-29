@@ -20,6 +20,8 @@ router = APIRouter()
 _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
 
+MAX_SESSIONS = 50
+
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
 MAX_TOOL_ROUNDS = 999
 
@@ -154,8 +156,14 @@ def _create_session(name: Optional[str] = None) -> dict:
         "name": name or f"Session {sid[:8]}",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "messages": [],
+        "last_access": datetime.now(timezone.utc).timestamp(),
     }
     _sessions[sid] = session
+    # LRU eviction: remove least-recently-accessed session when over limit
+    if len(_sessions) > MAX_SESSIONS:
+        oldest_id = min(_sessions, key=lambda k: _sessions[k].get("last_access", 0))
+        logger.info("Evicting session %s (LRU, %d sessions)", oldest_id[:8], len(_sessions))
+        del _sessions[oldest_id]
     return session
 
 
@@ -439,6 +447,8 @@ async def chat(message: ChatMessage, request: Request):
         if not session_id or session_id not in _sessions:
             session = _create_session()
             session_id = session["id"]
+        # Update LRU access time
+        _sessions[session_id]["last_access"] = datetime.now(timezone.utc).timestamp()
         _sessions[session_id]["messages"].append({
             "role": "user",
             "content": message.content,
