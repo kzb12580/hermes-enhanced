@@ -58,7 +58,7 @@ category: desktop
 1. create_word("/tmp/report.docx", "月度报告", "正文内容...")
 2. edit_word("/tmp/report.docx", [
      {"type": "add_heading", "text": "第二章", "level": 1},
-     {"type": "add_table, "rows": [["项目","进度"],["A","80%"],["B","60%"]]},
+     {"type": "add_table", "rows": [["项目","进度"],["A","80%"],["B","60%"]]},
    ])
 ```
 

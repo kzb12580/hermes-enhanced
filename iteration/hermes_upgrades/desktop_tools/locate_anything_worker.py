@@ -37,6 +37,7 @@ class LocateAnythingWorker:
         self._model = None
         self._processor = None
         self._load_lock = threading.Lock()
+        self._inference_lock = threading.Lock()
 
     def _load(self):
         """懒加载模型（双重检查锁）"""
@@ -80,15 +81,18 @@ class LocateAnythingWorker:
         import torch
         inputs = self._processor(text=prompt, images=image, return_tensors="pt")
         inputs = {k: v.to(self.device) if hasattr(v, 'to') else v for k, v in inputs.items()}
-        try:
-            with torch.no_grad():
-                output = self._model.generate(**inputs, max_new_tokens=512, do_sample=False)
-            decoded = self._processor.decode(output[0], skip_special_tokens=False)
-            return decoded
-        finally:
-            del inputs
-            if 'output' in dir():
-                del output
+        with self._inference_lock:
+            try:
+                with torch.no_grad():
+                    output = self._model.generate(**inputs, max_new_tokens=512, do_sample=False)
+                decoded = self._processor.decode(output[0].detach().cpu(), skip_special_tokens=False)
+                return decoded
+            finally:
+                del inputs
+                try:
+                    del output
+                except NameError:
+                    pass
 
     @staticmethod
     def _parse_box_content(content: str, width: int, height: int) -> tuple[list[BBox], list[tuple[int, int]]]:
@@ -97,9 +101,14 @@ class LocateAnythingWorker:
         points = []
         # 提取所有 <box>...</box>
         for match in re.finditer(r"<box>\s*([\d,\s]+?)\s*</box>", content):
-            nums = [int(x.strip()) for x in match.group(1).split(",") if x.strip()]
+            try:
+                nums = [int(x.strip()) for x in match.group(1).split(",") if x.strip()]
+            except ValueError:
+                _log.warning(f"Malformed box: {match.group(1)}")
+                continue
             if len(nums) == 4:
-                x1, y1, x2, y2 = nums
+                x1, x2 = min(nums[0], nums[2]), max(nums[0], nums[2])
+                y1, y2 = min(nums[1], nums[3]), max(nums[1], nums[3])
                 boxes.append(BBox(
                     x1=round(x1 * width / 1000), y1=round(y1 * height / 1000),
                     x2=round(x2 * width / 1000), y2=round(y2 * height / 1000),

@@ -2,6 +2,7 @@
 Hermes Desktop GUI 自动化工具集 — 已修复全部 CRITICAL/HIGH 问题
 """
 import io
+import math
 import os
 import re
 import sys
@@ -50,6 +51,8 @@ def _validate_coords(x: int, y: int, name: str = "coords") -> Optional[dict]:
     """验证坐标是否合理"""
     if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
         return {"error": f"{name}: x,y must be numbers", "success": False}
+    if math.isnan(x) or math.isnan(y) or math.isinf(x) or math.isinf(y):
+        return {"error": f"{name}: NaN/Inf not allowed", "success": False}
     if x < -1 or y < -1:
         return {"error": f"{name}: negative coords not allowed ({x},{y})", "success": False}
     if x > 10000 or y > 10000:
@@ -62,7 +65,7 @@ def _safe_path(p: str, allowed_dir: str = "") -> str:
     resolved = Path(p).resolve()
     if allowed_dir:
         allowed = Path(allowed_dir).resolve()
-        if not str(resolved).startswith(str(allowed)):
+        if not str(resolved).startswith(str(allowed) + os.sep) and resolved != allowed:
             raise ValueError(f"Path traversal blocked: {p}")
     return str(resolved)
 
@@ -199,6 +202,8 @@ def gui_type(text: str, interval: float = 0.02, press_enter: bool = False) -> di
     """模拟键盘输入文字（支持中文）"""
     try:
         import pyautogui
+        if not isinstance(text, str):
+            return {"error": "text must be a string", "success": False}
         if not text:
             return {"error": "text is empty", "success": False}
 
@@ -253,6 +258,12 @@ def gui_scroll(clicks: int, x: int = None, y: int = None) -> dict:
     """滚动鼠标滚轮，正数向上，负数向下"""
     try:
         import pyautogui
+        if not isinstance(clicks, int) or clicks == 0:
+            return {"error": "clicks must be non-zero integer", "success": False}
+        if abs(clicks) > 1000:
+            return {"error": "clicks too large (max 1000)", "success": False}
+        if (x is None) != (y is None):
+            return {"error": "x and y must both be provided or both omitted", "success": False}
         if x is not None and y is not None:
             err = _validate_coords(x, y, "scroll")
             if err:
@@ -274,10 +285,12 @@ def gui_drag(x1: int, y1: int, x2: int, y2: int, duration: float = 0.5) -> dict:
     """从 (x1,y1) 拖拽到 (x2,y2)"""
     try:
         import pyautogui
-        for name, val in [("x1", x1), ("y1", y1), ("x2", x2), ("y2", y2)]:
-            err = _validate_coords(val, val, name)
-            if err:
-                return err
+        err = _validate_coords(x1, y1, "drag_start")
+        if err: return err
+        err = _validate_coords(x2, y2, "drag_end")
+        if err: return err
+        if not 0.01 <= duration <= 60.0:
+            return {"error": f"duration must be 0.01-60.0", "success": False}
         pyautogui.moveTo(x1, y1)
         pyautogui.drag(x2 - x1, y2 - y1, duration=duration)
         return {"dragged": {"from": [x1, y1], "to": [x2, y2]}, "success": True}
@@ -369,8 +382,8 @@ def screen_ocr(image_path: str, lang: str = "chi_sim+eng") -> dict:
             return {"error": f"Image not found: {image_path}", "success": False}
         import pytesseract
         from PIL import Image
-        img = Image.open(image_path)
-        text = pytesseract.image_to_string(img, lang=lang)
+        with Image.open(image_path) as img:
+            text = pytesseract.image_to_string(img, lang=lang)
         return {"text": text.strip(), "success": True}
     except Exception as e:
         _log.error("screen_ocr failed: %s", e, exc_info=True)
@@ -391,6 +404,6 @@ GUI_TOOLS = {
     "gui_drag": {"fn": gui_drag, "concurrency": "write_serial", "description": "拖拽操作"},
     "open_app": {"fn": open_app, "concurrency": "write_serial", "description": "启动应用程序"},
     "get_windows": {"fn": get_windows, "concurrency": "read_only", "description": "获取窗口列表"},
-    "clipboard": {"fn": clipboard, "concurrency": "read_only", "description": "剪贴板操作"},
+    "clipboard": {"fn": clipboard, "concurrency": "write_serial", "description": "剪贴板操作"},
     "screen_ocr": {"fn": screen_ocr, "concurrency": "read_only", "description": "OCR文字识别"},
 }

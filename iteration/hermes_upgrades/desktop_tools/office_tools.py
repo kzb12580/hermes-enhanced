@@ -69,6 +69,8 @@ def edit_word(path: str, operations: list[dict]) -> dict:
         from docx import Document
         from docx.shared import Inches
 
+        if not isinstance(operations, list):
+            return {"error": "operations must be a list", "success": False}
         doc = Document(path)
 
         for i, op in enumerate(operations):
@@ -77,9 +79,9 @@ def edit_word(path: str, operations: list[dict]) -> dict:
                 return {"error": f"Operation #{i} missing 'type': {op}", "success": False}
 
             if t == "add_heading":
-                doc.add_heading(op["text"], level=op.get("level", 1))
+                doc.add_heading(op.get("text", ""), level=max(0, min(op.get("level", 1), 9)))
             elif t == "add_paragraph":
-                doc.add_paragraph(op["text"])
+                doc.add_paragraph(op.get("text", ""))
             elif t == "add_table":
                 rows = op.get("rows", [])
                 if not rows or not rows[0]:
@@ -93,7 +95,7 @@ def edit_word(path: str, operations: list[dict]) -> dict:
                 img_path = op.get("image_path", "")
                 err = _check_file_exists(img_path, "image")
                 if err: return err
-                doc.add_picture(img_path, width=Inches(op.get("width", 5)))
+                doc.add_picture(img_path, width=Inches(max(0.1, min(op.get("width", 5), 20))))
             elif t == "replace":
                 old, new = op.get("old", ""), op.get("new", "")
                 for p in doc.paragraphs:
@@ -135,6 +137,9 @@ def create_ppt(path: str, slides: list[dict], template: str = "") -> dict:
         from pptx.util import Inches
 
         prs = Presentation(template) if template else Presentation()
+
+        if not isinstance(slides, list):
+            return {"error": "slides must be a list", "success": False}
 
         for slide_data in slides:
             layout_name = slide_data.get("layout", "content")
@@ -209,6 +214,9 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
         from openpyxl.styles import Font, PatternFill
 
         wb = Workbook()
+        if not isinstance(sheets, list) or not sheets:
+            return {"error": "sheets must be a non-empty list", "success": False}
+
         for i, sheet_data in enumerate(sheets):
             ws = wb.active if i == 0 else wb.create_sheet()
             ws.title = sheet_data.get("name", f"Sheet{i+1}")

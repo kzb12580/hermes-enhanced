@@ -1,43 +1,45 @@
 #!/bin/bash
-# Hermes Desktop PC 自动化 — 一键安装
-set -e
-
+# Hermes Desktop PC Automation - Install
 echo "========================================="
-echo "  Hermes Desktop PC 自动化 安装"
+echo "  Hermes Desktop PC Automation - Install"
 echo "========================================="
 
-# Python 依赖
-echo "[1/3] 安装 Python 依赖..."
+# Detect CUDA version
+CUDA_VER="cpu"
+if command -v nvidia-smi &> /dev/null; then
+    CUDA_RAW=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
+    if nvidia-smi 2>/dev/null | grep -q "CUDA Version: 12"; then
+        CUDA_VER="cu124"
+    elif nvidia-smi 2>/dev/null | grep -q "CUDA Version: 11"; then
+        CUDA_VER="cu118"
+    fi
+fi
+echo "Detected CUDA: $CUDA_VER"
+
+# Python deps
+echo "[1/3] Installing Python dependencies..."
 pip install pyautogui pygetwindow pyperclip Pillow python-docx python-pptx openpyxl pytesseract opencv-python-headless
 
-# PyTorch (需要根据CUDA版本选择)
-echo "[2/3] 安装 PyTorch..."
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# PyTorch
+echo "[2/3] Installing PyTorch..."
+if [ "$CUDA_VER" = "cpu" ]; then
+    pip install torch torchvision
+else
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/$CUDA_VER
+fi
 
-# LocateAnything-3B
-echo "[3/3] 下载 LocateAnything-3B 模型..."
-python3 -c "
-from transformers import AutoModelForCausalLM, AutoProcessor
-print('Downloading model...')
-AutoProcessor.from_pretrained('nvidia/LocateAnything-3B', trust_remote_code=True)
-AutoModelForCausalLM.from_pretrained('nvidia/LocateAnything-3B', trust_remote_code=True)
-print('Model downloaded!')
-"
+# Transformers
+echo "[3/3] Installing Transformers..."
+pip install transformers
 
 echo ""
-echo "========================================="
-echo "  安装完成！"
-echo "========================================="
+echo "NOTE: Install Tesseract OCR for screen_ocr:"
+echo "  Linux: sudo apt install tesseract-ocr tesseract-ocr-chi-sim"
+echo "  macOS: brew install tesseract"
 echo ""
-echo "工具列表:"
-echo "  screen_capture  - 截图"
-echo "  gui_locate      - AI视觉定位"
-echo "  gui_click       - 鼠标点击"
-echo "  gui_type        - 键盘输入"
-echo "  gui_hotkey      - 快捷键"
-echo "  create_word     - Word文档"
-echo "  create_ppt      - PPT演示文稿"
-echo "  create_excel    - Excel表格"
-echo "  open_app        - 启动应用"
-echo "  clipboard       - 剪贴板"
-echo "  screen_ocr      - OCR文字识别"
+echo "To download LocateAnything-3B model (~6GB):"
+echo "  python3 -c \"from transformers import AutoModelForCausalLM, AutoProcessor; AutoProcessor.from_pretrained('nvidia/LocateAnything-3B', trust_remote_code=True); AutoModelForCausalLM.from_pretrained('nvidia/LocateAnything-3B', trust_remote_code=True)\""
+echo ""
+echo "========================================="
+echo "  Done!"
+echo "========================================="
