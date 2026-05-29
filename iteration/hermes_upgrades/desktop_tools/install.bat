@@ -102,15 +102,29 @@ echo [INFO] 📦 安装 Python 依赖包...
 
 :: 核心依赖
 set PACKAGES=pyautogui pygetwindow pyperclip Pillow python-docx python-pptx openpyxl transformers accelerate sentencepiece protobuf pytesseract opencv-python-headless
+set SKIPPED=0
 
 for %%P in (%PACKAGES%) do (
-    %PYTHON% -m pip install %%P --quiet 2>nul
+    :: 检查是否已安装（通过 importlib.util.find_spec）
+    set "IMPORT_NAME=%%P"
+    if "%%P"=="Pillow" set "IMPORT_NAME=PIL"
+    if "%%P"=="python-docx" set "IMPORT_NAME=docx"
+    if "%%P"=="python-pptx" set "IMPORT_NAME=pptx"
+    if "%%P"=="opencv-python-headless" set "IMPORT_NAME=cv2"
+    %PYTHON% -c "import importlib.util; exit(0 if importlib.util.find_spec('!IMPORT_NAME!') else 1)" >nul 2>&1
     if !errorlevel! equ 0 (
-        echo   [OK] %%P
+        echo   [OK] %%P 已安装，跳过
+        set /a SKIPPED+=1
     ) else (
-        echo   [WARN] %%P 安装失败
+        %PYTHON% -m pip install %%P --quiet 2>nul
+        if !errorlevel! equ 0 (
+            echo   [OK] %%P
+        ) else (
+            echo   [WARN] %%P 安装失败
+        )
     )
 )
+if !SKIPPED! gtr 0 echo   [INFO] 跳过 !SKIPPED! 个已安装包
 
 :: ── 5. 安装 PyTorch ──────────────────────────────────────────────────────
 echo.

@@ -42,20 +42,36 @@ async def list_models(
 
     try:
         # SSRF 防护: 禁止访问内网地址
-        import ipaddress, urllib.parse
+        import ipaddress
+        import socket
+        import urllib.parse
         try:
             parsed = urllib.parse.urlparse(models_url)
             hostname = parsed.hostname or ""
-            # 禁止内网/特殊地址
-            for blocked in ["127.", "10.", "192.168.", "172.16.", "169.254.", "0.", "localhost", "[::1]"]:
-                if hostname.startswith(blocked) or hostname == blocked:
-                    return ModelsResponse(success=False, models=[], error="不允许访问内网地址")
+            _BLOCKED_ERROR = "不允许访问内网地址"
+
+            # --- Phase 1: 阻止已知内网/特殊主机名 ---
+            _blocked_hosts = {"localhost", "[::1]", "0.0.0.0", "::"}
+            if hostname in _blocked_hosts:
+                return ModelsResponse(success=False, models=[], error=_BLOCKED_ERROR)
+
+            # --- Phase 2: 如果 host 是 IP 字面量，直接检查 ---
             try:
                 ip = ipaddress.ip_address(hostname)
                 if ip.is_private or ip.is_loopback or ip.is_link_local:
-                    return ModelsResponse(success=False, models=[], error="不允许访问内网地址")
+                    return ModelsResponse(success=False, models=[], error=_BLOCKED_ERROR)
             except ValueError:
-                pass  # 非 IP 地址，正常域名
+                pass  # 非 IP 字面量，继续域名解析检查
+
+            # --- Phase 3: DNS 解析检查（防止 DNS Rebinding） ---
+            try:
+                resolved = socket.getaddrinfo(hostname, parsed.port or 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                for _family, _type, _proto, _canonname, sockaddr in resolved:
+                    resolved_ip = ipaddress.ip_address(sockaddr[0])
+                    if resolved_ip.is_private or resolved_ip.is_loopback or resolved_ip.is_link_local:
+                        return ModelsResponse(success=False, models=[], error=_BLOCKED_ERROR)
+            except (socket.gaierror, OSError):
+                pass  # DNS 解析失败，让后续连接自然报错
         except Exception:
             pass
 

@@ -8,6 +8,75 @@ category: desktop
 
 让 AI 帮你处理繁琐的办公工作：做 PPT、写报告、收发邮件、数据分析、竞品调研。
 
+## 🇨🇳 中文快速开始
+
+### 第一步：安装依赖
+
+**Linux / macOS:**
+```bash
+git clone <repo-url> && cd hermes-enhanced/iteration/hermes_upgrades/desktop_tools
+bash install.sh
+```
+
+**Windows:**
+```cmd
+cd hermes-enhanced\iteration\hermes_upgrades\desktop_tools
+install.bat
+```
+
+**或使用 Python 脚本（跨平台）:**
+```bash
+python setup_deps.py
+```
+
+> 💡 安装脚本会自动检测已安装的依赖（openpyxl / python-pptx / python-docx 等），已安装的包会跳过，不会重复安装。
+
+### 第二步：验证安装
+
+```bash
+python setup_deps.py --verify-only
+```
+
+预期输出：所有项目显示 ✅，如果有 ❌ 按提示修复。
+
+### 第三步：开始使用
+
+安装完成后，在 Hermes Desktop 中直接用自然语言告诉 AI 你想做什么：
+
+```
+"帮我做一个 10 页的 Q3 工作汇报 PPT"
+"分析这个 Excel 的销售数据，做个报告"
+"帮我回复最新那封邮件，语气正式一点"
+"做一份 AI Agent 市场的竞品分析报告"
+```
+
+### Office 依赖说明
+
+本工具需要以下 Python 库来处理 Office 文档：
+
+| 库 | 用途 | 安装命令 |
+|---|---|---|
+| `python-docx` | 读写 Word (.docx) | `pip install python-docx` |
+| `python-pptx` | 读写 PowerPoint (.pptx) | `pip install python-pptx` |
+| `openpyxl` | 读写 Excel (.xlsx) | `pip install openpyxl` |
+
+这些依赖会在安装脚本中自动安装，无需手动操作。
+
+### 常见问题
+
+**Q: 安装太慢？**
+- 设置 PyPI 镜像源：`pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple`
+- 或在设置面板 → 网络 → 选择镜像源
+
+**Q: GPU 检测不到？**
+- 确认已安装 NVIDIA 驱动：`nvidia-smi`
+- 运行 `python setup_deps.py` 查看检测结果
+
+**Q: 邮件发送失败？**
+- QQ/163 邮箱需要授权码（非密码），在邮箱设置 → POP3/SMTP 开启
+
+---
+
 ## ⚡ 快速安装
 
 ```bash

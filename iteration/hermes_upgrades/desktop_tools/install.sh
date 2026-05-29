@@ -134,6 +134,19 @@ echo ""
 info "📦 安装 Python 依赖包..."
 "$PYTHON" -m pip install --upgrade pip --quiet
 
+# 包名 → 导入名映射（pip 名和 import 名不同的包）
+pip_to_import() {
+    case "$1" in
+        Pillow) echo "PIL" ;;
+        python-docx) echo "docx" ;;
+        python-pptx) echo "pptx" ;;
+        opencv-python-headless) echo "cv2" ;;
+        pytesseract) echo "pytesseract" ;;
+        python-*) echo "$1" | sed 's/python-//' | sed 's/-/_/g' ;;
+        *) echo "$1" | sed 's/-/_/g' ;;
+    esac
+}
+
 # 核心依赖
 PACKAGES=(
     "pyautogui>=0.9.54"
@@ -151,9 +164,19 @@ PACKAGES=(
     "opencv-python-headless>=4.8.0"
 )
 
+SKIPPED=0
 for pkg in "${PACKAGES[@]}"; do
-    "$PYTHON" -m pip install "$pkg" --quiet 2>/dev/null && ok "$pkg" || warn "跳过 $pkg"
+    # 提取包名（去掉版本号）
+    pkg_name=$(echo "$pkg" | sed 's/[><=].*//')
+    import_name=$(pip_to_import "$pkg_name")
+    if "$PYTHON" -c "import importlib.util; exit(0 if importlib.util.find_spec('$import_name') else 1)" 2>/dev/null; then
+        ok "$pkg_name 已安装，跳过"
+        SKIPPED=$((SKIPPED + 1))
+    else
+        "$PYTHON" -m pip install "$pkg" --quiet 2>/dev/null && ok "$pkg" || warn "跳过 $pkg"
+    fi
 done
+[ "$SKIPPED" -gt 0 ] && info "📋 跳过 $SKIPPED 个已安装包"
 
 # ── 6. 安装 PyTorch ──────────────────────────────────────────────────────
 echo ""

@@ -381,11 +381,15 @@ def build_workflow_prompt(workflow_id: str, user_inputs: dict) -> Optional[str]:
         "month": str(now.month),
     }
 
-    # 用户输入
+    # 用户输入 — 标记为不可信内容，防止提示注入
     for inp in wf["inputs"]:
         name = inp["name"]
-        value = user_inputs.get(name, inp.get("default", ""))
-        variables[name] = value
+        raw_value = user_inputs.get(name, inp.get("default", ""))
+        # 包裹用户输入为 [用户输入] 标记，向模型标识外部数据边界
+        if isinstance(raw_value, str) and name not in ("output",):
+            variables[name] = f"[用户输入开始]\n{raw_value}\n[用户输入结束]"
+        else:
+            variables[name] = raw_value
 
     # 输出指令
     output_fmt = user_inputs.get("output", "word")

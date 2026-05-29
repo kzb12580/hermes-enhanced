@@ -259,8 +259,10 @@ class ApiClient {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) {
-            // Empty line = end of SSE event block
-            currentEvent = '';
+            // Empty line = end of SSE event block (per SSE spec)
+            // Do NOT reset currentEvent — the event type persists until
+            // the next 'event:' line overwrites it. This prevents data loss
+            // if a data: line arrives without a preceding event: line.
             continue;
           }
 
@@ -308,8 +310,7 @@ class ApiClient {
         for (const line of remainingLines) {
           const trimmed = line.trim();
           if (!trimmed) {
-            currentEvent = '';
-            continue;
+            continue;  // Same as main loop — don't reset currentEvent
           }
           if (trimmed.startsWith('event:')) {
             currentEvent = trimmed.slice(6).trim();

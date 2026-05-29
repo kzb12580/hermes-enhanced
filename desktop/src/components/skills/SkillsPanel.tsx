@@ -38,69 +38,8 @@ const CATEGORIES: CategoryDef[] = [
   { key: 'user', label: '自定义', icon: User },
 ];
 
-// ── Fallback mock data ──
-const MOCK_SKILLS: SkillInfo[] = [
-  {
-    id: 'code-review',
-    name: '代码审查',
-    description: '审查代码质量、安全性和最佳实践',
-    category: 'development',
-    tags: ['代码', '审查'],
-    triggers: ['review', '审查', 'code review'],
-    is_builtin: true,
-    enabled: true,
-  },
-  {
-    id: 'translate',
-    name: '翻译助手',
-    description: '多语言翻译，支持中英日韩等',
-    category: 'productivity',
-    tags: ['翻译', '语言'],
-    triggers: ['translate', '翻译'],
-    is_builtin: true,
-    enabled: true,
-  },
-  {
-    id: 'sql-expert',
-    name: 'SQL 专家',
-    description: 'SQL 查询编写、优化和调试',
-    category: 'data',
-    tags: ['SQL', '数据库'],
-    triggers: ['sql', 'query', '数据库'],
-    is_builtin: true,
-    enabled: true,
-  },
-  {
-    id: 'doc-writer',
-    name: '文档生成',
-    description: '根据代码自动生成技术文档',
-    category: 'development',
-    tags: ['文档', '代码'],
-    triggers: ['doc', '文档', 'documentation'],
-    is_builtin: true,
-    enabled: true,
-  },
-  {
-    id: 'sys-admin',
-    name: '系统管理',
-    description: '系统监控、进程管理和日志分析',
-    category: 'system',
-    tags: ['系统', '运维'],
-    triggers: ['sysadmin', '系统', '运维'],
-    is_builtin: true,
-    enabled: false,
-  },
-  {
-    id: 'web-scraper',
-    name: '网页分析',
-    description: '网页内容抓取和结构化分析',
-    category: 'web',
-    tags: ['网页', '爬虫'],
-    triggers: ['web', '网页', 'scrape'],
-    is_builtin: true,
-    enabled: false,
-  },
-];
+// ── Fallback mock data (empty — show real API data or empty state) ──
+const MOCK_SKILLS: SkillInfo[] = [];
 
 // ── Props ──
 interface SkillsPanelProps {
