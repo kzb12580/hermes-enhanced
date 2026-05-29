@@ -41,6 +41,24 @@ async def list_models(
     logger.info("Fetching models from %s", models_url)
 
     try:
+        # SSRF 防护: 禁止访问内网地址
+        import ipaddress, urllib.parse
+        try:
+            parsed = urllib.parse.urlparse(models_url)
+            hostname = parsed.hostname or ""
+            # 禁止内网/特殊地址
+            for blocked in ["127.", "10.", "192.168.", "172.16.", "169.254.", "0.", "localhost", "[::1]"]:
+                if hostname.startswith(blocked) or hostname == blocked:
+                    return ModelsResponse(success=False, models=[], error="不允许访问内网地址")
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private or ip.is_loopback or ip.is_link_local:
+                    return ModelsResponse(success=False, models=[], error="不允许访问内网地址")
+            except ValueError:
+                pass  # 非 IP 地址，正常域名
+        except Exception:
+            pass
+
         # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
         client_kwargs: dict = {"timeout": 15.0, "verify": True}
         if proxy_url:
