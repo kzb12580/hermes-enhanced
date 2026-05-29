@@ -271,92 +271,65 @@ def _check_installed_deps() -> dict:
 # ── 后台安装执行 ──────────────────────────────────────────────────────────
 
 async def _run_install(req: InstallRequest):
-    """后台执行安装（在子进程中运行 setup_deps.py）"""
+    """后台执行安装（直接在进程内运行，避免子进程路径问题）"""
     try:
-        import subprocess
-
-        # 定位 setup_deps.py
-        script_dir = Path(__file__).parent.parent / "tools"
-        setup_script = script_dir / "setup_deps.py"
-        if not setup_script.exists():
-            # 尝试 iteration 目录
-            setup_script = Path(__file__).parent.parent.parent.parent / "iteration" / "hermes_upgrades" / "desktop_tools" / "setup_deps.py"
-
-        if not setup_script.exists():
-            _emit("error", 0, "找不到 setup_deps.py", "script_not_found")
+        # 定位 tools 目录并加入 Python 路径
+        tools_dir = Path(__file__).parent.parent / "tools"
+        if not tools_dir.exists():
+            tools_dir = Path(__file__).parent.parent.parent.parent / "iteration" / "hermes_upgrades" / "desktop_tools"
+        
+        if not tools_dir.exists():
+            _emit("error", 0, f"找不到 tools 目录", "script_not_found")
             _install_state["running"] = False
             return
 
-        _emit("deps", 5, "正在安装 Python 依赖...")
-
-        # 构建命令
-        cmd = [sys.executable, str(setup_script)]
-        if req.skip_model:
-            cmd.append("--skip-model")
-        if req.skip_tesseract:
-            cmd.append("--skip-tesseract")
-        if req.force_model:
-            cmd.append("--force-model")
-
-        # 在子进程中运行，实时读取输出
-        # 设置子进程强制 UTF-8 输出（解决 Windows 中文编码问题）
-        import locale
+        # 确保 tools 目录在 Python 路径中
+        tools_str = str(tools_dir)
+        if tools_str not in sys.path:
+            sys.path.insert(0, tools_str)
+        
+        # 确保 backend 目录在 Python 路径中（network_manager 在这里）
         backend_dir = str(Path(__file__).parent.parent)
-        child_env = {
-            **os.environ,
-            "PYTHONIOENCODING": "utf-8",
-            "PYTHONPATH": backend_dir + os.pathsep + os.environ.get("PYTHONPATH", ""),
-        }
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env=child_env,
-            cwd=backend_dir,
-        )
+        if backend_dir not in sys.path:
+            sys.path.insert(0, backend_dir)
 
-        phase_map = {
-            "Python": "deps",
-            "PyTorch": "pytorch",
-            "pip": "deps",
-            "模型": "model",
-            "LocateAnything": "model",
-            "Tesseract": "tesseract",
-            "验证": "verify",
-        }
-
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-
-            text = line.decode("utf-8", errors="replace").strip()
-            if not text:
-                continue
-
-            # 根据输出判断阶段
-            current_phase = "deps"
-            for keyword, phase in phase_map.items():
-                if keyword in text:
-                    current_phase = phase
-                    break
-
-            # 估算进度
-            progress = _estimate_progress(current_phase, text)
-            _emit(current_phase, progress, text)
-
-        await process.wait()
-
-        if process.returncode == 0:
+        _emit("deps", 5, "正在加载安装脚本...")
+        
+        # 动态导入 setup_deps 模块
+        import importlib
+        setup_module = importlib.import_module("setup_deps")
+        
+        _emit("deps", 10, "开始安装依赖...")
+        
+        # 在线程中运行（setup() 是同步阻塞的）
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+        
+        def run_setup():
+            return setup_module.setup(
+                skip_model=req.skip_model,
+                skip_tesseract=req.skip_tesseract,
+                force_model=req.force_model,
+            )
+        
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            success = await loop.run_in_executor(pool, run_setup)
+        
+        if success:
             _emit("done", 100, "✅ 安装完成！")
         else:
-            _emit("error", _install_state["progress"], f"安装失败 (exit={process.returncode})", "install_failed")
+            tail = "\n".join(_install_state["log"][-15:]) if _install_state["log"] else "无日志"
+            _emit("error", _install_state["progress"],
+                  f"安装脚本返回失败\n最近日志:\n{tail}", "install_failed")
 
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         logger.exception("安装异常")
-        _emit("error", 0, str(e), "exception")
+        _emit("error", 0, f"安装异常: {e}\n{tb}", "exception")
     finally:
         _install_state["running"] = False
+
 
 
 import re as _re

@@ -158,7 +158,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       await fetch(`${BACKEND}/api/setup/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skip_model: false, skip_tesseract: false, force_model: false }),
+        body: JSON.stringify({ skip_model: true, skip_tesseract: false, force_model: false }),
       });
 
       // SSE 监听进度
