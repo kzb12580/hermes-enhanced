@@ -2,7 +2,7 @@
 Email API — 收发邮件、配置管理
 """
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
@@ -21,13 +21,22 @@ class EmailConfig(BaseModel):
 
 
 class SendRequest(BaseModel):
-    to: str
+    to: str  # 逗号分隔的邮箱列表
     subject: str
     body: str
     cc: str = ""
     bcc: str = ""
     html: bool = False
     attachments: list[str] = []
+
+    def model_post_init(self, __context):
+        # 验证收件人格式
+        import re
+        for addr in [self.to] + ([self.cc] if self.cc else []) + ([self.bcc] if self.bcc else []):
+            for a in addr.split(","):
+                a = a.strip()
+                if a and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', a):
+                    raise ValueError(f"无效邮箱地址: {a}")
 
 
 @router.get("/api/email/config")
@@ -79,7 +88,7 @@ async def test_email_connection(body: EmailConfig):
 
 
 @router.get("/api/email/inbox")
-async def get_inbox(limit: int = 20, unread: bool = False, folder: str = "INBOX"):
+async def get_inbox(limit: int = Query(default=20, ge=1, le=100), unread: bool = False, folder: str = Query(default="INBOX", regex=r'^[a-zA-Z0-9_\-\. ]+$')):
     """获取收件箱"""
     try:
         from email_tools import read_emails

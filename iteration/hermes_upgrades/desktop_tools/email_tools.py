@@ -5,6 +5,7 @@ Hermes Desktop 邮件工具 — 收发邮件、模板回复
 import os
 import re
 import json
+import html as html_module
 import email
 import imaplib
 import smtplib
@@ -20,6 +21,12 @@ from pathlib import Path
 from datetime import datetime
 
 _log = logging.getLogger(__name__)
+
+# IMAP 默认超时（秒）
+IMAP_TIMEOUT = 30
+
+# 附件大小上限 25MB
+MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
 
 # ── 常见邮箱 IMAP/SMTP 配置 ──────────────────────────────────────────────
 EMAIL_PRESETS = {
@@ -56,6 +63,18 @@ def _decode_header_value(raw: str) -> str:
         return raw
 
 
+def _strip_html_tags(html_text: str) -> str:
+    """安全地去除 HTML 标签，先转义再去除"""
+    # 先用 html.escape 转义特殊字符防止 XSS，再去标签
+    text = html_module.escape(html_text)
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</(p|div|tr|li|h[1-6])>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    # 反转义 &amp; &lt; &gt; 回可读字符
+    text = html_module.unescape(text)
+    return text
+
+
 def _get_email_body(msg) -> str:
     """提取邮件正文（纯文本优先）"""
     body = ""
@@ -72,9 +91,8 @@ def _get_email_body(msg) -> str:
                 payload = part.get_payload(decode=True)
                 if payload:
                     charset = part.get_content_charset() or "utf-8"
-                    html = payload.decode(charset, errors="replace")
-                    # 简单去标签
-                    body = re.sub(r'<[^>]+>', '', html)
+                    html_text = payload.decode(charset, errors="replace")
+                    body = _strip_html_tags(html_text)
     else:
         payload = msg.get_payload(decode=True)
         if payload:
@@ -140,6 +158,7 @@ def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = Fals
         email_addr: 邮箱地址
         password: 密码/授权码
     """
+    mail = None
     try:
         # 从配置文件读取缺失参数
         config = load_email_config()
@@ -159,8 +178,9 @@ def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = Fals
             else:
                 return {"error": f"无法自动检测 {email_addr} 的 IMAP 服务器，请手动配置", "success": False}
 
-        # 连接
+        # 连接（加 timeout）
         mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        mail.socket().settimeout(IMAP_TIMEOUT)
         mail.login(email_addr, password)
         mail.select(folder)
 
@@ -199,19 +219,25 @@ def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = Fals
                 "attachments": _get_attachments(msg),
             })
 
-        mail.logout()
         return {"emails": emails, "count": len(emails), "folder": folder, "success": True}
     except imaplib.IMAP4.error as e:
         return {"error": f"IMAP 错误: {e}", "success": False}
     except Exception as e:
         _log.error("read_emails failed: %s", e, exc_info=True)
         return {"error": str(e), "success": False}
+    finally:
+        if mail is not None:
+            try:
+                mail.logout()
+            except Exception:
+                pass
 
 
 def read_email_detail(uid: str, folder: str = "INBOX",
                       email_addr: str = "", password: str = "",
                       imap_server: str = "", imap_port: int = 993) -> dict:
     """读取单封邮件完整内容"""
+    mail = None
     try:
         config = load_email_config()
         email_addr = email_addr or config.get("email", "")
@@ -226,6 +252,7 @@ def read_email_detail(uid: str, folder: str = "INBOX",
                 imap_port = preset["imap_port"]
 
         mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        mail.socket().settimeout(IMAP_TIMEOUT)
         mail.login(email_addr, password)
         mail.select(folder)
 
@@ -247,10 +274,15 @@ def read_email_detail(uid: str, folder: str = "INBOX",
             "success": True,
         }
 
-        mail.logout()
         return result
     except Exception as e:
         return {"error": str(e), "success": False}
+    finally:
+        if mail is not None:
+            try:
+                mail.logout()
+            except Exception:
+                pass
 
 
 # ── 发邮件 ────────────────────────────────────────────────────────────────
@@ -281,6 +313,7 @@ def send_email(to: str, subject: str, body: str,
         password: 密码/授权码
         reply_to: 回复邮件的 Message-ID
     """
+    server = None
     try:
         config = load_email_config()
         email_addr = email_addr or config.get("email", "")
@@ -301,6 +334,9 @@ def send_email(to: str, subject: str, body: str,
             else:
                 return {"error": f"无法自动检测 SMTP 服务器，请手动配置", "success": False}
 
+        # 拆分收件人列表（fix #1: recipients split）
+        to_list = [a.strip() for a in to.split(",") if a.strip()]
+
         # 构建邮件
         msg = MIMEMultipart()
         msg["From"] = formataddr(("", email_addr))
@@ -317,12 +353,15 @@ def send_email(to: str, subject: str, body: str,
         content_type = "html" if html else "plain"
         msg.attach(MIMEText(body, content_type, "utf-8"))
 
-        # 附件
+        # 附件（fix #3: 25MB 大小限制）
         if attachments:
             for filepath in attachments:
                 if not os.path.isfile(filepath):
                     _log.warning(f"附件不存在: {filepath}")
                     continue
+                file_size = os.path.getsize(filepath)
+                if file_size > MAX_ATTACHMENT_SIZE:
+                    return {"error": f"附件 {os.path.basename(filepath)} 超过 25MB 限制 ({file_size / 1024 / 1024:.1f}MB)", "success": False}
                 part = MIMEBase("application", "octet-stream")
                 with open(filepath, "rb") as f:
                     part.set_payload(f.read())
@@ -331,8 +370,8 @@ def send_email(to: str, subject: str, body: str,
                 part.add_header("Content-Disposition", f"attachment; filename={filename}")
                 msg.attach(part)
 
-        # 发送
-        all_recipients = [to]
+        # 发送（fix #1: 用拆分后的 to_list）
+        all_recipients = list(to_list)
         if cc:
             all_recipients.extend([a.strip() for a in cc.split(",")])
         if bcc:
@@ -346,7 +385,6 @@ def send_email(to: str, subject: str, body: str,
 
         server.login(email_addr, password)
         server.sendmail(email_addr, all_recipients, msg.as_string())
-        server.quit()
 
         return {"success": True, "to": to, "subject": subject}
     except smtplib.SMTPAuthenticationError:
@@ -356,6 +394,12 @@ def send_email(to: str, subject: str, body: str,
     except Exception as e:
         _log.error("send_email failed: %s", e, exc_info=True)
         return {"error": str(e), "success": False}
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 # ── 工具注册 ──────────────────────────────────────────────────────────────

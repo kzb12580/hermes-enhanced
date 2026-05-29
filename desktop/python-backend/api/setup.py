@@ -77,22 +77,41 @@ async def stream_setup_status():
     async def event_generator():
         last_phase = None
         last_progress = -1
-        while True:
-            if _install_state["phase"] != last_phase or _install_state["progress"] != last_progress:
-                data = json.dumps({
-                    "phase": _install_state["phase"],
-                    "progress": _install_state["progress"],
-                    "message": _install_state["message"],
-                    "error": _install_state["error"],
-                }, ensure_ascii=False)
-                yield f"data: {data}\n\n"
-                last_phase = _install_state["phase"]
-                last_progress = _install_state["progress"]
+        idle_ticks = 0
+        MAX_IDLE = 600  # 5分钟无变化则关闭 (0.5s/tick)
+        try:
+            while True:
+                changed = (_install_state["phase"] != last_phase or
+                           _install_state["progress"] != last_progress)
+                if changed:
+                    data = json.dumps({
+                        "phase": _install_state["phase"],
+                        "progress": _install_state["progress"],
+                        "message": _install_state["message"],
+                        "error": _install_state["error"],
+                    }, ensure_ascii=False)
+                    yield f"data: {data}\n\n"
+                    last_phase = _install_state["phase"]
+                    last_progress = _install_state["progress"]
+                    idle_ticks = 0
+                else:
+                    idle_ticks += 1
+                    # 心跳防代理超时
+                    if idle_ticks % 120 == 0:
+                        yield ": heartbeat\n\n"
 
-            if _install_state["phase"] in ("done", "error") and not _install_state["running"]:
-                break
+                # 终态检测
+                if _install_state["phase"] in ("done", "error") and not _install_state["running"]:
+                    yield f"data: {json.dumps({'phase': _install_state['phase'], 'progress': _install_state['progress'], 'message': _install_state['message'], 'error': _install_state['error']}, ensure_ascii=False)}\n\n"
+                    break
 
-            await asyncio.sleep(0.5)
+                # 超时保护
+                if idle_ticks >= MAX_IDLE:
+                    break
+
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            pass  # 客户端断开
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -190,8 +209,8 @@ def _check_installed_deps() -> dict:
             "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         }
-    except ImportError:
-        deps["pytorch"] = {"ok": False}
+    except Exception as e:
+        deps["pytorch"] = {"ok": False, "error": str(e)[:100]}
 
     # Transformers
     try:
@@ -279,10 +298,14 @@ async def _run_install(req: InstallRequest):
             cmd.append("--force-model")
 
         # 在子进程中运行，实时读取输出
+        # 设置子进程强制 UTF-8 输出（解决 Windows 中文编码问题）
+        import locale
+        child_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            env=child_env,
         )
 
         phase_map = {
@@ -329,17 +352,27 @@ async def _run_install(req: InstallRequest):
         _install_state["running"] = False
 
 
+import re as _re
+_PCT_RE = _re.compile(r"(\d+)%")
+
+# 预计算阶段进度范围 (start%, end%)
+_PHASE_RANGES = {
+    "deps": (5, 30),
+    "pytorch": (30, 50),
+    "model": (50, 85),
+    "tesseract": (85, 92),
+    "verify": (92, 98),
+    "done": (100, 100),
+}
+
 def _estimate_progress(phase: str, text: str) -> int:
     """根据阶段和输出估算进度"""
-    base = {"deps": 10, "pytorch": 35, "model": 55, "tesseract": 85, "verify": 90, "done": 100}
-    current = base.get(phase, 10)
+    start, end = _PHASE_RANGES.get(phase, (5, 30))
+    span = end - start
 
-    # 尝试从输出中提取百分比
-    import re
-    pct_match = re.search(r"(\d+)%", text)
-    if pct_match:
-        pct = int(pct_match.group(1))
-        # 映射到当前阶段的范围
-        return min(current + pct * 20 // 100, 99)
+    m = _PCT_RE.search(text)
+    if m:
+        pct = min(int(m.group(1)), 100)
+        return min(start + pct * span // 100, 99)
 
-    return min(current, 99)
+    return min(start, 99)

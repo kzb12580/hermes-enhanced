@@ -183,9 +183,18 @@ def load_network_config() -> dict:
 def save_network_config(config: dict):
     """保存网络配置"""
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        import stat
+        os.chmod(_CONFIG_DIR, stat.S_IRWXU)  # 0o700
+    except (OSError, AttributeError):
+        pass
     existing = load_network_config()
     existing.update(config)
     _CONFIG_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        os.chmod(_CONFIG_FILE, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+    except (OSError, AttributeError):
+        pass
     _log.info(f"网络配置已保存: {_CONFIG_FILE}")
 
 

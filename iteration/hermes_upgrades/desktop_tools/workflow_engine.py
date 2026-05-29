@@ -381,10 +381,15 @@ def build_workflow_prompt(workflow_id: str, user_inputs: dict) -> Optional[str]:
         "month": str(now.month),
     }
 
-    # 用户输入
+    # 用户输入（防注入：标记包裹 + 长度限制 + 转义模板占位符）
+    MAX_INPUT_LEN = 5000
     for inp in wf["inputs"]:
         name = inp["name"]
-        value = user_inputs.get(name, inp.get("default", ""))
+        value = str(user_inputs.get(name, inp.get("default", "")))
+        if len(value) > MAX_INPUT_LEN:
+            value = value[:MAX_INPUT_LEN] + "...[截断]"
+        # 转义用户输入中的模板占位符，防止二次注入
+        value = value.replace("{", "\{").replace("}", "\}")
         variables[name] = value
 
     # 输出指令

@@ -17,7 +17,13 @@ MAX_ROWS = 500_000
 
 
 def _safe_path(p: str) -> str:
-    return str(Path(p).resolve())
+    """路径净化 + 白名单保护"""
+    resolved = str(Path(p).resolve())
+    # 禁止写入系统目录
+    blocked = ('/etc', '/usr', '/bin', '/sbin', '/boot', '/dev', '/proc', '/sys')
+    if any(resolved.startswith(d) for d in blocked):
+        raise ValueError(f"不允许写入系统路径: {resolved}")
+    return resolved
 
 
 def _check_file(p: str, name: str = "file") -> Optional[dict]:
@@ -136,14 +142,30 @@ def edit_word(path: str, operations: list[dict]) -> dict:
                 footer = section.footer
                 footer.paragraphs[0].text = op.get("text", "")
             elif t == "add_toc":
-                """添加目录（需手动更新域）"""
-                p = doc.add_paragraph()
-                run = p.add_run()
-                fldChar1 = doc.add_paragraph().add_run()
+                # 添加目录域 (TOC)
                 from docx.oxml.ns import qn
-                fldChar = fldChar1._element
-                fldChar.tag = qn('w:fldChar')
-                fldChar.set(qn('w:fldCharType'), 'begin')
+                from docx.oxml import OxmlElement
+                paragraph = doc.add_paragraph()
+                run = paragraph.add_run()
+                # begin
+                fldChar_begin = OxmlElement('w:fldChar')
+                fldChar_begin.set(qn('w:fldCharType'), 'begin')
+                run._r.append(fldChar_begin)
+                # instrText
+                instrText = OxmlElement('w:instrText')
+                instrText.set(qn('xml:space'), 'preserve')
+                instrText.text = ' TOC \\o "1-3" \\h \\z \\u '
+                run._r.append(instrText)
+                # separate
+                fldChar_sep = OxmlElement('w:fldChar')
+                fldChar_sep.set(qn('w:fldCharType'), 'separate')
+                run._r.append(fldChar_sep)
+                # placeholder
+                run2 = paragraph.add_run("(请在Word中右键更新目录)")
+                # end
+                fldChar_end = OxmlElement('w:fldChar')
+                fldChar_end.set(qn('w:fldCharType'), 'end')
+                run._r.append(fldChar_end)
             else:
                 return {"error": f"Unknown op type: {t}", "success": False}
 
@@ -185,6 +207,13 @@ PPT_THEMES = {
     "minimal": {"primary": "333333", "secondary": "666666", "accent": "E74C3C", "bg": "FFFFFF", "text": "333333"},
     "nature": {"primary": "27AE60", "secondary": "2ECC71", "accent": "F39C12", "bg": "F8F9FA", "text": "2C3E50"},
 }
+
+
+def _get_layout(prs, preferred: int, fallback_name: str = ""):
+    """安全获取幻灯片布局，避免索引越界"""
+    if preferred < len(prs.slide_layouts):
+        return prs.slide_layouts[preferred]
+    return prs.slide_layouts[len(prs.slide_layouts) - 1]
 
 
 def _apply_theme(slide, theme: dict, prs):
@@ -361,7 +390,9 @@ def create_ppt(path: str, slides: list[dict], template: str = "",
                         "pie": XL_CHART_TYPE.PIE,
                         "area": XL_CHART_TYPE.AREA,
                     }
-                    xl_type = type_map.get(chart_type, XL_CHART_TYPE.BAR_CLUSTERED)
+                    xl_type = type_map.get(chart_type)
+                    if xl_type is None:
+                        return {"error": f"不支持的图表类型: {chart_type}，可选: {list(type_map.keys())}", "success": False}
                     chart_frame = slide.shapes.add_chart(
                         xl_type, Inches(1), Inches(1.5), Inches(11), Inches(5.5), chart_data_obj
                     )
@@ -510,10 +541,15 @@ def read_excel(path: str, sheet_name: str = "", max_rows: int = 1000) -> dict:
     try:
         err = _check_file(path, "excel")
         if err: return err
+        # 文件大小检查
+        file_size = os.path.getsize(path)
+        if file_size > 50_000_000:  # 50MB
+            return {"error": f"Excel文件过大 ({file_size // 1_000_000}MB > 50MB)", "success": False}
         from openpyxl import load_workbook
         wb = load_workbook(path, read_only=True, data_only=True)
+        sheet_names_cache = list(wb.sheetnames)  # close前缓存
         result = {}
-        sheets_to_read = [sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb.sheetnames
+        sheets_to_read = [sheet_name] if sheet_name and sheet_name in sheet_names_cache else sheet_names_cache
         for name in sheets_to_read:
             ws = wb[name]
             rows = []
@@ -523,7 +559,7 @@ def read_excel(path: str, sheet_name: str = "", max_rows: int = 1000) -> dict:
                 rows.append(list(row))
             result[name] = rows
         wb.close()
-        return {"sheets": result, "sheet_names": wb.sheetnames, "success": True}
+        return {"sheets": result, "sheet_names": sheet_names_cache, "success": True}
     except Exception as e:
         return {"error": str(e), "success": False}
 
@@ -590,8 +626,16 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
                 chart.style = 10
                 chart.y_axis.title = op.get("y_axis", "")
                 chart.x_axis.title = op.get("x_axis", "")
-                data_ref = Reference(ws, **op.get("data_ref", {}))
-                cats_ref = Reference(ws, **op.get("cats_ref", {}))
+def _safe_ref(ws, ref_dict):
+                        if not isinstance(ref_dict, dict):
+                            return Reference(ws, min_col=1, min_row=1, max_col=1, max_row=1)
+                        return Reference(ws,
+                            min_row=max(1, ref_dict.get("min_row", 1)),
+                            max_row=max(1, ref_dict.get("max_row", 1)),
+                            min_col=max(1, ref_dict.get("min_col", 1)),
+                            max_col=max(1, ref_dict.get("max_col", 1)))
+                    data_ref = _safe_ref(ws, op.get("data_ref", {}))
+                    cats_ref = _safe_ref(ws, op.get("cats_ref", {}))
                 chart.add_data(data_ref, titles_from_data=True)
                 chart.set_categories(cats_ref)
                 chart.width = op.get("width", 20)
