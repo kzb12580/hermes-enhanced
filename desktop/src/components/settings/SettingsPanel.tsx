@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
+import { EmailConfig } from '../email/EmailConfig';
 
-type SettingsTab = 'general' | 'models' | 'network' | 'apikeys' | 'about';
+type SettingsTab = 'general' | 'models' | 'network' | 'email' | 'apikeys' | 'about';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'general', label: '通用', icon: <Settings2 size={16} /> },
   { id: 'models', label: '模型', icon: <Cpu size={16} /> },
   { id: 'network', label: '网络', icon: <Wifi size={16} /> },
+  { id: 'email', label: '邮件', icon: <Mail size={16} /> },
   { id: 'apikeys', label: 'API 密钥', icon: <Key size={16} /> },
   { id: 'about', label: '关于', icon: <Info size={16} /> },
 ];
@@ -87,6 +89,12 @@ export function SettingsPanel() {
             )}
             {activeTab === 'network' && (
               <NetworkSettings />
+            )}
+            {activeTab === 'email' && (
+              <div>
+                <h3 className="text-base font-semibold text-[var(--text-primary)] mb-4">邮件配置</h3>
+                <EmailConfig />
+              </div>
             )}
             {activeTab === 'apikeys' && (
               <ApiKeysSettings />

@@ -1,134 +1,155 @@
 ---
 name: hermes-desktop-pc
-description: "Hermes Desktop PC自动化 — 截图+视觉定位+GUI操作+Office文档。让AI像人一样使用电脑。"
+description: "Hermes Desktop PC自动化 — 个人PC管理助手：Office文档、邮件收发、数据报表、竞品分析、Web调研、GUI自动化"
 category: desktop
 ---
 
-# Hermes Desktop PC 自动化
+# Hermes Desktop — 个人 PC 管理助手
 
-让 Hermes 像人一样操作电脑：看到屏幕 → 理解内容 → 点击/输入/创建文档。
+让 AI 帮你处理繁琐的办公工作：做 PPT、写报告、收发邮件、数据分析、竞品调研。
 
 ## ⚡ 快速安装
-
-### 一键安装（推荐）
 
 ```bash
 # Linux / macOS
 bash install.sh
 
-# Windows (CMD)
+# Windows
 install.bat
 
-# 或用 Python 脚本（最灵活）
+# 或 Python 脚本
 python setup_deps.py
 ```
 
-安装脚本会自动：
-- ✅ 检测 Python 版本（>= 3.10）
-- ✅ 检测 NVIDIA GPU / CUDA 版本
-- ✅ 安装 PyTorch（自动匹配 CUDA 11.8/12.4/CPU）
-- ✅ 安装所有 Python 依赖
-- ✅ 安装 Tesseract OCR + 中文语言包
-- ✅ 下载 LocateAnything-3B 模型（~6GB）
-- ✅ 验证所有组件
+首次启动自动弹出设置向导，引导完成：环境检测 → 网络配置 → 依赖安装。
 
-### 安装选项
+## 🎯 工作流（一键完成）
 
-```bash
-python setup_deps.py --verify-only    # 仅验证，不安装
-python setup_deps.py --skip-model     # 跳过模型下载
-python setup_deps.py --skip-tesseract # 跳过 OCR
-python setup_deps.py --force-model    # 强制重新下载模型
+### 竞品分析报告
+```
+"帮我做一份 XX 的竞品分析报告，竞品是 A、B、C"
+→ 自动搜索 → 对比分析 → 生成 PPT（含图表/表格）
 ```
 
-### 依赖清单
+### 周报
+```
+"帮我写周报：本周完成了 XX 项目、修复了 YY bug、ZZ 方案评审"
+→ 整理格式 → 标注状态 → 生成 Word / 发邮件
+```
 
-| 组件 | 用途 | 自动安装 |
-|------|------|---------|
-| Python >= 3.10 | 运行环境 | ✅ |
-| PyTorch | 深度学习框架 | ✅ (自动匹配CUDA) |
-| transformers | 模型加载 | ✅ |
-| LocateAnything-3B | 视觉定位模型 | ✅ (~6GB) |
-| pyautogui | GUI操作 | ✅ |
-| Pillow | 图像处理 | ✅ |
-| python-docx/pptx/xlsx | Office文档 | ✅ |
-| Tesseract OCR | 文字识别 | ✅ (Linux/macOS) |
+### 会议纪要
+```
+"整理这段会议记录" [粘贴文字]
+→ 提取议题 → 整理决议 → 列出待办 → 生成 Word
+```
 
-## 核心能力
+### 数据分析
+```
+"分析这个 Excel 的销售数据，做个报告"
+→ 读取数据 → 分析趋势 → 生成图表 → 输出 PPT/Excel
+```
 
-### 🖥️ 屏幕感知
+### 邮件回复
+```
+"帮我回复最新那封邮件，语气正式一点"
+→ 读邮件 → 生成回复 → 直接发送
+```
+
+### 搜索调研
+```
+"调研一下 AI Agent 市场现状"
+→ 多角度搜索 → 整理报告 → 生成 Word/PPT
+```
+
+### 快速 PPT
+```
+"做一个 10 页的 Q3 工作汇报 PPT"
+→ 搜索数据 → 组织内容 → 套主题 → 生成 PPT
+```
+
+## 📄 Office 工具
+
+### Word
+- `create_word(path, title, content, template, font_size, line_spacing)` — 创建
+- `edit_word(path, operations)` — 编辑（标题/段落/表格/图片/替换/页眉页脚）
+- `read_word(path)` — 读取内容
+
+### PPT（增强版）
+- `create_ppt(path, slides, template, theme)` — 创建
+  - **5 种主题**: business / tech / modern / minimal / nature
+  - **9 种页面**: title / content / bullet / two_column / chart / table / section / image / end
+  - **图表**: bar / column / line / pie / area
+  - **表格**: 自动表头高亮、主题色
+
+### Excel（增强版）
+- `create_excel(path, sheets)` — 创建（自动列宽、表头样式）
+- `read_excel(path, sheet_name, max_rows)` — 读取
+- `edit_excel(path, operations)` — 编辑：
+  - set_cell / set_range — 写入数据
+  - add_chart — 添加图表（bar/line/pie）
+  - add_formula — 添加公式
+  - format_cells — 格式化（加粗/颜色/对齐）
+  - add_sheet / delete_sheet — 管理工作表
+  - auto_filter / merge_cells — 筛选/合并
+
+## ✉️ 邮件工具
+
+### 收邮件
+- `read_emails(folder, limit, unread_only, search)` — 邮件列表
+- `read_email_detail(uid)` — 邮件全文
+
+### 发邮件
+- `send_email(to, subject, body, cc, bcc, html, attachments)` — 发送
+- 支持 QQ邮箱/163/Outlook/Gmail/企业邮箱
+- 自动检测 IMAP/SMTP 配置
+
+### 配置
+首次使用需配置邮箱（设置面板 → 网络 → 邮箱配置），或直接告诉 AI：
+```
+"配置邮箱：xxx@qq.com，授权码是 yyy"
+```
+
+## 🔍 网络调研
+
+- `web_search(query)` — 搜索引擎
+- `web_extract(urls)` — 提取网页内容
+- 支持代理/镜像源（设置面板配置）
+
+## 🖥️ GUI 自动化
+
 - `screen_capture()` — 截图
-- `gui_locate(image, target)` — AI视觉定位元素
+- `gui_locate(image, target)` — AI 视觉定位
+- `gui_click(x, y)` / `gui_type(text)` / `gui_hotkey(...)` — 操作
 - `screen_ocr(image)` — 文字识别
 
-### 🖱️ GUI 操作
-- `gui_click(x, y)` — 点击
-- `gui_type(text)` — 输入文字（支持中文）
-- `gui_hotkey("ctrl", "s")` — 快捷键
-- `gui_scroll(clicks)` — 滚动
-- `gui_drag(x1,y1,x2,y2)` — 拖拽
+## 📋 系统
 
-### 📄 Office 文档
-- `create_word(path, title, content)` — Word
-- `create_ppt(path, slides)` — PPT
-- `create_excel(path, sheets)` — Excel
-- `edit_word(path, operations)` — 编辑Word
-
-### 📋 系统
 - `open_app(name)` — 启动应用
 - `get_windows()` — 窗口列表
-- `clipboard("get"/"set", text)` — 剪贴板
+- `clipboard("get"/"set")` — 剪贴板
 
-## 典型工作流
+## 网络配置
 
-### 填写网页表单
-```
-1. screen_capture()                        → 截图
-2. gui_locate(img, "姓名输入框")           → 定位
-3. gui_click(x, y)                         → 点击输入框
-4. gui_type("张三")                        → 输入
-5. gui_locate(img, "提交按钮")             → 定位按钮
-6. gui_click(x, y)                         → 提交
-```
+### 代理
+- 自动检测 Clash/V2Ray/系统代理
+- 手动设置 HTTP/SOCKS5 代理
+- 配置持久化
 
-### 创建 PPT
-```
-1. open_app("powerpoint")
-2. gui_locate(screenshot, "空白演示文稿")  → 获取坐标
-3. gui_click(x, y)                         → 点击
-4. create_ppt("/tmp/ppt.pptx", slides)     → 或用代码直接创建
-```
+### 镜像源
+- HuggingFace: 官方 / hf-mirror.com
+- PyPI: 清华 / 阿里云 / 豆瓣 / 中科大
 
 ## 故障排除
 
-### 模型加载失败
+### PPT/Word/Excel 创建失败
 ```bash
-# 检查依赖
-python setup_deps.py --verify-only
-
-# 重新下载模型
-python setup_deps.py --force-model
+pip install python-docx python-pptx openpyxl
 ```
 
-### CUDA 内存不足
-- LocateAnything-3B 需要 ~6GB VRAM
-- 自动切换为 CPU 模式（较慢但可用）
-- 关闭其他 GPU 应用释放显存
+### 邮件发送失败
+- QQ邮箱：需要授权码（非密码），在 QQ邮箱 → 设置 → 账户 → POP3 开启
+- 163邮箱：需要授权码，在 163邮箱 → 设置 → POP3 开启
+- Outlook：可能需要 App Password
 
-### Tesseract 找不到
-```bash
-# Linux
-sudo apt install tesseract-ocr tesseract-ocr-chi-sim
-
-# macOS
-brew install tesseract tesseract-lang
-
-# Windows: 下载安装包
-# https://github.com/UB-Mannheim/tesseract/wiki
-```
-
-## 安全机制
-- pyautogui.FAILSAFE = True（鼠标移到左上角紧急停止）
-- 所有路径经过净化验证
-- shell 命令参数经过列表传递（无注入风险）
-- 坐标范围验证（防止 NaN/Inf/越界）
+### 模型下载慢
+设置面板 → 网络 → 选择 hf-mirror 镜像源

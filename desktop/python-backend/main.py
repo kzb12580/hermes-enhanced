@@ -21,6 +21,7 @@ from api.health import router as health_router
 from api.memory import router as memory_router
 from api.skills import router as skills_router
 from api.setup import router as setup_router
+from api.email import router as email_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -100,6 +101,7 @@ app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(skills_router)
 app.include_router(setup_router)
+app.include_router(email_router)
 app.include_router(memory_router)
 app.include_router(config_router)
 app.include_router(models_router)
