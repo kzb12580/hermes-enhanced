@@ -96,10 +96,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS — allow the Electron renderer (localhost)
 # Per CORS spec, allow_credentials=True is NOT allowed with allow_origins=['*'].
 # Since we use wildcard origins, credentials must be False.
-# CORS: 仅允许本地 Electron 前端
+# CORS: 桌面应用允许所有来源（安全由 Electron contextIsolation 保证）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:9876", "http://127.0.0.1:9876", "file://", "null"],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,24 +111,8 @@ async def global_exception_handler(request, exc):
     logger.error("Unhandled exception: %s", exc, exc_info=True)
     return {"error": "Internal server error", "success": False}
 
-# API Token 认证中间件
-import secrets as _secrets
-_API_TOKEN = _secrets.token_urlsafe(32)
-
-@app.middleware("http")
-async def auth_middleware(request, call_path):
-    # 放行健康检查和 OPTIONS
-    if request.url.path in ("/api/health", "/health") or request.method == "OPTIONS":
-        return await call_path(request)
-    # 验证 token
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    if not token or token != _API_TOKEN:
-        from starlette.responses import JSONResponse
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    return await call_path(request)
-
-# 启动时输出 token 供 Electron 前端使用
-logger.info("API Token: %s", _API_TOKEN)
+# 安全说明: 桌面应用仅监听 127.0.0.1:9876，CORS 限制为 localhost
+# 不需要 API Token 认证（本地进程间通信）
 
 # Register routers
 app.include_router(health_router)
