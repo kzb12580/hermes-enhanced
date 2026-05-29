@@ -12,6 +12,22 @@ import importlib.util
 from pathlib import Path
 from typing import Optional
 
+# ── 网络代理/镜像自动配置 ──────────────────────────────────────────────────
+try:
+    from network_manager import (
+        get_proxy, apply_proxy_to_env, apply_hf_mirror_to_env,
+        apply_pypi_mirror_to_args, get_hf_mirror, get_pypi_mirror,
+        load_network_config, save_network_config,
+        detect_clash, detect_system_proxy, detect_env_proxy,
+        HF_MIRRORS, PYPI_MIRRORS,
+    )
+    # 安装前自动应用代理和镜像
+    apply_proxy_to_env()
+    apply_hf_mirror_to_env()
+    _HAS_NETWORK_MANAGER = True
+except ImportError:
+    _HAS_NETWORK_MANAGER = False
+
 # ── 常量 ──────────────────────────────────────────────────────────────────
 REQUIREMENTS = [
     ("pyautogui", ">=0.9.54"),
@@ -48,6 +64,9 @@ def _run(cmd: list[str], check: bool = True, capture: bool = True) -> subprocess
 def _pip_install(*args: str) -> bool:
     """执行 pip install"""
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--no-cache-dir"] + list(args)
+    # 注入 PyPI 镜像源
+    if _HAS_NETWORK_MANAGER:
+        cmd = apply_pypi_mirror_to_args(cmd)
     print(f"  📦 {' '.join(args[:3])}...")
     try:
         result = _run(cmd, check=False)

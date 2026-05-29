@@ -20,6 +20,7 @@ from api.models import router as models_router
 from api.health import router as health_router
 from api.memory import router as memory_router
 from api.skills import router as skills_router
+from api.setup import router as setup_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -98,6 +99,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(skills_router)
+app.include_router(setup_router)
 app.include_router(memory_router)
 app.include_router(config_router)
 app.include_router(models_router)

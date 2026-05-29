@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
 
-type SettingsTab = 'general' | 'models' | 'apikeys' | 'about';
+type SettingsTab = 'general' | 'models' | 'network' | 'apikeys' | 'about';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'general', label: '通用', icon: <Settings2 size={16} /> },
   { id: 'models', label: '模型', icon: <Cpu size={16} /> },
+  { id: 'network', label: '网络', icon: <Wifi size={16} /> },
   { id: 'apikeys', label: 'API 密钥', icon: <Key size={16} /> },
   { id: 'about', label: '关于', icon: <Info size={16} /> },
 ];
@@ -83,6 +84,9 @@ export function SettingsPanel() {
                 <h3 className="text-base font-semibold text-[var(--text-primary)] mb-4">模型配置</h3>
                 <ModelConfig />
               </div>
+            )}
+            {activeTab === 'network' && (
+              <NetworkSettings />
             )}
             {activeTab === 'apikeys' && (
               <ApiKeysSettings />
@@ -321,6 +325,145 @@ function AboutSection() {
         <p>由 <a href="https://nousresearch.com" className="text-[var(--accent)] hover:underline" target="_blank" rel="noopener">Nous Research</a> 出品</p>
         <p className="mt-1">© 2025 Hermes Desktop. All rights reserved.</p>
       </div>
+    </div>
+  );
+}
+
+// ── 网络设置组件 ────────────────────────────────────────────────────────
+function NetworkSettings() {
+  const [config, setConfig] = useState<any>({});
+  const [diagnosis, setDiagnosis] = useState<any>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [mirrors, setMirrors] = useState<any>({});
+  const [saving, setSaving] = useState(false);
+
+  const BACKEND = 'http://127.0.0.1:9876';
+
+  useEffect(() => {
+    fetch(`${BACKEND}/api/setup/network`).then(r => r.json()).then(setConfig).catch(() => {});
+    fetch(`${BACKEND}/api/setup/mirrors`).then(r => r.json()).then(setMirrors).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${BACKEND}/api/setup/network`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+    } catch (e) {}
+    setSaving(false);
+  };
+
+  const diagnose = async () => {
+    setDiagnosing(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/setup/diagnose`);
+      setDiagnosis(await res.json());
+    } catch (e) { setDiagnosis({ error: '诊断失败' }); }
+    setDiagnosing(false);
+  };
+
+  const modes = [
+    { key: 'auto', label: '🔍 自动检测' },
+    { key: 'manual', label: '✏️ 手动设置' },
+    { key: 'disabled', label: '🚫 不使用代理' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-base font-semibold text-[var(--text-primary)]">网络设置</h3>
+
+      {/* 代理模式 */}
+      <div className="rounded-lg border border-[var(--border)] p-4 space-y-3">
+        <label className="text-sm font-medium text-[var(--text-secondary)]">代理模式</label>
+        <div className="flex gap-2">
+          {modes.map(m => (
+            <button key={m.key} onClick={() => setConfig((c: any) => ({ ...c, proxy_mode: m.key }))}
+              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                config.proxy_mode === m.key
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}>{m.label}</button>
+          ))}
+        </div>
+        {config.detected_proxy && config.proxy_mode !== 'disabled' && (
+          <p className="text-xs text-green-400">检测到代理: {config.detected_proxy}</p>
+        )}
+      </div>
+
+      {/* 手动代理 */}
+      {config.proxy_mode === 'manual' && (
+        <div className="rounded-lg border border-[var(--border)] p-4 space-y-3">
+          <label className="text-sm font-medium text-[var(--text-secondary)]">代理地址</label>
+          <input value={config.proxy || ''} onChange={e => setConfig((c: any) => ({ ...c, proxy: e.target.value }))}
+            placeholder="http://127.0.0.1:7890"
+            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] text-sm" />
+        </div>
+      )}
+
+      {/* HuggingFace 镜像 */}
+      <div className="rounded-lg border border-[var(--border)] p-4 space-y-3">
+        <label className="text-sm font-medium text-[var(--text-secondary)]">HuggingFace 模型镜像</label>
+        <p className="text-xs text-[var(--text-muted)]">中国大陆用户建议选择 hf-mirror</p>
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(mirrors.hf || {}).map(([key]: [string, any]) => (
+            <button key={key} onClick={() => setConfig((c: any) => ({ ...c, hf_mirror: key }))}
+              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                config.hf_mirror === key
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}>
+              {key === 'official' ? '🌐 官方' : key === 'hf-mirror' ? '🇨🇳 hf-mirror' : key}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* PyPI 镜像 */}
+      <div className="rounded-lg border border-[var(--border)] p-4 space-y-3">
+        <label className="text-sm font-medium text-[var(--text-secondary)]">PyPI 下载镜像</label>
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(mirrors.pypi || {}).map(([key]: [string, any]) => (
+            <button key={key} onClick={() => setConfig((c: any) => ({ ...c, pypi_mirror: key }))}
+              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                config.pypi_mirror === key
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}>
+              {key === 'official' ? '🌐 官方' : key === 'tuna' ? '🇨🇳 清华' : key === 'aliyun' ? '🇨🇳 阿里云' : key}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex gap-3">
+        <button onClick={save} disabled={saving}
+          className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+          {saving ? '保存中...' : '💾 保存配置'}
+        </button>
+        <button onClick={diagnose} disabled={diagnosing}
+          className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-sm font-medium hover:text-[var(--text-primary)] transition-colors disabled:opacity-50">
+          {diagnosing ? '诊断中...' : '🔍 网络诊断'}
+        </button>
+      </div>
+
+      {/* 诊断结果 */}
+      {diagnosis && !diagnosis.error && (
+        <div className="rounded-lg border border-[var(--border)] p-4 space-y-2">
+          <p className="text-sm font-medium text-[var(--text-secondary)]">诊断结果</p>
+          {diagnosis.tests?.map((t: any, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className={t.ok ? 'text-green-400' : 'text-red-400'}>{t.ok ? '✅' : '❌'}</span>
+              <span className="text-[var(--text-primary)]">{t.name}</span>
+              <span className="text-[var(--text-muted)] text-xs">
+                {t.ok ? `HTTP ${t.status}` : t.error?.substring(0, 60)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
