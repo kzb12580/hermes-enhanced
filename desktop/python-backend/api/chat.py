@@ -18,8 +18,32 @@ from api.memory import get_memory_context
 logger = logging.getLogger("hermes-backend.chat")
 router = APIRouter()
 
+import json as _json
+from pathlib import Path as _Path
+
 _sessions: dict[str, dict] = {}
 _session_lock = asyncio.Lock()
+
+_SESSION_DIR = _Path.home() / ".hermes" / "desktop"
+_SESSION_FILE = _SESSION_DIR / "sessions.json"
+MAX_SESSION_HISTORY = 200  # max messages per session
+
+def _load_sessions():
+    global _sessions
+    if _SESSION_FILE.exists():
+        try:
+            _sessions = _json.loads(_SESSION_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+def _save_sessions():
+    _SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        _SESSION_FILE.write_text(_json.dumps(_sessions, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+_load_sessions()
 
 MAX_SESSIONS = 50
 
@@ -57,7 +81,7 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "qwen-turbo": 131_072,
     "qwq": 131_072,
     # MIMO
-    "mimo": 131_072,
+    "mimo": 1_048_576,
 }
 
 # Response token budgets by context size
@@ -491,6 +515,10 @@ async def chat(message: ChatMessage, request: Request):
             "content": message.content,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+        # Trim old messages to prevent unbounded growth
+        if len(_sessions[session_id]["messages"]) > MAX_SESSION_HISTORY:
+            _sessions[session_id]["messages"] = _sessions[session_id]["messages"][-MAX_SESSION_HISTORY:]
+        _save_sessions()
 
     # Build message history with model-aware context window
     history = _sessions[session_id]["messages"]
