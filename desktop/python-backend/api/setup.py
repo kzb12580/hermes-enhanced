@@ -306,6 +306,11 @@ async def _run_install(req: InstallRequest):
         loop = asyncio.get_event_loop()
         
         def run_setup():
+            # Windows GBK 编码无法输出 emoji，强制 UTF-8
+            import io
+            import codecs
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
             return setup_module.setup(
                 skip_model=req.skip_model,
                 skip_tesseract=req.skip_tesseract,
