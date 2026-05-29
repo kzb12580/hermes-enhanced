@@ -22,6 +22,7 @@ interface SetupStatus {
   message: string;
   error: string | null;
   deps: Record<string, DepStatus>;
+  log?: string[];
 }
 
 interface NetworkConfig {
@@ -192,8 +193,10 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     };
   }, []);
 
+  // Only check critical deps - tesseract and model are optional
+  const criticalDepNames = ['python', 'pytorch', 'transformers', 'pillow', 'pyautogui'];
   const allDepsOk = setupStatus?.deps
-    ? Object.values(setupStatus.deps).every(d => d.ok)
+    ? criticalDepNames.every(d => !setupStatus.deps[d] || setupStatus.deps[d].ok)
     : false;
 
   const steps = ['环境检测', '网络配置', '依赖安装', '完成'];

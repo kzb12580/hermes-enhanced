@@ -58,6 +58,7 @@ export default function App() {
       const criticalDeps = ['pytorch', 'transformers', 'pillow', 'pyautogui'];
       const allOk = criticalDeps.every(d => deps[d]?.ok);
 
+      // critical deps OK -> skip wizard (tesseract/model are optional)
       if (allOk) {
         localStorage.setItem('hermes_setup_done', 'true');
         setSetupDone(true);
