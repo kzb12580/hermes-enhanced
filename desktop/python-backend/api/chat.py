@@ -27,7 +27,7 @@ MAX_TOOL_ROUNDS = 999
 
 # ─── Model context window mapping ───
 # Key: model name substring → context window tokens
-# Fallback: 32K if no match
+# Fallback: 64K if no match
 MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     # OpenAI
     "gpt-4o": 128_000,
@@ -73,13 +73,13 @@ RESPONSE_TOKEN_BUDGETS = {
 def get_model_context_config(model_name: str) -> tuple[int, int]:
     """Return (context_window, max_response_tokens) for a model."""
     model_lower = model_name.lower()
-    context_window = 32_768  # default
+    context_window = 65_536  # default (64K)
     for pattern, window in MODEL_CONTEXT_WINDOWS.items():
         if pattern in model_lower:
             context_window = window
             break
     # Find appropriate response budget
-    max_response = 4_096  # default
+    max_response = 8_192  # default
     for threshold, budget in sorted(RESPONSE_TOKEN_BUDGETS.items(), reverse=True):
         if context_window >= threshold:
             max_response = budget
@@ -121,16 +121,34 @@ def truncate_messages_by_tokens(messages: list[dict], max_input_tokens: int) -> 
     result.reverse()
     return result
 
-DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI assistant with access to tools for file operations, terminal commands, and web search.
+DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI desktop assistant with FULL tool access. You MUST use tools to complete tasks — NEVER just describe what you would do.
 
-When the user asks you to:
-- Read/write/create files → use read_file / write_file / list_files
-- Search for code or text → use search_files
-- Run commands → use terminal
-- Look up information online → use web_search / web_extract
+## CRITICAL RULES
+1. **ACT, don't describe** — When user asks to create/modify/search something, call the tool IMMEDIATELY. Do NOT say "I can help you with that" or "Would you like me to..." — just DO IT.
+2. **Maintain context** — Remember what was discussed. If user says "1" or "yes" or "ok", refer to the previous offer/question.
+3. **No unnecessary questions** — If user says "make a PPT about X", make it directly with reasonable defaults. Don't ask for style/length/format unless truly ambiguous.
+4. **Use tools for everything** — File creation, code, search, web lookup — always use tools, never fabricate content.
 
-Always use tools when needed. Be proactive — don't just say "I can't do that" when tools are available.
-Respond in the user's language. Be concise and helpful."""
+## AVAILABLE TOOLS
+- **write_file** — Create any file (.py, .md, .pptx, .docx, .xlsx, .html, etc.)
+- **read_file** — Read file contents
+- **search_files** — Search for files or text patterns
+- **terminal** — Run shell commands (python scripts, pip install, etc.)
+- **web_search** — Search the internet
+- **web_extract** — Extract content from URLs
+
+## PPT CREATION
+When user asks for a PPT/presentation/slide:
+1. Write a Python script using python-pptx
+2. Run it with terminal tool
+3. Tell user the file path
+
+## EXAMPLES
+User: "做个苹果调研PPT" → Write pptx Python script → Run it → "已创建: 苹果调研.pptx"
+User: "1" (after being offered to convert MD to PPT) → Convert the MD to PPT immediately
+User: "帮我搜一下XXX" → Use web_search immediately
+
+Respond in the user's language. Be concise. Always use tools."""
 
 
 class ChatMessage(BaseModel):
