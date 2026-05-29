@@ -191,6 +191,85 @@ async def list_mirrors():
         return {"hf": {}, "pypi": {}}
 
 
+
+class ModelDownloadRequest(BaseModel):
+    mirror: str = "hf-mirror"  # hf-mirror / modelscope / official
+
+
+@router.post("/api/setup/download-model")
+async def download_model(req: ModelDownloadRequest):
+    """Download LocateAnything-3B model with mirror selection"""
+    async with _install_lock:
+        if _install_state["running"]:
+            raise HTTPException(status_code=409, detail="Installation already running")
+
+        _install_state["running"] = True
+        _install_state["phase"] = "model"
+        _install_state["progress"] = 0
+        _install_state["error"] = None
+        _install_state["log"] = []
+
+    asyncio.create_task(_run_model_download(req.mirror))
+    return {"success": True, "message": "Model download started"}
+
+
+async def _run_model_download(mirror: str):
+    """Download model in background thread"""
+    try:
+        import os
+        
+        # Set HF endpoint based on mirror
+        if mirror == "hf-mirror":
+            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        elif mirror == "modelscope":
+            os.environ["HF_ENDPOINT"] = "https://modelscope.cn"
+        else:
+            os.environ.pop("HF_ENDPOINT", None)
+
+        _emit("model", 5, f"Starting download from {mirror}...")
+
+        def do_download():
+            from huggingface_hub import snapshot_download
+            import sys
+            
+            class ProgressCapture:
+                def write(self, text):
+                    if text and text.strip():
+                        line = text.strip()
+                        # Parse download percentage
+                        import re
+                        m = re.search(r"(\d+)%", line)
+                        if m:
+                            pct = int(m.group(1))
+                            _emit("model", min(5 + pct * 90 // 100, 95), line)
+                        else:
+                            _emit("model", _install_state["progress"], line)
+                    return len(text) if text else 0
+                def flush(self):
+                    pass
+
+            old_stdout = sys.stdout
+            sys.stdout = ProgressCapture()
+            try:
+                snapshot_download("nvidia/LocateAnything-3B")
+            finally:
+                sys.stdout = old_stdout
+
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            success = await loop.run_in_executor(pool, do_download)
+
+        _emit("done", 100, "Model download complete!")
+
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logger.exception("Model download failed")
+        _emit("error", _install_state["progress"], f"Download failed: {e}\n{tb}", "download_failed")
+    finally:
+        _install_state["running"] = False
+
 # ── 依赖检测 ──────────────────────────────────────────────────────────────
 
 def _check_installed_deps() -> dict:

@@ -96,6 +96,11 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [diagnosing, setDiagnosing] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [mirrors, setMirrors] = useState<{ hf: Record<string, string>; pypi: Record<string, string> }>({ hf: {}, pypi: {} });
+  const [modelMirror, setModelMirror] = useState('hf-mirror');
+  const [modelDownloading, setModelDownloading] = useState(false);
+  const [modelProgress, setModelProgress] = useState(0);
+  const [modelStatus, setModelStatus] = useState('');
+  const [modelDone, setModelDone] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // 加载初始状态
@@ -199,7 +204,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     ? criticalDepNames.every(d => !setupStatus.deps[d] || setupStatus.deps[d].ok)
     : false;
 
-  const steps = ['环境检测', '网络配置', '依赖安装', '完成'];
+  const steps = ['环境检测', '网络配置', '依赖安装', '模型下载', '完成'];
 
   return (
     <div style={{
@@ -512,8 +517,125 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
         </div>
       )}
 
-      {/* ── Step 3: 完成 ── */}
+      {/* ── Step 3: 模型下载 ── */}
       {step === 3 && (
+        <div>
+          <h2 style={{ fontSize: 18, color: '#e5e7eb', marginBottom: 16 }}>
+            <Download size={20} style={{ verticalAlign: 'middle', marginRight: 8 }} />
+            视觉模型下载 (可选)
+          </h2>
+
+          <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 16 }}>
+            LocateAnything-3B 视觉模型 (~6GB) 用于屏幕元素定位和GUI自动化。
+            不安装也可以使用其他功能。
+          </p>
+
+          {/* 镜像选择 */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>下载源</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[
+                { key: 'hf-mirror', label: '🇨🇳 hf-mirror (国内推荐)', note: '' },
+                { key: 'modelscope', label: '🇨🇳 ModelScope (阿里)', note: '' },
+                { key: 'official', label: '🌐 HuggingFace 官方', note: '需 TUN 模式' },
+              ].map(m => (
+                <button
+                  key={m.key}
+                  onClick={() => setModelMirror(m.key)}
+                  disabled={modelDownloading}
+                  style={{
+                    ...chipStyle,
+                    background: modelMirror === m.key ? '#8b5cf6' : '#1f2937',
+                    color: modelMirror === m.key ? '#fff' : '#9ca3af',
+                    opacity: modelDownloading ? 0.5 : 1,
+                  }}
+                >
+                  {m.label} {m.note && <span style={{ fontSize: 11, color: '#f59e0b' }}>({m.note})</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 下载进度 */}
+          {(modelDownloading || modelDone) && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ height: 8, borderRadius: 4, background: '#1f2937', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 4,
+                  width: `${modelProgress}%`,
+                  background: modelDone ? '#22c55e' : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 13, color: '#9ca3af' }}>
+                <span>{modelStatus || '准备中...'}</span>
+                <span>{modelProgress}%</span>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            <button onClick={() => setStep(2)} style={btnSecondaryStyle} disabled={modelDownloading}>
+              <ArrowLeft size={16} /> 上一步
+            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!modelDownloading && !modelDone && (
+                <button
+                  onClick={async () => {
+                    setModelDownloading(true);
+                    setModelStatus('正在下载...');
+                    try {
+                      const res = await fetch(`${BACKEND}/api/setup/download-model`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mirror: modelMirror }),
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        // SSE listen for progress
+                        const es = new EventSource(`${BACKEND}/api/setup/status/stream`);
+                        es.onmessage = (ev) => {
+                          try {
+                            const d = JSON.parse(ev.data);
+                            if (d.progress) setModelProgress(d.progress);
+                            if (d.message) setModelStatus(d.message);
+                            if (d.phase === 'done') {
+                              setModelDone(true);
+                              setModelDownloading(false);
+                              es.close();
+                            }
+                            if (d.phase === 'error') {
+                              setModelDownloading(false);
+                              setModelStatus(d.error || d.message || '下载失败');
+                              es.close();
+                            }
+                          } catch {}
+                        };
+                        es.onerror = () => { es.close(); setModelDownloading(false); };
+                      } else {
+                        setModelDownloading(false);
+                        setModelStatus(data.error || '启动下载失败');
+                      }
+                    } catch (e) {
+                      setModelDownloading(false);
+                      setModelStatus('请求失败');
+                    }
+                  }}
+                  style={btnStyle}
+                >
+                  <Download size={16} /> 开始下载
+                </button>
+              )}
+              <button onClick={() => setStep(4)} style={modelDone ? btnStyle : btnSecondaryStyle}>
+                {modelDone ? '下一步' : '跳过'} <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 4: 完成 ── */}
+      {step === 4 && (
         <div style={{ textAlign: 'center', padding: 32 }}>
           <CheckCircle size={64} color="#22c55e" />
           <h2 style={{ fontSize: 22, color: '#e5e7eb', marginTop: 16, marginBottom: 8 }}>
