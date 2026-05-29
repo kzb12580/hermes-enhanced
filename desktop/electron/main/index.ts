@@ -24,8 +24,7 @@ process.on('SIGINT', () => {
 
 process.on('uncaughtException', (err) => {
   console.error('[主进程] 未捕获异常:', err)
-  // 给日志写入一点时间，然后退出
-  setTimeout(() => process.exit(1), 1000)
+  // 不退出 — 保持窗口可见，让 Python 后端重试
 })
 
 process.on('unhandledRejection', (reason) => {

@@ -201,7 +201,7 @@ def save_network_config(config: dict):
 def get_hf_mirror() -> str:
     """获取 HuggingFace 镜像地址"""
     config = load_network_config()
-    mirror_key = config.get("hf_mirror", "official")
+    mirror_key = config.get("hf_mirror", "hf-mirror")
     if mirror_key in HF_MIRRORS:
         return HF_MIRRORS[mirror_key]
     # 自定义 URL
@@ -213,7 +213,7 @@ def get_hf_mirror() -> str:
 def get_pypi_mirror() -> str:
     """获取 PyPI 镜像地址"""
     config = load_network_config()
-    mirror_key = config.get("pypi_mirror", "official")
+    mirror_key = config.get("pypi_mirror", "aliyun")
     if mirror_key in PYPI_MIRRORS:
         return PYPI_MIRRORS[mirror_key]
     if mirror_key.startswith("http"):
@@ -273,7 +273,6 @@ def diagnose() -> dict:
     tests = [
         ("HuggingFace", get_hf_mirror()),
         ("PyPI", get_pypi_mirror()),
-        ("OpenAI API", "https://api.openai.com/v1"),
     ]
 
     for name, url in tests:

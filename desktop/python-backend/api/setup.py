@@ -5,6 +5,7 @@ Setup API — 首次启动引导、依赖安装、模型下载、网络诊断
 import asyncio
 import json
 import logging
+import os
 import sys
 from typing import Optional
 from pathlib import Path
