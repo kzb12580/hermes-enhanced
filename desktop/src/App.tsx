@@ -40,34 +40,15 @@ export default function App() {
 
   const checkSetupStatus = async () => {
     try {
-      // 1. 检查本地标记
-      const localDone = localStorage.getItem('hermes_setup_done');
-      if (localDone === 'true') {
-        setSetupDone(true);
-        return;
-      }
-
-      // 2. 检查后端依赖状态
-      const res = await fetch(`${BACKEND}/api/setup/status`);
-      if (!res.ok) {
-        setSetupDone(true); // 后端不可用，跳过向导
-        return;
-      }
-      const data = await res.json();
-      const deps = data.deps || {};
-      const criticalDeps = ['pytorch', 'transformers', 'pillow', 'pyautogui'];
-      const allOk = criticalDeps.every(d => deps[d]?.ok);
-
-      // critical deps OK -> still show wizard (user may want to download model)
-      // Only auto-skip if user has explicitly completed wizard before
+      // Only skip if user has explicitly completed wizard
       const wizardCompleted = localStorage.getItem('hermes_wizard_completed');
       if (wizardCompleted === 'true') {
         setSetupDone(true);
-      } else {
-        setSetupDone(false);
+        return;
       }
+      // First time -> show wizard (model download)
+      setSetupDone(false);
     } catch (e) {
-      // 后端未启动，仍显示向导（首次安装场景）
       setSetupDone(false);
     }
   };
