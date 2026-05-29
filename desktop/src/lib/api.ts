@@ -31,6 +31,8 @@ export interface ChatCompletionRequest {
   thinking_budget?: number;
   proxy_url?: string;
   skills?: string[];
+  temperature?: number;
+  max_tokens?: number;
 }
 
 export interface SkillInfo {
@@ -214,6 +216,8 @@ class ApiClient {
           thinking_budget: request.thinking_budget,
           proxy_url: request.proxy_url,
           skills: request.skills,
+          temperature: request.temperature,
+          max_tokens: request.max_tokens,
         }),
         signal,
       }

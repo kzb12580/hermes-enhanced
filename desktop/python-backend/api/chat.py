@@ -143,6 +143,8 @@ class ChatMessage(BaseModel):
     thinking_mode: Optional[str] = None
     thinking_budget: Optional[int] = None
     proxy_url: Optional[str] = None
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=None, ge=1, le=128000)
 
 
 class SessionCreate(BaseModel):
@@ -180,6 +182,7 @@ async def _call_provider_with_tools(
     thinking_mode: Optional[str] = None,
     thinking_budget: Optional[int] = None,
     max_tokens: int = 4096,
+    temperature: Optional[float] = None,
 ):
     """Call provider with tool calling loop.
 
@@ -208,6 +211,9 @@ async def _call_provider_with_tools(
             "stream": True,
             "max_tokens": max_tokens,
         }
+
+        if temperature is not None:
+            body["temperature"] = temperature
 
         if tools:
             body["tools"] = tools
@@ -529,7 +535,8 @@ async def chat(message: ChatMessage, request: Request):
                 proxy_url=message.proxy_url,
                 thinking_mode=message.thinking_mode,
                 thinking_budget=message.thinking_budget,
-                max_tokens=max_response,
+                max_tokens=message.max_tokens or max_response,
+                temperature=message.temperature,
             ):
                 if await request.is_disconnected():
                     break

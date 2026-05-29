@@ -54,6 +54,14 @@ class SettingsStore {
           type: 'string',
           enum: ['debug', 'info', 'warn', 'error'],
           default: 'info'
+        },
+        proxyUrl: {
+          type: 'string',
+          default: ''
+        },
+        openLinksInExternalBrowser: {
+          type: 'boolean',
+          default: true
         }
       }
     })

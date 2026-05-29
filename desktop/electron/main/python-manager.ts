@@ -6,7 +6,10 @@
  * 1. PyInstaller sidecar (hermes-backend.exe) — 打包好的独立二进制
  * 2. 系统 Python + 源码 — 自动检测 Python、自动安装依赖
  */
-import { ChildProcess, spawn, execSync } from 'child_process'
+import { ChildProcess, spawn, exec as execCb } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(execCb)
 import { app, BrowserWindow } from 'electron'
 import { net } from 'electron'
 import { join } from 'path'
@@ -26,6 +29,27 @@ interface PythonManagerOptions {
 
 /** Sliding window duration for restart count reset (5 minutes) */
 const RESTART_WINDOW_MS = 5 * 60 * 1000
+
+/** Environment variable whitelist for spawned Python processes */
+const ENV_WHITELIST_KEYS = [
+  'PATH', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR',
+  'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT',
+  'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM',
+  'SHELL', 'USER', 'LOGNAME',
+  'XDG_RUNTIME_DIR', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+  'http_proxy', 'https_proxy', 'no_proxy',
+]
+
+/** Build a sanitized env object with only whitelisted keys plus Hermes overrides */
+function buildSafeEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const safe: Record<string, string> = {}
+  for (const key of ENV_WHITELIST_KEYS) {
+    const val = process.env[key]
+    if (val !== undefined) safe[key] = val
+  }
+  return { ...safe, ...overrides }
+}
 
 /** 后端启动模式 */
 type BackendMode = 'sidecar' | 'system-python' | 'none'
@@ -116,16 +140,16 @@ export class PythonManager {
   }
 
   // ─── 检测系统 Python ───
-  private findSystemPython(): string | null {
+  private async findSystemPython(): Promise<string | null> {
     this.addLog('[检测] 正在搜索系统 Python...')
 
     if (process.platform === 'win32') {
       // 方法1: py launcher (Python 官方安装器会注册)
       try {
-        const pyResult = execSync('py -3 -c "import sys; print(sys.executable)"', {
+        const pyResult = (await execAsync('py -3 -c "import sys; print(sys.executable)"', {
           encoding: 'utf-8',
           timeout: 5000
-        }).trim()
+        })).stdout.trim()
         if (pyResult && existsSync(pyResult)) {
           this.addLog(`[检测] 通过 py launcher 找到: ${pyResult}`)
           return pyResult
@@ -134,10 +158,10 @@ export class PythonManager {
 
       // 方法2: where python（过滤掉 Windows Store stub）
       try {
-        const whereResult = execSync('where python 2>nul', {
+        const whereResult = (await execAsync('where python 2>nul', {
           encoding: 'utf-8',
           timeout: 5000
-        }).trim()
+        })).stdout.trim()
         for (const line of whereResult.split('\n')) {
           const p = line.trim()
           if (!p || p.includes('WindowsApps')) continue // 跳过 Store stub
@@ -186,10 +210,10 @@ export class PythonManager {
     } else {
       // Linux/macOS
       try {
-        const result = execSync('which python3 || which python', {
+        const result = (await execAsync('which python3 || which python', {
           encoding: 'utf-8',
           timeout: 5000
-        }).trim()
+        })).stdout.trim()
         if (result && existsSync(result)) {
           this.addLog(`[检测] 找到: ${result}`)
           return result
@@ -201,12 +225,12 @@ export class PythonManager {
   }
 
   // ─── 验证 Python 版本 >= 3.9 ───
-  private validatePython(pythonPath: string): boolean {
+  private async validatePython(pythonPath: string): Promise<boolean> {
     try {
-      const version = execSync(`"${pythonPath}" --version`, {
+      const version = (await execAsync(`"${pythonPath}" --version`, {
         encoding: 'utf-8',
         timeout: 5000
-      }).trim()
+      })).stdout.trim()
       const match = version.match(/Python (\d+)\.(\d+)/)
       if (!match) return false
       const major = parseInt(match[1])
@@ -272,7 +296,7 @@ export class PythonManager {
     return new Promise<boolean>((resolve) => {
       const pip = spawn(pythonPath, ['-m', 'pip', 'install', '-r', reqPath, '--quiet', '--disable-pip-version-check'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        env: buildSafeEnv({ PYTHONUNBUFFERED: '1' }),
         windowsHide: true
       })
 
@@ -300,7 +324,7 @@ export class PythonManager {
   }
 
   // ─── 检测后端启动模式 ───
-  private detectBackendMode(): { mode: BackendMode; pythonPath: string; serverScript: string | null } {
+  private async detectBackendMode(): Promise<{ mode: BackendMode; pythonPath: string; serverScript: string | null }> {
     // 缓存结果
     if (this.cachedBackendMode && this.cachedPythonPath) {
       return {
@@ -346,10 +370,10 @@ export class PythonManager {
     }
 
     // 策略2: 系统 Python + 源码
-    const sysPython = this.findSystemPython()
+    const sysPython = await this.findSystemPython()
     if (sysPython) {
       this.addLog(`[检测] 找到系统 Python: ${sysPython}`)
-      if (this.validatePython(sysPython)) {
+      if (await this.validatePython(sysPython)) {
         const sourceDir = this.getBackendSourceDir()
         const mainPy = join(sourceDir, 'main.py')
         this.addLog(`[检测] 后端源码: ${sourceDir} → main.py=${existsSync(mainPy)}`)
@@ -382,13 +406,12 @@ export class PythonManager {
 
     this.process = spawn(pythonPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
+      env: buildSafeEnv({
         HERMES_PORT: String(this.options.port),
         HERMES_HOST: this.options.host,
         HERMES_LOG_LEVEL: settingsStore.get('logLevel'),
         PYTHONUNBUFFERED: '1'
-      },
+      }),
       windowsHide: true,
       ...(serverScript ? { cwd: this.getBackendSourceDir() } : {})
     })
@@ -475,7 +498,7 @@ export class PythonManager {
     }
 
     // 检测启动模式
-    const detection = this.detectBackendMode()
+    const detection = await this.detectBackendMode()
 
     if (detection.mode === 'none') {
       const errorMsg = '无法启动后端：未找到 PyInstaller 二进制，也未找到系统 Python (>= 3.9)。请安装 Python 3.9+ 后重试。'
@@ -505,7 +528,7 @@ export class PythonManager {
     }
 
     // ── 策略2: 系统 Python + 源码 ──
-    const sysPython = this.findSystemPython()
+    const sysPython = await this.findSystemPython()
     const sourceDir = this.getBackendSourceDir()
     const mainPy = join(sourceDir, 'main.py')
 
@@ -516,7 +539,7 @@ export class PythonManager {
       return
     }
 
-    if (!this.validatePython(sysPython)) {
+    if (!(await this.validatePython(sysPython))) {
       this.addLog('[启动] ❌ Python 版本过低 (需要 >= 3.9)')
       this.state.lastError = '后端启动失败：Python 版本过低，需要 3.9+'
       this.updateStatus('error')

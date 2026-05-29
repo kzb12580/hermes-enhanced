@@ -363,6 +363,8 @@ export const useChatStore = create<ChatState>()(
               thinking_mode: settings.thinkingMode,
               thinking_budget: settings.thinkingMode !== 'off' ? settings.thinkingBudget : undefined,
               skills: get().activeSkills,
+              temperature: settings.temperature,
+              max_tokens: settings.maxTokens,
             },
             controller.signal
           );
@@ -385,11 +387,11 @@ export const useChatStore = create<ChatState>()(
                 };
                 const currentMsg = get().currentMessages()?.find(m => m.id === assistantMsgId);
                 const existingToolCalls = currentMsg?.toolCalls || [];
-                get().updateMessage(assistantMsgId, {
-                  toolCalls: [...existingToolCalls, newToolCall],
-                });
-              } catch { /* ignore parse errors */ }
-              continue;
+               get().updateMessage(assistantMsgId, {
+                 toolCalls: [...existingToolCalls, newToolCall],
+               });
+              } catch (e) { console.warn('[chatStore] Failed to parse tool_call event:', e); }
+             continue;
             }
             if (token.startsWith('[TOOL_RESULT]')) {
               try {
@@ -410,10 +412,10 @@ export const useChatStore = create<ChatState>()(
                     }
                     return tc;
                   });
-                  get().updateMessage(assistantMsgId, { toolCalls: updatedToolCalls });
-                }
-              } catch { /* ignore parse errors */ }
-              continue;
+                 get().updateMessage(assistantMsgId, { toolCalls: updatedToolCalls });
+               }
+              } catch (e) { console.warn('[chatStore] Failed to parse tool_result event:', e); }
+             continue;
             }
             if (token.startsWith('[THINKING]')) {
               // Skip thinking tokens for now (could add UI later)

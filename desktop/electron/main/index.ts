@@ -392,7 +392,9 @@ function setupApplicationMenu(): void {
         {
           label: '关于',
           click: () => {
-            dialog.showMessageBox(getMainWindow()!, {
+            const win = getMainWindow()
+            if (!win) return
+            dialog.showMessageBox(win, {
               type: 'info',
               title: '关于 Hermes Desktop',
               message: 'Hermes Desktop',

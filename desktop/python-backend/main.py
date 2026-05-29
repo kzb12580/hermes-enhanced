@@ -99,7 +99,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS: 仅允许本地 Electron 前端
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:9876", "http://127.0.0.1:9876", "file://"],
+    allow_origins=["http://localhost:9876", "http://127.0.0.1:9876", "file://", "null"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
