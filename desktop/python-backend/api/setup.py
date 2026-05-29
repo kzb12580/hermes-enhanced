@@ -306,16 +306,38 @@ async def _run_install(req: InstallRequest):
         loop = asyncio.get_event_loop()
         
         def run_setup():
-            # Windows GBK 编码无法输出 emoji，强制 UTF-8
+            # Capture setup() print output and forward to _emit() for frontend progress
             import io
-            import codecs
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-            return setup_module.setup(
-                skip_model=req.skip_model,
-                skip_tesseract=req.skip_tesseract,
-                force_model=req.force_model,
-            )
+
+            class _ProgressCapture:
+                def write(self, text):
+                    if text and text.strip():
+                        line = text.strip()
+                        phase = "deps"
+                        for kw, ph in [("PyTorch", "pytorch"), ("模型", "model"),
+                                       ("LocateAnything", "model"), ("Tesseract", "tesseract"),
+                                       ("验证", "verify")]:
+                            if kw in line:
+                                phase = ph
+                                break
+                        _emit(phase, _estimate_progress(phase, line), line)
+                    return len(text) if text else 0
+                def flush(self):
+                    pass
+
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            capture = _ProgressCapture()
+            sys.stdout = capture
+            sys.stderr = capture
+            try:
+                return setup_module.setup(
+                    skip_model=req.skip_model,
+                    skip_tesseract=req.skip_tesseract,
+                    force_model=req.force_model,
+                )
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
         
         with concurrent.futures.ThreadPoolExecutor() as pool:
             success = await loop.run_in_executor(pool, run_setup)
