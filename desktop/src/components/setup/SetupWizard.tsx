@@ -251,10 +251,17 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
             <button
-              onClick={() => setStep(allDepsOk ? 3 : 1)}
+              onClick={() => {
+                if (allDepsOk) {
+                  localStorage.setItem('hermes_setup_done', 'true');
+                  onComplete();
+                } else {
+                  setStep(1);
+                }
+              }}
               style={btnStyle}
             >
-              下一步 <ArrowRight size={16} />
+              {allDepsOk ? '完成，开始使用' : '下一步'} <ArrowRight size={16} />
             </button>
           </div>
         </div>
@@ -486,9 +493,14 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 </button>
               )}
               {!installing && setupStatus?.phase !== 'done' && (
-                <button onClick={startInstall} style={btnStyle}>
-                  <Download size={16} /> 开始安装
-                </button>
+                <>
+                  <button onClick={startInstall} style={btnStyle}>
+                    <Download size={16} /> 开始安装
+                  </button>
+                  <button onClick={() => { localStorage.setItem('hermes_setup_done', 'true'); onComplete(); }} style={btnSecondaryStyle}>
+                    跳过
+                  </button>
+                </>
               )}
               {setupStatus?.phase === 'done' && (
                 <button onClick={() => setStep(3)} style={btnStyle}>
