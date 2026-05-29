@@ -358,9 +358,9 @@ export function InputBar() {
             multiple
           />
           <button
-            className="flex-shrink-0 p-3 text-[var(--text-muted)] opacity-40 cursor-not-allowed"
-            title="附件功能即将推出"
-            disabled
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-shrink-0 p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            title="添加附件"
           >
             <Paperclip size={18} />
           </button>

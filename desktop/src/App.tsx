@@ -58,9 +58,10 @@ export default function App() {
       const criticalDeps = ['pytorch', 'transformers', 'pillow', 'pyautogui'];
       const allOk = criticalDeps.every(d => deps[d]?.ok);
 
-      // critical deps OK -> skip wizard (tesseract/model are optional)
-      if (allOk) {
-        localStorage.setItem('hermes_setup_done', 'true');
+      // critical deps OK -> still show wizard (user may want to download model)
+      // Only auto-skip if user has explicitly completed wizard before
+      const wizardCompleted = localStorage.getItem('hermes_wizard_completed');
+      if (wizardCompleted === 'true') {
         setSetupDone(true);
       } else {
         setSetupDone(false);
@@ -73,6 +74,7 @@ export default function App() {
 
   const handleSetupComplete = () => {
     localStorage.setItem('hermes_setup_done', 'true');
+    localStorage.setItem('hermes_wizard_completed', 'true');
     setSetupDone(true);
   };
 
