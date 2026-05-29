@@ -301,12 +301,18 @@ async def _run_install(req: InstallRequest):
         # 在子进程中运行，实时读取输出
         # 设置子进程强制 UTF-8 输出（解决 Windows 中文编码问题）
         import locale
-        child_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        backend_dir = str(Path(__file__).parent.parent)
+        child_env = {
+            **os.environ,
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONPATH": backend_dir + os.pathsep + os.environ.get("PYTHONPATH", ""),
+        }
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=child_env,
+            cwd=backend_dir,
         )
 
         phase_map = {
