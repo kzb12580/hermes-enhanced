@@ -65,8 +65,8 @@ export default function App() {
         setSetupDone(false);
       }
     } catch (e) {
-      // 后端未启动，跳过向导
-      setSetupDone(true);
+      // 后端未启动，仍显示向导（首次安装场景）
+      setSetupDone(false);
     }
   };
 

@@ -29,7 +29,7 @@ async function fetchModels(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    const res = await fetch(`${BACKEND_URL}/api/models?${params}`, {
+    const res = await fetch(`${getBackendUrl()}/api/models?${params}`, {
       method: 'GET',
       signal: controller.signal,
     });
