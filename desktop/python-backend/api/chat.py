@@ -73,13 +73,13 @@ RESPONSE_TOKEN_BUDGETS = {
 def get_model_context_config(model_name: str) -> tuple[int, int]:
     """Return (context_window, max_response_tokens) for a model."""
     model_lower = model_name.lower()
-    context_window = 65_536  # default (64K)
+    context_window = 1_048_576  # default (1M)
     for pattern, window in MODEL_CONTEXT_WINDOWS.items():
         if pattern in model_lower:
             context_window = window
             break
     # Find appropriate response budget
-    max_response = 8_192  # default
+    max_response = 32_768  # default (32K)
     for threshold, budget in sorted(RESPONSE_TOKEN_BUDGETS.items(), reverse=True):
         if context_window >= threshold:
             max_response = budget
