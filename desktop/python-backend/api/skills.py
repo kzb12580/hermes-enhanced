@@ -1,113 +1,62 @@
-"""Skills API — list, view, search, and reload skills from Markdown files."""
+"""Skills API — manage and query skills."""
 
-from typing import List
+from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from api.skills_manager import skill_manager
+
+logger = logging.getLogger("hermes-backend.skills")
 router = APIRouter()
 
-# ---------------------------------------------------------------------------
-# Lazy singleton for the SkillLoader
-# ---------------------------------------------------------------------------
 
-_skill_loader = None
-
-
-def get_skill_loader():
-    global _skill_loader
-    if _skill_loader is None:
-        from skills.loader import SkillLoader
-        _skill_loader = SkillLoader()
-    return _skill_loader
-
-
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-class SkillInfo(BaseModel):
-    id: str
-    name: str
-    description: str
-    category: str
-    tags: List[str]
-    triggers: List[str]
-    is_builtin: bool
-
-
-class SkillDetail(SkillInfo):
-    content: str
-    tools: List[str]
-
-
-class SearchRequest(BaseModel):
-    query: str
-
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-@router.get("/api/skills", response_model=List[SkillInfo])
+@router.get("/api/skills")
 async def list_skills():
-    """Return all registered skills."""
-    loader = get_skill_loader()
-    return [
-        SkillInfo(
-            id=s.name,
-            name=s.name,
-            description=s.description,
-            category=s.category,
-            tags=s.tags,
-            triggers=s.triggers,
-            is_builtin=s.is_builtin,
-        )
-        for s in loader.get_all()
-    ]
+    """List all available skills."""
+    skills = skill_manager.get_all_skills()
+    return {
+        "skills": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "triggers": s.triggers,
+            }
+            for s in skills
+        ]
+    }
 
 
-@router.get("/api/skills/{name}", response_model=SkillDetail)
+@router.get("/api/skills/{name}")
 async def get_skill(name: str):
-    """Return full details for a single skill."""
-    loader = get_skill_loader()
-    skill = loader.get_by_name(name)
+    """Get a specific skill by name."""
+    skill = skill_manager.get_skill(name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-    return SkillDetail(
-        id=skill.name,
-        name=skill.name,
-        description=skill.description,
-        category=skill.category,
-        tags=skill.tags,
-        triggers=skill.triggers,
-        tools=skill.tools,
-        content=skill.content,
-        is_builtin=skill.is_builtin,
-    )
+    return {
+        "name": skill.name,
+        "description": skill.description,
+        "triggers": skill.triggers,
+        "content": skill.content,
+    }
 
 
-@router.post("/api/skills/search", response_model=List[SkillInfo])
-async def search_skills(request: SearchRequest):
-    """Search skills by keyword."""
-    loader = get_skill_loader()
-    return [
-        SkillInfo(
-            id=s.name,
-            name=s.name,
-            description=s.description,
-            category=s.category,
-            tags=s.tags,
-            triggers=s.triggers,
-            is_builtin=s.is_builtin,
-        )
-        for s in loader.search(request.query)
-    ]
+class SkillQuery(BaseModel):
+    query: str = Field(..., min_length=1, max_length=1000)
 
 
-@router.post("/api/skills/reload")
-async def reload_skills():
-    """Re-scan skill directories and reload all definitions."""
-    loader = get_skill_loader()
-    loader.reload()
-    return {"status": "ok", "count": len(loader.skills)}
+@router.post("/api/skills/match")
+async def match_skills(request: SkillQuery):
+    """Find skills matching a query."""
+    skills = skill_manager.get_skills_for_query(request.query)
+    return {
+        "skills": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "triggers": s.triggers,
+            }
+            for s in skills
+        ]
+    }

@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from api.session_manager import SessionManager
 from api.memory import get_memory_context
+from api.prompts import build_system_prompt as _build_system_prompt, build_tools_description
+from api.skills_manager import skill_manager
 from tools import all_tools, openai_tools, execute_tool
 
 logger = logging.getLogger("hermes-backend.chat")
@@ -163,12 +165,17 @@ def truncate_tool_result(result: str) -> str:
 
 
 def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
-    """Build system prompt with memory context."""
-    sys_prompt = custom_prompt or DEFAULT_SYSTEM_PROMPT
+    """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
-    if memory_ctx:
-        sys_prompt = sys_prompt + memory_ctx
-    return sys_prompt
+    skills_ctx = skill_manager.get_skills_context()
+    tools_desc = build_tools_description(openai_tools())
+    
+    return _build_system_prompt(
+        custom_prompt=custom_prompt,
+        memory_context=memory_ctx,
+        skills_context=skills_ctx,
+        tools_description=tools_desc,
+    )
 
 
 async def call_llm_streaming(

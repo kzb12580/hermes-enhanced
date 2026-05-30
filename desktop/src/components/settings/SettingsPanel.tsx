@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
 import { VisionModelDownload } from './VisionModelDownload';
+import { SkillsPanel } from './SkillsPanel';
 import { EmailConfig } from '../email/EmailConfig';
 
-type SettingsTab = 'general' | 'models' | 'network' | 'email' | 'apikeys' | 'about';
+type SettingsTab = 'general' | 'models' | 'skills' | 'network' | 'email' | 'apikeys' | 'about';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'general', label: '通用', icon: <Settings2 size={16} /> },
   { id: 'models', label: '模型', icon: <Cpu size={16} /> },
+  { id: 'skills', label: '技能', icon: <Zap size={16} /> },
   { id: 'network', label: '网络', icon: <Wifi size={16} /> },
   { id: 'email', label: '邮件', icon: <Mail size={16} /> },
   { id: 'apikeys', label: 'API 密钥', icon: <Key size={16} /> },
@@ -93,6 +95,11 @@ export function SettingsPanel() {
             )}
             {activeTab === 'network' && (
               <NetworkSettings />
+            )}
+            {activeTab === 'skills' && (
+              <div>
+                <SkillsPanel />
+              </div>
             )}
             {activeTab === 'email' && (
               <div>
