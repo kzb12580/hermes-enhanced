@@ -25,8 +25,9 @@ router = APIRouter()
 # ─── Constants ─────────────────────────────────────────────────────────────
 
 MAX_CONTENT_LENGTH = 100_000
-MAX_TOOL_RESULT_SIZE = 10_000  # 10KB max tool result
-MAX_TOOL_CALLS_PER_TURN = 10  # Max tool calls per conversation turn
+MAX_TOOL_RESULT_SIZE = 10_000  # 10KB per tool result
+MAX_TOOL_CALLS_PER_TURN = 10
+MAX_TOOL_ITERATIONS = 5  # Max tool execution loops per turn
 
 # ─── System Prompt ─────────────────────────────────────────────────────────
 
@@ -381,36 +382,77 @@ async def chat(message: ChatMessage):
     tools = openai_tools()
 
     async def generate_stream():
-        """Generate SSE stream for chat response."""
+        """Generate SSE stream for chat response with tool execution loop."""
         try:
-            # First LLM call with streaming
-            full_response = ""
-            tool_calls_data = []
+            current_messages = list(api_messages)
             
-            async for chunk in call_llm_streaming(base_url, api_key, model, api_messages, max_tokens, temperature, tools):
-                if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
-                    # Regular content
-                    full_response += chunk
-                    yield f"data: {json.dumps({'content': chunk})}\n\n"
-                elif isinstance(chunk, str) and chunk.startswith('{"tool_calls"'):
-                    # Tool call chunk
-                    try:
-                        tc_data = json.loads(chunk)
-                        tc = tc_data.get("tool_calls")
-                        if tc:
-                            tool_calls_data.extend(tc)
-                    except json.JSONDecodeError:
-                        pass
-
-            # If we got tool calls, execute them and do follow-up
-            if tool_calls_data:
-                # Reconstruct tool calls for execution
-                # Note: This is simplified - in production you'd need to properly accumulate tool calls
-                yield f"data: {json.dumps({'tool_calls': tool_calls_data})}\n\n"
+            for iteration in range(MAX_TOOL_ITERATIONS + 1):
+                # Call LLM with streaming
+                full_response = ""
+                raw_tool_calls = []  # Accumulate streaming tool call deltas
                 
-                # Execute tools (simplified - would need proper accumulation in production)
-                # For now, just send the tool calls to the client
+                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools):
+                    if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
+                        # Regular content token
+                        full_response += chunk
+                        yield f"event: token\ndata: {chunk}\n\n"
+                    elif isinstance(chunk, str) and chunk.startswith('{"tool_calls"'):
+                        # Tool call delta from streaming
+                        try:
+                            tc_data = json.loads(chunk)
+                            tc = tc_data.get("tool_calls")
+                            if tc:
+                                raw_tool_calls.extend(tc)
+                        except json.JSONDecodeError:
+                            pass
                 
+                # If no tool calls, we're done
+                if not raw_tool_calls:
+                    break
+                
+                # Accumulate streaming tool call deltas into complete tool calls
+                # Streaming sends partial updates: {index:0, id:"xxx", function:{name:"...", arguments:"..."}}
+                accumulated = {}
+                for tc in raw_tool_calls:
+                    idx = tc.get("index", 0)
+                    if idx not in accumulated:
+                        accumulated[idx] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                    if tc.get("id"):
+                        accumulated[idx]["id"] = tc["id"]
+                    if tc.get("type"):
+                        accumulated[idx]["type"] = tc["type"]
+                    func = tc.get("function", {})
+                    if func.get("name"):
+                        accumulated[idx]["function"]["name"] = func["name"]
+                    if func.get("arguments"):
+                        accumulated[idx]["function"]["arguments"] += func["arguments"]
+                
+                complete_tool_calls = list(accumulated.values())
+                
+                # Send tool call events to frontend
+                for tc in complete_tool_calls:
+                    yield f"event: tool_call\ndata: {json.dumps({'id': tc['id'], 'name': tc['function']['name'], 'arguments': tc['function']['arguments']})}\n\n"
+                
+                # Add assistant message with tool_calls to history
+                assistant_msg = {"role": "assistant", "content": full_response or None, "tool_calls": complete_tool_calls}
+                current_messages.append(assistant_msg)
+                session["messages"].append(assistant_msg)
+                
+                # Execute tools
+                tool_results = await execute_tools(complete_tool_calls)
+                
+                # Send tool results and add to messages
+                for result in tool_results:
+                    yield f"event: tool_result\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\n\n"
+                    current_messages.append(result)
+                    session["messages"].append(result)
+                
+                # Continue loop for follow-up LLM call
+                logger.info("Tool iteration %d done, calling LLM again", iteration + 1)
+            
+            # Save session
+            session_manager._save()
+            
             # Send done event
             yield "event: done\ndata: \n\n"
 
