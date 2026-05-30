@@ -27,8 +27,8 @@ router = APIRouter()
 
 MAX_CONTENT_LENGTH = 100_000
 MAX_TOOL_RESULT_SIZE = 50_000  # 50KB per tool result
-MAX_TOOL_CALLS_PER_TURN = 10
-MAX_TOOL_ITERATIONS = 5  # Max tool execution loops per turn
+MAX_TOOL_CALLS_PER_TURN = 50
+MAX_TOOL_ITERATIONS = 50  # Max tool execution loops per turn
 
 # Apply adaptive limits from performance detection
 try:
