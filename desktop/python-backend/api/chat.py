@@ -396,7 +396,9 @@ async def chat(message: ChatMessage):
                     # Tool call chunk
                     try:
                         tc_data = json.loads(chunk)
-                        tool_calls_data.extend(tc_data.get("tool_calls", []))
+                        tc = tc_data.get("tool_calls")
+                        if tc:
+                            tool_calls_data.extend(tc)
                     except json.JSONDecodeError:
                         pass
 
