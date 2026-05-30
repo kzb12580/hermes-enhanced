@@ -1,38 +1,29 @@
-"""Hermes Desktop Python Backend — FastAPI server with tool execution."""
+"""Chat API — handles chat sessions with tool execution."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
-import sys
 import time
-from contextlib import asynccontextmanager
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-import uvicorn
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+import httpx
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-# Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from api.session_manager import SessionManager
-from api.memory import MemoryManager
+from api.memory import get_memory_context
 from tools import all_tools, openai_tools, execute_tool
 
-logger = logging.getLogger("hermes-backend")
+logger = logging.getLogger("hermes-backend.chat")
+router = APIRouter()
 
 # ─── Constants ─────────────────────────────────────────────────────────────
 
-MAX_CONTENT_LENGTH = 100_000  # 100KB max message
+MAX_CONTENT_LENGTH = 100_000
 MAX_INPUT_TOKENS = 128_000
 DEFAULT_MAX_TOKENS = 4096
-SESSION_TIMEOUT = 3600  # 1 hour
 
 # ─── System Prompt ─────────────────────────────────────────────────────────
 
@@ -61,22 +52,15 @@ DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI desktop assistant with FULL too
 
 ### Vision & Screen
 - **screen_capture** — Take screenshots of the current screen
-  - Parameters: region ('full', 'active_window', or 'x,y,width,height'), save_path
-  - Use this BEFORE vision_locate to get an image to analyze
 - **vision_locate** — Analyze screenshots to locate GUI elements or understand screen content
-  - Parameters: image_path (required), question (what to find/understand)
-  - Uses nvidia/LocateAnything-3B model for visual understanding
-  - Can identify buttons, text, icons, layout, and other UI elements
 - **ocr_extract** — Extract text from images using OCR
-  - Parameters: image_path (required), language ('chi_sim', 'eng', 'chi_sim+eng'), method ('tesseract' or 'vision')
-  - Use 'vision' method for complex layouts or handwritten text
 
 ## YOUR CAPABILITIES
 You CAN do all of these by writing Python scripts and running them:
-- **PPT Creation** — python-pptx library is installed. Write a .py script, run it, deliver the .pptx file
+- **PPT Creation** — python-pptx library is installed
 - **Word Documents** — python-docx library is installed
 - **Excel Spreadsheets** — openpyxl library is installed
-- **Image Processing** — Pillow library is installed (resize, crop, filters, format conversion)
+- **Image Processing** — Pillow library is installed
 - **Web Scraping** — Use web_search and web_extract tools
 - **File Operations** — Read, write, search any file
 - **Code Execution** — Run any Python script via terminal tool
@@ -105,6 +89,8 @@ You have persistent memory. Previous conversations and user preferences are inje
 Respond in the user's language. Be concise. Always use tools to complete tasks."""
 
 
+# ─── Models ────────────────────────────────────────────────────────────────
+
 class ChatMessage(BaseModel):
     content: str = Field(..., min_length=1, max_length=MAX_CONTENT_LENGTH)
     session_id: Optional[str] = None
@@ -112,9 +98,6 @@ class ChatMessage(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     system_prompt: Optional[str] = None
-    thinking_mode: Optional[str] = None
-    thinking_budget: Optional[int] = None
-    proxy_url: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=128000)
 
@@ -123,41 +106,15 @@ class SessionCreate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=200)
 
 
-# ─── App Setup ─────────────────────────────────────────────────────────────
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown."""
-    logger.info("Hermes Desktop Backend starting...")
-    yield
-    logger.info("Hermes Desktop Backend shutting down...")
-
-
-app = FastAPI(
-    title="Hermes Desktop Backend",
-    version="1.9.0",
-    lifespan=lifespan,
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # ─── Managers ──────────────────────────────────────────────────────────────
 
 session_manager = SessionManager()
-memory_manager = MemoryManager()
 
 
 # ─── Helper Functions ──────────────────────────────────────────────────────
 
 def estimate_tokens(text: str) -> int:
-    """Rough token estimate: 1 token ≈ 4 chars for English, 2 chars for Chinese."""
+    """Rough token estimate."""
     chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
     other_chars = len(text) - chinese_chars
     return chinese_chars + (other_chars // 4) + 1
@@ -166,37 +123,23 @@ def estimate_tokens(text: str) -> int:
 def get_model_context_config(model: str) -> tuple[int, int]:
     """Get context window and max response tokens for a model."""
     model_lower = model.lower()
-
-    # MIMO models
     if "mimo" in model_lower:
         return 1_000_000, 32_000
-
-    # Claude models
     if "claude" in model_lower:
-        if "opus" in model_lower:
-            return 200_000, 4096
         return 200_000, 4096
-
-    # GPT models
     if "gpt-4" in model_lower:
         return 128_000, 4096
     if "gpt-3.5" in model_lower:
         return 16_385, 4096
-
-    # Default
     return 32_768, 4096
 
 
 def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
-    """Trim message history to fit within token limit, preserving system prompt and recent messages."""
+    """Trim message history to fit within token limit."""
     if not messages:
         return messages
-
-    # Always keep the first message (system prompt or first user message)
     result = [messages[0]]
     total_tokens = estimate_tokens(messages[0].get("content", ""))
-
-    # Work backwards from most recent messages
     for msg in reversed(messages[1:]):
         msg_tokens = 0
         if "content" in msg and msg["content"]:
@@ -207,40 +150,59 @@ def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
             break
         result.append(msg)
         total_tokens += msg_tokens
-
     result.reverse()
     return result
 
 
 # ─── API Routes ────────────────────────────────────────────────────────────
 
-@app.get("/health")
-async def health():
-    """Health check."""
+@router.get("/api/chat/sessions")
+async def list_sessions():
+    """List all sessions."""
+    return {"sessions": session_manager.list_sessions()}
+
+
+@router.post("/api/chat/sessions")
+async def create_session(request: SessionCreate):
+    """Create a new session."""
+    session_id = str(int(time.time() * 1000))
+    session = session_manager.create_session(session_id, request.name)
+    return {"session_id": session_id, "name": request.name}
+
+
+@router.get("/api/chat/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Get session details."""
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
     return {
-        "status": "ok",
-        "version": "1.9.0",
-        "tools_count": len(all_tools()),
-        "timestamp": datetime.now().isoformat(),
+        "session_id": session_id,
+        "messages": session["messages"],
+        "created_at": session.get("created_at"),
     }
 
 
-@app.get("/tools")
-async def list_tools():
-    """List all available tools."""
-    return {
-        "tools": [
-            {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.parameters,
-            }
-            for t in all_tools()
-        ]
-    }
+@router.delete("/api/chat/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session."""
+    if session_manager.delete_session(session_id):
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Session not found")
 
 
-@app.post("/chat")
+@router.post("/api/chat/sessions/{session_id}/clear")
+async def clear_session(session_id: str):
+    """Clear session history."""
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session["messages"] = []
+    session_manager._save()
+    return {"status": "cleared"}
+
+
+@router.post("/api/chat")
 async def chat(message: ChatMessage):
     """Process a chat message with tool support."""
     session_id = message.session_id or str(int(time.time() * 1000))
@@ -249,7 +211,6 @@ async def chat(message: ChatMessage):
     session = session_manager.get_session(session_id)
     if not session:
         session = session_manager.create_session(session_id)
-        logger.info("Created new session: %s", session_id)
 
     # Add user message to history
     session["messages"].append({
@@ -257,7 +218,7 @@ async def chat(message: ChatMessage):
         "content": message.content,
     })
 
-    # Build message history with model-aware context window
+    # Build message history
     history = session["messages"]
     api_messages = []
 
@@ -270,9 +231,8 @@ async def chat(message: ChatMessage):
 
     # Auto-adjust context based on model
     context_window, max_response = get_model_context_config(message.model or "default")
-    # Reserve tokens: system prompt + response + safety margin
     system_tokens = estimate_tokens(sys_prompt)
-    max_input_tokens = context_window - max_response - system_tokens - 500  # 500 token safety
+    max_input_tokens = context_window - max_response - system_tokens - 500
 
     # Trim history to fit
     trimmed = trim_messages(history, max_input_tokens)
@@ -285,18 +245,13 @@ async def chat(message: ChatMessage):
     if not api_key:
         raise HTTPException(status_code=401, detail="API key not configured")
 
-    # Call LLM
     try:
-        import httpx
-
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
-        # Prepare tools
         tools = openai_tools()
-
         payload = {
             "model": message.model or "gpt-3.5-turbo",
             "messages": api_messages,
@@ -308,12 +263,7 @@ async def chat(message: ChatMessage):
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        # Add proxy if specified
-        client_kwargs = {"timeout": 120}
-        if message.proxy_url:
-            client_kwargs["proxy"] = message.proxy_url
-
-        async with httpx.AsyncClient(**client_kwargs) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 f"{base_url.rstrip('/')}/chat/completions",
                 headers=headers,
@@ -330,10 +280,8 @@ async def chat(message: ChatMessage):
 
             # Handle tool calls
             if "tool_calls" in assistant_message and assistant_message["tool_calls"]:
-                # Add assistant message with tool calls
                 session["messages"].append(assistant_message)
 
-                # Execute each tool call
                 for tool_call in assistant_message["tool_calls"]:
                     tool_name = tool_call["function"]["name"]
                     tool_args = json.loads(tool_call["function"]["arguments"])
@@ -342,20 +290,18 @@ async def chat(message: ChatMessage):
                     result = await execute_tool(tool_name, tool_args)
                     logger.info("Tool result: %s...", result[:200])
 
-                    # Add tool result to history
                     session["messages"].append({
                         "role": "tool",
                         "tool_call_id": tool_call["id"],
                         "content": result,
                     })
 
-                # Make a follow-up call to get final response
+                # Follow-up call
                 api_messages_with_tools = [{"role": "system", "content": sys_prompt}]
                 api_messages_with_tools.extend(trim_messages(session["messages"], max_input_tokens))
-
                 payload["messages"] = api_messages_with_tools
 
-                async with httpx.AsyncClient(**client_kwargs) as client2:
+                async with httpx.AsyncClient(timeout=120) as client2:
                     response2 = await client2.post(
                         f"{base_url.rstrip('/')}/chat/completions",
                         headers=headers,
@@ -366,6 +312,7 @@ async def chat(message: ChatMessage):
                         data2 = response2.json()
                         final_message = data2["choices"][0]["message"]
                         session["messages"].append(final_message)
+                        session_manager._save()
                         return {
                             "response": final_message.get("content", ""),
                             "session_id": session_id,
@@ -378,9 +325,9 @@ async def chat(message: ChatMessage):
                             ],
                         }
                     else:
-                        # Return tool results even if follow-up fails
+                        session_manager._save()
                         return {
-                            "response": f"Tools executed successfully but follow-up failed: {response2.text[:200]}",
+                            "response": f"Tools executed but follow-up failed: {response2.text[:200]}",
                             "session_id": session_id,
                             "tool_calls": [
                                 {
@@ -391,8 +338,8 @@ async def chat(message: ChatMessage):
                             ],
                         }
             else:
-                # No tool calls, just return the response
                 session["messages"].append(assistant_message)
+                session_manager._save()
                 return {
                     "response": assistant_message.get("content", ""),
                     "session_id": session_id,
@@ -406,99 +353,16 @@ async def chat(message: ChatMessage):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/sessions")
-async def create_session(request: SessionCreate):
-    """Create a new chat session."""
-    session_id = str(int(time.time() * 1000))
-    session = session_manager.create_session(session_id, request.name)
-    return {"session_id": session_id, "name": request.name}
-
-
-@app.get("/sessions")
-async def list_sessions():
-    """List all sessions."""
-    return {"sessions": session_manager.list_sessions()}
-
-
-@app.get("/sessions/{session_id}")
-async def get_session(session_id: str):
-    """Get session details."""
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+@router.get("/api/chat/tools")
+async def list_tools():
+    """List all available tools."""
     return {
-        "session_id": session_id,
-        "messages": session["messages"],
-        "created_at": session.get("created_at"),
+        "tools": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.parameters,
+            }
+            for t in all_tools()
+        ]
     }
-
-
-@app.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
-    """Delete a session."""
-    if session_manager.delete_session(session_id):
-        return {"status": "deleted"}
-    raise HTTPException(status_code=404, detail="Session not found")
-
-
-@app.post("/sessions/{session_id}/clear")
-async def clear_session(session_id: str):
-    """Clear session history."""
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    session["messages"] = []
-    return {"status": "cleared"}
-
-
-# ─── Memory Endpoints ──────────────────────────────────────────────────────
-
-@app.get("/memory")
-async def get_memory():
-    """Get all memories."""
-    return {"memories": memory_manager.get_all()}
-
-
-@app.post("/memory")
-async def add_memory(request: dict):
-    """Add a memory."""
-    content = request.get("content")
-    if not content:
-        raise HTTPException(status_code=400, detail="content is required")
-    memory_manager.add(content)
-    return {"status": "added"}
-
-
-@app.delete("/memory/{memory_id}")
-async def delete_memory(memory_id: str):
-    """Delete a memory."""
-    if memory_manager.delete(memory_id):
-        return {"status": "deleted"}
-    raise HTTPException(status_code=404, detail="Memory not found")
-
-
-def get_memory_context() -> str:
-    """Get memory context string to inject into system prompt."""
-    memories = memory_manager.get_all()
-    if not memories:
-        return ""
-    context = "\n\n## PERSISTENT MEMORY\nThings I remember about you:\n"
-    for m in memories:
-        context += f"- {m['content']}\n"
-    return context
-
-
-# ─── Main ──────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    uvicorn.run(
-        "api.chat:app",
-        host="127.0.0.1",
-        port=9876,
-        reload=False,
-        log_level="info",
-    )
