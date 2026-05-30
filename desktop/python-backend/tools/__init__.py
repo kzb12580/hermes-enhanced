@@ -61,6 +61,12 @@ def _auto_register():
     from .ocr_tool import OCRTool
     from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
     from . import office_tools
+    from .automation_tools import (
+        MouseClickTool, MouseMoveTool, MouseDragTool, MouseScrollTool,
+        KeyboardTypeTool, KeyboardHotkeyTool, KeyboardPressTool,
+        ListWindowsTool, FindWindowTool, BringToFrontTool,
+        WaitTool, GetMousePosTool, ScreenSizeTool,
+    )
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
@@ -69,6 +75,11 @@ def _auto_register():
         VisionTool,
         ScreenCaptureTool,
         OCRTool,
+        # Automation tools
+        MouseClickTool, MouseMoveTool, MouseDragTool, MouseScrollTool,
+        KeyboardTypeTool, KeyboardHotkeyTool, KeyboardPressTool,
+        ListWindowsTool, FindWindowTool, BringToFrontTool,
+        WaitTool, GetMousePosTool, ScreenSizeTool,
     ]:
         try:
             register(tool_cls())

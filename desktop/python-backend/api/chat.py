@@ -23,12 +23,23 @@ from tools import all_tools, openai_tools, execute_tool
 logger = logging.getLogger("hermes-backend.chat")
 router = APIRouter()
 
-# ─── Constants ─────────────────────────────────────────────────────────────
+# ─── Constants (base defaults, overridden by perf_detect) ──────────────────
 
 MAX_CONTENT_LENGTH = 100_000
 MAX_TOOL_RESULT_SIZE = 10_000  # 10KB per tool result
 MAX_TOOL_CALLS_PER_TURN = 10
 MAX_TOOL_ITERATIONS = 5  # Max tool execution loops per turn
+
+# Apply adaptive limits from performance detection
+try:
+    from perf_detect import get_limits as _get_perf_limits
+    _plimits = _get_perf_limits()
+    MAX_CONTENT_LENGTH = _plimits["max_content_length"]
+    MAX_TOOL_RESULT_SIZE = _plimits["max_tool_result_size"]
+    MAX_TOOL_CALLS_PER_TURN = _plimits["max_tool_calls_per_turn"]
+    MAX_TOOL_ITERATIONS = _plimits["max_tool_iterations"]
+except Exception:
+    pass  # Use defaults if perf detection fails
 
 # ─── System Prompt ─────────────────────────────────────────────────────────
 
@@ -494,8 +505,20 @@ async def chat(message: ChatMessage):
             last_had_tools = len(raw_tool_calls) > 0 if 'raw_tool_calls' in dir() else False
             if last_had_tools:
                 logger.info("Tool loop exhausted, calling LLM for final text response (no tools)")
+                # Strip heavy tool messages to free context space for the final response
+                trimmed_messages = []
+                for msg in current_messages:
+                    if msg.get("role") == "tool":
+                        continue  # Drop tool results
+                    if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                        trimmed = {k: v for k, v in msg.items() if k != "tool_calls"}
+                        if trimmed.get("content"):
+                            trimmed_messages.append(trimmed)
+                        continue
+                    trimmed_messages.append(msg)
+                logger.info("Trimmed messages: %d → %d for final response", len(current_messages), len(trimmed_messages))
                 final_response = ""
-                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools=None):
+                async for chunk in call_llm_streaming(base_url, api_key, model, trimmed_messages, max_tokens, temperature, tools=None):
                     if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         final_response += chunk
                         yield f"event: token\ndata: {chunk}\n\n"

@@ -18,3 +18,16 @@ async def health_check():
         "version": VERSION,
         "uptime_seconds": round(uptime_seconds, 2),
     }
+
+
+@router.get("/api/performance")
+async def performance_info():
+    """Return host performance profile and adaptive limits."""
+    try:
+        from perf_detect import get_profile, get_limits
+        return {
+            "profile": get_profile(),
+            "limits": get_limits(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
