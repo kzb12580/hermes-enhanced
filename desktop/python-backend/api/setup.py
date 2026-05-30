@@ -196,14 +196,67 @@ class ModelDownloadRequest(BaseModel):
     mirror: str = "hf-mirror"  # hf-mirror / modelscope / official
 
 
+def _find_model_path():
+    """Check if vision model is downloaded."""
+    from pathlib import Path
+    candidates = [
+        Path.home() / ".hermes" / "desktop" / "models" / "LocateAnything-3B",
+        Path.home() / ".hermes" / "desktop" / "models" / "nvidia--LocateAnything-3B",
+        Path.home() / ".cache" / "huggingface" / "hub",
+    ]
+    for p in candidates[:2]:
+        if p.exists() and any(p.glob("*.safetensors")):
+            return str(p)
+    # Check HF cache
+    hf_cache = candidates[2]
+    if hf_cache.exists():
+        for d in hf_cache.iterdir():
+            if "LocateAnything" in d.name:
+                snapshots = d / "snapshots"
+                if snapshots.exists():
+                    for s in snapshots.iterdir():
+                        if any(s.glob("*.safetensors")):
+                            return str(s)
+    return None
+
+
+@router.get("/api/setup/model-status")
+async def model_status():
+    """Check if vision model exists."""
+    path = _find_model_path()
+    return {"exists": path is not None, "path": path}
+
+
+@router.delete("/api/setup/delete-model")
+async def delete_model():
+    """Delete vision model."""
+    import shutil
+    path = _find_model_path()
+    if not path:
+        raise HTTPException(status_code=404, detail="Model not found")
+    try:
+        shutil.rmtree(path)
+        return {"success": True, "deleted": path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/setup/download-model")
 async def download_model(req: ModelDownloadRequest):
     """Download LocateAnything-3B model with mirror selection"""
+    import time as _time
     async with _install_lock:
         if _install_state["running"]:
-            raise HTTPException(status_code=409, detail="Installation already running")
+            # Force reset if stuck for more than 30 minutes
+            if _install_state.get("start_time") and _time.time() - _install_state["start_time"] > 1800:
+                _install_state["running"] = False
+                _install_state["phase"] = "idle"
+                logger.warning("Force reset stuck installation")
+            else:
+                raise HTTPException(status_code=409, detail="Installation already running")
 
         _install_state["running"] = True
+        _install_state["start_time"] = _time.time()
         _install_state["phase"] = "model"
         _install_state["progress"] = 0
         _install_state["error"] = None

@@ -3,6 +3,7 @@ import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi,
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
+import { VisionModelDownload } from './VisionModelDownload';
 import { EmailConfig } from '../email/EmailConfig';
 
 type SettingsTab = 'general' | 'models' | 'network' | 'email' | 'apikeys' | 'about';
@@ -85,6 +86,9 @@ export function SettingsPanel() {
               <div>
                 <h3 className="text-base font-semibold text-[var(--text-primary)] mb-4">模型配置</h3>
                 <ModelConfig />
+                <div className="mt-6 pt-6 border-t border-[var(--border)]">
+                  <VisionModelDownload />
+                </div>
               </div>
             )}
             {activeTab === 'network' && (

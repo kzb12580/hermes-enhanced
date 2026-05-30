@@ -242,9 +242,15 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             <div style={{
               padding: 12, borderRadius: 8, marginBottom: 20,
               background: 'rgba(239,68,68,0.1)',
-              display: 'flex', alignItems: 'center', gap: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
             }}>
               <span style={{ color: '#fca5a5', fontSize: 14 }}>{modelError}</span>
+              <button onClick={startDownload} style={{
+                ...btnStyle, padding: '6px 12px', fontSize: 12,
+                background: '#ef4444',
+              }}>
+                <RefreshCw size={14} /> 重试
+              </button>
             </div>
           )}
 
