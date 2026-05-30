@@ -61,6 +61,7 @@ def _auto_register():
     from .ocr_tool import OCRTool
     from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
     from . import office_tools
+    from .memory_tools import SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool
     from .automation_tools import (
         MouseClickTool, MouseMoveTool, MouseDragTool, MouseScrollTool,
         KeyboardTypeTool, KeyboardHotkeyTool, KeyboardPressTool,
@@ -75,6 +76,8 @@ def _auto_register():
         VisionTool,
         ScreenCaptureTool,
         OCRTool,
+        # Memory tools
+        SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool,
         # Automation tools
         MouseClickTool, MouseMoveTool, MouseDragTool, MouseScrollTool,
         KeyboardTypeTool, KeyboardHotkeyTool, KeyboardPressTool,
