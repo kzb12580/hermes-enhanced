@@ -22,8 +22,8 @@ router = APIRouter()
 # ─── Constants ─────────────────────────────────────────────────────────────
 
 MAX_CONTENT_LENGTH = 100_000
-MAX_INPUT_TOKENS = 128_000
-DEFAULT_MAX_TOKENS = 4096
+MAX_TOOL_RESULT_SIZE = 10_000  # 10KB max tool result
+MAX_TOOL_CALLS_PER_TURN = 10  # Max tool calls per conversation turn
 
 # ─── System Prompt ─────────────────────────────────────────────────────────
 
@@ -154,6 +154,83 @@ def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
     return result
 
 
+def truncate_tool_result(result: str) -> str:
+    """Truncate tool result if too large."""
+    if len(result) > MAX_TOOL_RESULT_SIZE:
+        return result[:MAX_TOOL_RESULT_SIZE] + f"\n\n[Result truncated: {len(result)} chars total]"
+    return result
+
+
+def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
+    """Build system prompt with memory context."""
+    sys_prompt = custom_prompt or DEFAULT_SYSTEM_PROMPT
+    memory_ctx = get_memory_context()
+    if memory_ctx:
+        sys_prompt = sys_prompt + memory_ctx
+    return sys_prompt
+
+
+async def call_llm(
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict],
+    max_tokens: int,
+    temperature: float,
+    tools: Optional[list[dict]] = None,
+) -> dict:
+    """Call LLM API with retry logic."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+
+        if response.status_code != 200:
+            error_text = response.text
+            logger.error("API error %d: %s", response.status_code, error_text[:500])
+            raise HTTPException(status_code=response.status_code, detail=error_text)
+
+        return response.json()
+
+
+async def execute_tools(tool_calls: list[dict]) -> list[dict]:
+    """Execute multiple tool calls and return results."""
+    results = []
+    for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
+        tool_name = tool_call["function"]["name"]
+        tool_args = json.loads(tool_call["function"]["arguments"])
+
+        logger.info("Executing tool: %s(%s)", tool_name, tool_args)
+        result = await execute_tool(tool_name, tool_args)
+        result = truncate_tool_result(result)
+        logger.info("Tool result: %s...", result[:200])
+
+        results.append({
+            "role": "tool",
+            "tool_call_id": tool_call["id"],
+            "content": result,
+        })
+    return results
+
+
 # ─── API Routes ────────────────────────────────────────────────────────────
 
 @router.get("/api/chat/sessions")
@@ -218,132 +295,65 @@ async def chat(message: ChatMessage):
         "content": message.content,
     })
 
-    # Build message history
-    history = session["messages"]
-    api_messages = []
-
-    # System prompt with memory context
-    sys_prompt = message.system_prompt or DEFAULT_SYSTEM_PROMPT
-    memory_ctx = get_memory_context()
-    if memory_ctx:
-        sys_prompt = sys_prompt + memory_ctx
-    api_messages.append({"role": "system", "content": sys_prompt})
-
-    # Auto-adjust context based on model
+    # Build API messages
+    sys_prompt = build_system_prompt(message.system_prompt)
     context_window, max_response = get_model_context_config(message.model or "default")
     system_tokens = estimate_tokens(sys_prompt)
     max_input_tokens = context_window - max_response - system_tokens - 500
 
-    # Trim history to fit
-    trimmed = trim_messages(history, max_input_tokens)
-    api_messages.extend(trimmed)
+    api_messages = [{"role": "system", "content": sys_prompt}]
+    api_messages.extend(trim_messages(session["messages"], max_input_tokens))
 
     # Prepare API call
     base_url = message.base_url or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
     api_key = message.api_key or os.environ.get("OPENAI_API_KEY", "")
-
     if not api_key:
         raise HTTPException(status_code=401, detail="API key not configured")
 
+    model = message.model or "gpt-3.5-turbo"
+    max_tokens = message.max_tokens or max_response
+    temperature = message.temperature if message.temperature is not None else 0.7
+    tools = openai_tools()
+
     try:
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
+        # First LLM call
+        data = await call_llm(base_url, api_key, model, api_messages, max_tokens, temperature, tools)
+        assistant_message = data["choices"][0]["message"]
 
-        tools = openai_tools()
-        payload = {
-            "model": message.model or "gpt-3.5-turbo",
-            "messages": api_messages,
-            "max_tokens": message.max_tokens or max_response,
-            "temperature": message.temperature if message.temperature is not None else 0.7,
-        }
+        # Handle tool calls
+        if "tool_calls" in assistant_message and assistant_message["tool_calls"]:
+            session["messages"].append(assistant_message)
+            tool_results = await execute_tools(assistant_message["tool_calls"])
+            session["messages"].extend(tool_results)
 
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            # Follow-up call with tool results
+            api_messages_with_tools = [{"role": "system", "content": sys_prompt}]
+            api_messages_with_tools.extend(trim_messages(session["messages"], max_input_tokens))
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
+            data2 = await call_llm(base_url, api_key, model, api_messages_with_tools, max_tokens, temperature, tools)
+            final_message = data2["choices"][0]["message"]
+            session["messages"].append(final_message)
+            session_manager._save()
 
-            if response.status_code != 200:
-                error_text = response.text
-                logger.error("API error %d: %s", response.status_code, error_text[:500])
-                raise HTTPException(status_code=response.status_code, detail=error_text)
-
-            data = response.json()
-            assistant_message = data["choices"][0]["message"]
-
-            # Handle tool calls
-            if "tool_calls" in assistant_message and assistant_message["tool_calls"]:
-                session["messages"].append(assistant_message)
-
-                for tool_call in assistant_message["tool_calls"]:
-                    tool_name = tool_call["function"]["name"]
-                    tool_args = json.loads(tool_call["function"]["arguments"])
-
-                    logger.info("Executing tool: %s(%s)", tool_name, tool_args)
-                    result = await execute_tool(tool_name, tool_args)
-                    logger.info("Tool result: %s...", result[:200])
-
-                    session["messages"].append({
-                        "role": "tool",
-                        "tool_call_id": tool_call["id"],
-                        "content": result,
-                    })
-
-                # Follow-up call
-                api_messages_with_tools = [{"role": "system", "content": sys_prompt}]
-                api_messages_with_tools.extend(trim_messages(session["messages"], max_input_tokens))
-                payload["messages"] = api_messages_with_tools
-
-                async with httpx.AsyncClient(timeout=120) as client2:
-                    response2 = await client2.post(
-                        f"{base_url.rstrip('/')}/chat/completions",
-                        headers=headers,
-                        json=payload,
-                    )
-
-                    if response2.status_code == 200:
-                        data2 = response2.json()
-                        final_message = data2["choices"][0]["message"]
-                        session["messages"].append(final_message)
-                        session_manager._save()
-                        return {
-                            "response": final_message.get("content", ""),
-                            "session_id": session_id,
-                            "tool_calls": [
-                                {
-                                    "name": tc["function"]["name"],
-                                    "arguments": json.loads(tc["function"]["arguments"]),
-                                }
-                                for tc in assistant_message["tool_calls"]
-                            ],
-                        }
-                    else:
-                        session_manager._save()
-                        return {
-                            "response": f"Tools executed but follow-up failed: {response2.text[:200]}",
-                            "session_id": session_id,
-                            "tool_calls": [
-                                {
-                                    "name": tc["function"]["name"],
-                                    "arguments": json.loads(tc["function"]["arguments"]),
-                                }
-                                for tc in assistant_message["tool_calls"]
-                            ],
-                        }
-            else:
-                session["messages"].append(assistant_message)
-                session_manager._save()
-                return {
-                    "response": assistant_message.get("content", ""),
-                    "session_id": session_id,
-                }
+            return {
+                "response": final_message.get("content", ""),
+                "session_id": session_id,
+                "tool_calls": [
+                    {
+                        "name": tc["function"]["name"],
+                        "arguments": json.loads(tc["function"]["arguments"]),
+                    }
+                    for tc in assistant_message["tool_calls"]
+                ],
+            }
+        else:
+            # No tool calls, just return response
+            session["messages"].append(assistant_message)
+            session_manager._save()
+            return {
+                "response": assistant_message.get("content", ""),
+                "session_id": session_id,
+            }
 
     except httpx.TimeoutException:
         logger.error("API request timed out")
