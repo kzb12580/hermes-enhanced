@@ -25,6 +25,7 @@ from api.memory import router as memory_router
 from api.skills import router as skills_router
 from api.setup import router as setup_router
 from api.email import router as email_router
+from api.workflow import router as workflow_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -123,6 +124,7 @@ app.include_router(email_router)
 app.include_router(memory_router)
 app.include_router(config_router)
 app.include_router(models_router)
+app.include_router(workflow_router)
 
 # ---------------------------------------------------------------------------
 # Graceful shutdown via signal

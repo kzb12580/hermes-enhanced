@@ -59,6 +59,8 @@ def _auto_register():
     from .vision_tool import VisionTool
     from .screen_capture_tool import ScreenCaptureTool
     from .ocr_tool import OCRTool
+    from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
+    from . import office_tools
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
@@ -72,6 +74,26 @@ def _auto_register():
             register(tool_cls())
         except Exception as e:
             logger.warning("Failed to register %s: %s", tool_cls.__name__, e)
+
+    # Register office tools
+    office_fn_map = {
+        "create_word": office_tools.create_word,
+        "edit_word": office_tools.edit_word,
+        "read_word": office_tools.read_word,
+        "create_ppt": office_tools.create_ppt,
+        "create_excel": office_tools.create_excel,
+        "read_excel": office_tools.read_excel,
+        "edit_excel": office_tools.edit_excel,
+    }
+    for wrapper in OFFICE_TOOL_DEFINITIONS:
+        try:
+            wrapper._fn = office_fn_map.get(wrapper.name)
+            if wrapper._fn:
+                register(wrapper)
+            else:
+                logger.warning("Office tool %s has no matching function", wrapper.name)
+        except Exception as e:
+            logger.warning("Failed to register office tool %s: %s", wrapper.name, e)
 
 
 _auto_register()

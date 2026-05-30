@@ -1,11 +1,19 @@
-"""Config API — read and update application settings."""
+"""Config API — read and update application settings with persistence."""
 
+import json
+import logging
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+logger = logging.getLogger("hermes-backend.config")
 router = APIRouter()
+
+# Config file path
+_CONFIG_DIR = Path.home() / ".hermes-desktop"
+_CONFIG_FILE = _CONFIG_DIR / "config.json"
 
 # Allowed enum values for theme and language
 _THEMES = {"light", "dark", "system"}
@@ -26,6 +34,33 @@ _config: dict = {
     "streaming": True,
     "backend_port": 9876,
 }
+
+
+def _load_config():
+    """Load config from disk if available."""
+    global _config
+    try:
+        if _CONFIG_FILE.exists():
+            with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            _config.update(saved)
+            logger.info("Config loaded from %s", _CONFIG_FILE)
+    except Exception as e:
+        logger.warning("Failed to load config: %s", e)
+
+
+def _save_config():
+    """Save config to disk."""
+    try:
+        _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(_config, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning("Failed to save config: %s", e)
+
+
+# Load on startup
+_load_config()
 
 
 class ConfigUpdate(BaseModel):
@@ -76,4 +111,5 @@ async def update_config(body: ConfigUpdate):
         )
 
     _config.update(updates)
+    _save_config()
     return _config

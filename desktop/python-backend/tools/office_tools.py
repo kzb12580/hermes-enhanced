@@ -564,6 +564,18 @@ def read_excel(path: str, sheet_name: str = "", max_rows: int = 1000) -> dict:
         return {"error": str(e), "success": False}
 
 
+def _safe_ref(ws, ref_dict):
+    """Safe Reference builder for openpyxl charts."""
+    from openpyxl.chart import Reference
+    if not isinstance(ref_dict, dict):
+        return Reference(ws, min_col=1, min_row=1, max_col=1, max_row=1)
+    return Reference(ws,
+        min_row=max(1, ref_dict.get("min_row", 1)),
+        max_row=max(1, ref_dict.get("max_row", 1)),
+        min_col=max(1, ref_dict.get("min_col", 1)),
+        max_col=max(1, ref_dict.get("max_col", 1)))
+
+
 def edit_excel(path: str, operations: list[dict]) -> dict:
     """
     编辑 Excel 文件
@@ -626,16 +638,8 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
                 chart.style = 10
                 chart.y_axis.title = op.get("y_axis", "")
                 chart.x_axis.title = op.get("x_axis", "")
-def _safe_ref(ws, ref_dict):
-                        if not isinstance(ref_dict, dict):
-                            return Reference(ws, min_col=1, min_row=1, max_col=1, max_row=1)
-                        return Reference(ws,
-                            min_row=max(1, ref_dict.get("min_row", 1)),
-                            max_row=max(1, ref_dict.get("max_row", 1)),
-                            min_col=max(1, ref_dict.get("min_col", 1)),
-                            max_col=max(1, ref_dict.get("max_col", 1)))
-                    data_ref = _safe_ref(ws, op.get("data_ref", {}))
-                    cats_ref = _safe_ref(ws, op.get("cats_ref", {}))
+                data_ref = _safe_ref(ws, op.get("data_ref", {}))
+                cats_ref = _safe_ref(ws, op.get("cats_ref", {}))
                 chart.add_data(data_ref, titles_from_data=True)
                 chart.set_categories(cats_ref)
                 chart.width = op.get("width", 20)

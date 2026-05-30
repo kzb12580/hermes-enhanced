@@ -88,7 +88,7 @@ async def test_email_connection(body: EmailConfig):
 
 
 @router.get("/api/email/inbox")
-async def get_inbox(limit: int = Query(default=20, ge=1, le=100), unread: bool = False, folder: str = Query(default="INBOX", regex=r'^[a-zA-Z0-9_\-\. ]+$')):
+async def get_inbox(limit: int = Query(default=20, ge=1, le=100), unread: bool = False, folder: str = Query(default="INBOX", pattern=r'^[a-zA-Z0-9_\-\. ]+$')):
     """获取收件箱"""
     try:
         from email_tools import read_emails
