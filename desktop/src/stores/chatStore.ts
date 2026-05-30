@@ -19,6 +19,7 @@ export interface DisplayMessage {
   toolCalls?: ParsedToolCall[];
   isStreaming?: boolean;
   error?: string;
+  thinkingContent?: string;
 }
 
 export interface Session {
@@ -27,6 +28,12 @@ export interface Session {
   messages: DisplayMessage[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface AttachmentInfo {
+  filename: string;
+  path: string;
+  size: number;
 }
 
 interface ChatState {
@@ -53,8 +60,9 @@ interface ChatState {
   addMessage: (message: Omit<DisplayMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (messageId: string, updates: Partial<DisplayMessage>) => void;
   appendToMessage: (messageId: string, content: string) => void;
+  appendToThinking: (messageId: string, content: string) => void;
   setToolCallResult: (messageId: string, toolCallId: string, result: string) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: AttachmentInfo[]) => Promise<void>;
   stopGeneration: () => void;
   clearError: () => void;
 }
@@ -82,7 +90,12 @@ const STREAM_THROTTLE_MS = 33; // ~30fps
 let pendingTokenBuffer = '';
 let pendingMessageId: string | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let flushStoreRef: { appendToMessage: (id: string, content: string) => void } | null = null;
+let flushStoreRef: { appendToMessage: (id: string, content: string) => void; appendToThinking: (id: string, content: string) => void } | null = null;
+
+// Thinking token throttle buffers
+let pendingThinkingBuffer = '';
+let pendingThinkingMessageId: string | null = null;
+let thinkingFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function flushPendingTokens() {
   if (pendingTokenBuffer && pendingMessageId && flushStoreRef) {
@@ -101,6 +114,23 @@ function scheduleTokenFlush(messageId: string, token: string, store: { appendToM
   }
 }
 
+function flushPendingThinking() {
+  if (pendingThinkingBuffer && pendingThinkingMessageId && flushStoreRef) {
+    flushStoreRef.appendToThinking(pendingThinkingMessageId, pendingThinkingBuffer);
+    pendingThinkingBuffer = '';
+  }
+  thinkingFlushTimer = null;
+}
+
+function scheduleThinkingFlush(messageId: string, token: string, store: { appendToThinking: (id: string, content: string) => void }) {
+  pendingThinkingBuffer += token;
+  pendingThinkingMessageId = messageId;
+  flushStoreRef = flushStoreRef || store;
+  if (!thinkingFlushTimer) {
+    thinkingFlushTimer = setTimeout(flushPendingThinking, STREAM_THROTTLE_MS);
+  }
+}
+
 function resetFlushState() {
   if (flushTimer) {
     clearTimeout(flushTimer);
@@ -109,6 +139,12 @@ function resetFlushState() {
   pendingTokenBuffer = '';
   pendingMessageId = null;
   flushStoreRef = null;
+  if (thinkingFlushTimer) {
+    clearTimeout(thinkingFlushTimer);
+    thinkingFlushTimer = null;
+  }
+  pendingThinkingBuffer = '';
+  pendingThinkingMessageId = null;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -258,6 +294,23 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      appendToThinking: (messageId, content) => {
+        set((s) => ({
+          sessions: s.sessions.map((ses) =>
+            ses.id === s.currentSessionId
+              ? {
+                  ...ses,
+                  messages: ses.messages.map((msg) =>
+                    msg.id === messageId
+                      ? { ...msg, thinkingContent: (msg.thinkingContent || '') + content }
+                      : msg
+                  ),
+                }
+              : ses
+          ),
+        }));
+      },
+
       setToolCallResult: (messageId, toolCallId, result) => {
         set((s) => ({
           sessions: s.sessions.map((ses) =>
@@ -282,7 +335,7 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
-      sendMessage: async (content) => {
+      sendMessage: async (content, attachments?) => {
         const state = get();
 
         // Guard against concurrent sends
@@ -365,6 +418,7 @@ export const useChatStore = create<ChatState>()(
               skills: get().activeSkills,
               temperature: settings.temperature,
               max_tokens: settings.maxTokens,
+              attachments: attachments && attachments.length > 0 ? attachments : undefined,
             },
             controller.signal
           );
@@ -418,7 +472,8 @@ export const useChatStore = create<ChatState>()(
              continue;
             }
             if (token.startsWith('[THINKING]')) {
-              // Skip thinking tokens for now (could add UI later)
+              const thinkingText = token.slice(10); // Remove '[THINKING]' prefix
+              scheduleThinkingFlush(assistantMsgId, thinkingText, get());
               continue;
             }
             // Regular token
@@ -448,6 +503,7 @@ export const useChatStore = create<ChatState>()(
           }
           // FIX #3: Single flush in finally (removed redundant flush in catch)
           flushPendingTokens();
+          flushPendingThinking();
           resetFlushState();
 
           get().updateMessage(assistantMsgId, { isStreaming: false });
@@ -495,7 +551,7 @@ export const useChatStore = create<ChatState>()(
           ...session,
           messages: session.messages.map((msg) => {
             // Strip transient streaming/error fields from persisted messages
-            const { isStreaming, error, ...rest } = msg;
+            const { isStreaming, error, thinkingContent, ...rest } = msg;
             return rest;
           }),
         })),

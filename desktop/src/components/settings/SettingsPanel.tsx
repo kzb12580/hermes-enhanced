@@ -178,6 +178,34 @@ function GeneralSettings() {
         </div>
       </div>
 
+      {/* Language */}
+      <div>
+        <label className="text-sm font-medium text-[var(--text-secondary)] mb-2 block">
+          语言 / Language
+        </label>
+        <div className="flex gap-2">
+          {(['zh', 'en'] as const).map((lang) => (
+            <button
+              key={lang}
+              onClick={() => {
+                updateSettings({ language: lang });
+                // Dynamically import and set i18n
+                import('../../lib/i18n').then(({ setLang }) => setLang(lang));
+              }}
+              className={`
+                px-4 py-2 rounded-lg text-sm border transition-colors
+                ${language === lang
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                  : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-muted)]'
+                }
+              `}
+            >
+              {lang === 'zh' ? '中文' : 'English'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Font size */}
       <div>
         <label className="text-sm font-medium text-[var(--text-secondary)] mb-2 block">

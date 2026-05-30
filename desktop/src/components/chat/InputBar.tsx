@@ -11,7 +11,9 @@ import {
   X,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
+import type { AttachmentInfo } from '../../stores/chatStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import apiClient from '../../lib/api';
 import { SkillsPanel } from '../skills/SkillsPanel';
 import { ContextMenu, createEditMenuItems, useContextMenu } from '../ui/ContextMenu';
 
@@ -27,6 +29,8 @@ export function InputBar() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<AttachmentInfo[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const thinkingPickerRef = useRef<HTMLDivElement>(null);
@@ -82,13 +86,14 @@ export function InputBar() {
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
-    if (!trimmed || isGenerating) return;
-    sendMessage(trimmed);
+    if ((!trimmed && pendingAttachments.length === 0) || isGenerating) return;
+    sendMessage(trimmed || '(请分析附件)', pendingAttachments.length > 0 ? pendingAttachments : undefined);
     setInput('');
+    setPendingAttachments([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [input, isGenerating, sendMessage]);
+  }, [input, isGenerating, sendMessage, pendingAttachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (sendShortcut === 'enter') {
@@ -149,18 +154,24 @@ export function InputBar() {
     stopGeneration();
   }, [stopGeneration]);
 
-  // 文件选择处理
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // 文件选择处理 — 实际上传文件到后端
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
-    // 将文件名添加到输入框
-    const fileNames = Array.from(files).map(f => f.name).join(', ');
-    setInput(prev => prev ? `${prev}\n附件: ${fileNames}` : `附件: ${fileNames}`);
-    
-    // 重置 input 以便再次选择同一文件
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+
+    setIsUploading(true);
+    try {
+      const uploadPromises = Array.from(files).map(file => apiClient.uploadFile(file));
+      const results = await Promise.all(uploadPromises);
+      setPendingAttachments(prev => [...prev, ...results]);
+    } catch (err: any) {
+      console.error('[InputBar] File upload failed:', err);
+      alert(`文件上传失败: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   }, []);
 
@@ -184,7 +195,7 @@ export function InputBar() {
     currentModel.includes('reasoner') ||
     currentModel.includes('thinking');
 
-  const canSend = input.trim().length > 0 && !isGenerating;
+  const canSend = (input.trim().length > 0 || pendingAttachments.length > 0) && !isGenerating && !isUploading;
 
   return (
     <div className="border-t border-[var(--border)] bg-[var(--bg-secondary)] p-4">
@@ -345,6 +356,28 @@ export function InputBar() {
                 </button>
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Pending attachments bar */}
+        {pendingAttachments.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+            {pendingAttachments.map((att, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
+                  bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]"
+              >
+                📎 {att.filename}
+                <button
+                  onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
+                  className="hover:text-[var(--error)] transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+            {isUploading && <span className="text-xs text-[var(--text-muted)]">上传中...</span>}
           </div>
         )}
 

@@ -1,11 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { CodeBlock } from './CodeBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { DisplayMessage } from '../../stores/chatStore';
-import { User, Bot, AlertCircle, Loader2 } from 'lucide-react';
+import { User, Bot, AlertCircle, Loader2, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { ContextMenu, useContextMenu } from '../ui/ContextMenu';
 import { Copy } from 'lucide-react';
 
@@ -17,6 +17,9 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isTool = message.role === 'tool';
+
+  // Thinking section expand/collapse state
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
 
   // 右键菜单
   const { isOpen, position, menuItems, openMenu, closeMenu } = useContextMenu();
@@ -82,6 +85,25 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
           <ToolCallCard key={tc.id} toolCall={tc} />
         ))}
 
+        {/* Thinking content - collapsible */}
+        {message.thinkingContent && (
+          <div className="mb-2">
+            <button
+              onClick={() => setThinkingExpanded(!thinkingExpanded)}
+              className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--bg-secondary)]"
+            >
+              <Brain size={12} />
+              <span>思考过程</span>
+              {thinkingExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            </button>
+            {thinkingExpanded && (
+              <div className="mt-1 ml-2 pl-3 border-l-2 border-[var(--accent)]/20 text-xs text-[var(--text-muted)] leading-relaxed max-h-64 overflow-y-auto">
+                <pre className="whitespace-pre-wrap font-sans">{message.thinkingContent}</pre>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Message bubble */}
         {message.content && (
           <div
@@ -134,10 +156,18 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
         )}
 
         {/* Thinking indicator — show when streaming but no content yet */}
-        {message.isStreaming && !message.content && (!message.toolCalls || message.toolCalls.length === 0) && (
+        {message.isStreaming && !message.content && !message.thinkingContent && (!message.toolCalls || message.toolCalls.length === 0) && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-muted)]">
             <Loader2 size={12} className="animate-spin" />
             <span>AI 正在思考...</span>
+          </div>
+        )}
+
+        {/* Streaming thinking indicator */}
+        {message.isStreaming && message.thinkingContent && !message.content && (
+          <div className="flex items-center gap-2 px-2 py-1 text-xs text-[var(--accent)]">
+            <Brain size={12} className="animate-pulse" />
+            <span>正在思考...</span>
           </div>
         )}
 

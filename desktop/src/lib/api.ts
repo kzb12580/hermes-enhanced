@@ -33,6 +33,7 @@ export interface ChatCompletionRequest {
   skills?: string[];
   temperature?: number;
   max_tokens?: number;
+  attachments?: Array<{ filename: string; path: string; size: number }>;
 }
 
 export interface SkillInfo {
@@ -80,6 +81,24 @@ class ApiClient {
 
   getBaseUrl(): string {
     return this.baseUrl;
+  }
+
+  /** Upload a file to the backend */
+  async uploadFile(file: File): Promise<{ filename: string; path: string; size: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(`${this.baseUrl}/api/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const detail = await this.parseErrorResponse(res);
+      throw new Error(`File upload failed: ${res.status} - ${detail}`);
+    }
+
+    return res.json();
   }
 
   private getHeaders(isGet = false): Record<string, string> {
@@ -215,10 +234,11 @@ class ApiClient {
           thinking_mode: request.thinking_mode,
           thinking_budget: request.thinking_budget,
           proxy_url: request.proxy_url,
-          skills: request.skills,
-          temperature: request.temperature,
-          max_tokens: request.max_tokens,
-        }),
+              skills: request.skills,
+              temperature: request.temperature,
+              max_tokens: request.max_tokens,
+              attachments: request.attachments,
+            }),
         signal,
       }
     );

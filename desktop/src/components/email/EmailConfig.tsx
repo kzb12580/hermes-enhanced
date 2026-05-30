@@ -25,6 +25,17 @@ interface Email {
   has_attachments: boolean;
 }
 
+interface EmailDetail {
+  uid: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  body: string;
+  body_html?: string;
+  attachments?: { filename: string; size: number }[];
+}
+
 // ── 邮箱预设 ──────────────────────────────────────────────────────────────
 const PRESETS: Record<string, Partial<EmailConfig>> = {
   'qq.com': { imap_server: 'imap.qq.com', imap_port: 993, smtp_server: 'smtp.qq.com', smtp_port: 465, smtp_ssl: true },
@@ -44,6 +55,8 @@ export function EmailConfig() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [view, setView] = useState<'config' | 'inbox'>('config');
+  const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -104,6 +117,19 @@ export function EmailConfig() {
     if (domain && PRESETS[domain]) {
       setConfig(prev => ({ ...prev, ...PRESETS[domain] }));
     }
+  };
+
+  const loadEmailDetail = async (uid: string) => {
+    setDetailLoading(true);
+    setSelectedEmail(null);
+    try {
+      const res = await fetch(`${BACKEND}/api/email/detail/${uid}`);
+      const data = await res.json();
+      if (!data.error) {
+        setSelectedEmail(data);
+      }
+    } catch (e) { /* ignore */ }
+    setDetailLoading(false);
   };
 
   return (
@@ -209,7 +235,7 @@ export function EmailConfig() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 400, overflow: 'auto' }}>
             {emails.map((mail, i) => (
-              <div key={i} style={{
+              <div key={i} onClick={() => loadEmailDetail(mail.id)} style={{
                 padding: '10px 14px', borderRadius: 8,
                 background: '#1f2937', cursor: 'pointer',
               }}>
@@ -234,6 +260,81 @@ export function EmailConfig() {
                 <Inbox size={32} style={{ marginBottom: 8 }} />
                 <p>暂无邮件</p>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 邮件详情弹窗 ─────────────────────────────────────────────── */}
+      {(selectedEmail || detailLoading) && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => { setSelectedEmail(null); setDetailLoading(false); }}>
+          <div style={{
+            background: '#111827', borderRadius: 12, width: '90%', maxWidth: 680,
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            border: '1px solid #374151', overflow: 'hidden',
+          }} onClick={e => e.stopPropagation()}>
+            {/* 头部 */}
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid #374151',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#e5e7eb' }}>
+                {detailLoading ? '加载中...' : selectedEmail?.subject || '(无主题)'}
+              </span>
+              <button onClick={() => { setSelectedEmail(null); setDetailLoading(false); }} style={{
+                background: 'none', border: 'none', color: '#9ca3af',
+                fontSize: 20, cursor: 'pointer', padding: '0 4px',
+              }}>✕</button>
+            </div>
+
+            {detailLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>
+                <Loader2 size={28} className="spin" />
+                <p style={{ marginTop: 8 }}>正在加载邮件内容…</p>
+              </div>
+            ) : selectedEmail && (
+              <>
+                {/* 元信息 */}
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #374151', fontSize: 13, color: '#9ca3af' }}>
+                  <div><b style={{ color: '#d1d5db' }}>发件人：</b>{selectedEmail.from}</div>
+                  <div><b style={{ color: '#d1d5db' }}>收件人：</b>{selectedEmail.to}</div>
+                  <div><b style={{ color: '#d1d5db' }}>日　期：</b>{selectedEmail.date}</div>
+                  {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <b style={{ color: '#d1d5db' }}>附件：</b>
+                      {selectedEmail.attachments.map((a, j) => (
+                        <span key={j} style={{
+                          display: 'inline-block', marginLeft: 6, padding: '2px 8px',
+                          background: '#1f2937', borderRadius: 4, fontSize: 12,
+                        }}>
+                          📎 {a.filename} ({(a.size / 1024).toFixed(1)}KB)
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* 正文 */}
+                <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
+                  {selectedEmail.body_html ? (
+                    <div
+                      style={{ color: '#d1d5db', fontSize: 14, lineHeight: 1.6 }}
+                      dangerouslySetInnerHTML={{ __html: selectedEmail.body_html }}
+                    />
+                  ) : (
+                    <pre style={{
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      color: '#d1d5db', fontSize: 14, lineHeight: 1.6,
+                      fontFamily: 'inherit', margin: 0,
+                    }}>
+                      {selectedEmail.body || '(无正文)'}
+                    </pre>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

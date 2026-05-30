@@ -10,6 +10,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi import UploadFile, File as FastAPIFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -104,6 +105,7 @@ class ChatMessage(BaseModel):
     system_prompt: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=128000)
+    attachments: Optional[list[dict]] = None
 
 
 class SessionCreate(BaseModel):
@@ -345,6 +347,32 @@ async def clear_session(session_id: str):
     return {"status": "cleared"}
 
 
+@router.post("/api/upload")
+async def upload_file(file: UploadFile = FastAPIFile(...)):
+    """Upload a file and return its server path."""
+    import uuid
+
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate unique filename to avoid collisions
+    ext = os.path.splitext(file.filename or "file")[1]
+    unique_name = f"{uuid.uuid4().hex[:12]}_{file.filename or 'file'}"
+    file_path = os.path.join(upload_dir, unique_name)
+
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    logger.info("File uploaded: %s (%d bytes)", unique_name, len(contents))
+
+    return {
+        "filename": file.filename,
+        "path": file_path,
+        "size": len(contents),
+    }
+
+
 @router.post("/api/chat")
 async def chat(message: ChatMessage):
     """Process a chat message with tool support."""
@@ -356,9 +384,20 @@ async def chat(message: ChatMessage):
         session = session_manager.create_session(session_id)
 
     # Add user message to history
+    # Prepend attachment info to content if present
+    user_content = message.content
+    if message.attachments:
+        attachment_lines = []
+        for att in message.attachments:
+            fname = att.get("filename", "file")
+            fpath = att.get("path", "")
+            fsize = att.get("size", 0)
+            attachment_lines.append(f"[附件: {fname} ({fsize} bytes) 路径: {fpath}]")
+        user_content = "\n".join(attachment_lines) + "\n\n" + user_content
+
     session["messages"].append({
         "role": "user",
-        "content": message.content,
+        "content": user_content,
     })
 
     # Build API messages
