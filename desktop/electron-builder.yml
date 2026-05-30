@@ -22,6 +22,11 @@ extraResources:
     to: python-backend
     filter:
       - '**/*'
+  # VC++ Runtime (Windows only, for sidecar DLL loading)
+  - from: buildResources/vcredist
+    to: vcredist
+    filter:
+      - '**/*'
   # 后端源码 (系统 Python fallback)
   - from: python-backend
     to: python-backend-source

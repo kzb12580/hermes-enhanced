@@ -279,6 +279,42 @@ export class PythonManager {
   }
 
   // ─── 安装后端依赖 ───
+  // ─── 确保 VC++ Runtime 已安装 (Windows sidecar 依赖) ───
+  private async ensureVCppRuntime(): Promise<void> {
+    try {
+      // 检查 vcruntime140.dll 是否存在（VC++ 2015-2022 的标志）
+      const systemRoot = process.env.SYSTEMROOT || 'C:\\Windows'
+      const vcruntimePath = join(systemRoot, 'System32', 'vcruntime140.dll')
+      if (existsSync(vcruntimePath)) {
+        this.addLog('[VC++] vcruntime140.dll 已存在，跳过安装')
+        return
+      }
+      // 查找打包的 vc_redist 安装程序
+      const vcredistPath = join(process.resourcesPath, 'vcredist', 'vc_redist.x64.exe')
+      if (!existsSync(vcredistPath)) {
+        this.addLog('[VC++] vc_redist.x64.exe 未打包，跳过安装')
+        return
+      }
+      this.addLog('[VC++] 检测到缺失的 VC++ Runtime，正在静默安装...')
+      // 静默安装：/install /quiet /norestart
+      const { stdout, stderr } = await execAsync(
+        `"${vcredistPath}" /install /quiet /norestart`,
+        { timeout: 120_000 } // 2 分钟超时
+      )
+      if (stdout) this.addLog(`[VC++] stdout: ${stdout.trim().slice(0, 200)}`)
+      if (stderr) this.addLog(`[VC++] stderr: ${stderr.trim().slice(0, 200)}`)
+      // 验证安装结果
+      if (existsSync(vcruntimePath)) {
+        this.addLog('[VC++] ✅ VC++ Runtime 安装成功')
+      } else {
+        this.addLog('[VC++] ⚠️ 安装完成但 vcruntime140.dll 仍未找到，sidecar 可能无法启动')
+      }
+    } catch (err: any) {
+      this.addLog(`[VC++] ⚠️ 安装失败: ${err.message}`)
+      // 不阻塞启动，让 sidecar 尝试后 fallback 到系统 Python
+    }
+  }
+
   private async installDependencies(pythonPath: string): Promise<boolean> {
     const reqPath = this.getRequirementsPath()
     if (!existsSync(reqPath)) {
@@ -510,6 +546,10 @@ export class PythonManager {
 
     // ── 策略1: 尝试 sidecar ──
     if (detection.mode === 'sidecar') {
+      // Windows: 确保 VC++ Runtime 已安装（sidecar DLL 依赖）
+      if (process.platform === 'win32') {
+        await this.ensureVCppRuntime()
+      }
       this.addLog(`[启动] 尝试 sidecar 模式: ${detection.pythonPath}`)
       const sidecarOk = await this.tryStart(detection.pythonPath, null, 'sidecar')
       if (sidecarOk) {
