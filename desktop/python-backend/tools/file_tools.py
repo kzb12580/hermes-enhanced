@@ -13,6 +13,45 @@ from pathlib import Path
 from .base import BaseTool
 from . import register
 
+
+def _detect_encoding(path: str) -> str:
+    """Detect file encoding. Try UTF-8 first, then common encodings."""
+    try:
+        with open(path, 'rb') as f:
+            raw = f.read(8192)
+    except Exception:
+        return 'utf-8'
+
+    if not raw:
+        return 'utf-8'
+
+    # Try UTF-8 first (most common)
+    try:
+        raw.decode('utf-8')
+        return 'utf-8'
+    except UnicodeDecodeError:
+        pass
+
+    # Try common encodings in order of likelihood
+    for enc in ['gbk', 'shift_jis', 'euc-jp', 'big5', 'euc-kr', 'latin-1']:
+        try:
+            raw.decode(enc)
+            return enc
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    # Fallback: try chardet if available
+    try:
+        import chardet
+        result = chardet.detect(raw)
+        if result and result.get('encoding'):
+            return result['encoding']
+    except ImportError:
+        pass
+
+    return 'utf-8'  # final fallback
+
+
 MAX_READ_LINES = 2000
 MAX_WRITE_SIZE = 1_000_000  # 1MB
 MAX_SEARCH_RESULTS = 50
@@ -99,7 +138,8 @@ class ReadFileTool(BaseTool):
             return f"Error: File too large ({p.stat().st_size} bytes)"
 
         try:
-            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            enc = _detect_encoding(str(p))
+            lines = p.read_text(encoding=enc, errors="replace").splitlines()
             total = len(lines)
             start = max(0, offset - 1)
             end = min(total, start + limit)
@@ -184,7 +224,8 @@ class SearchFilesTool(BaseTool):
 
         for fpath in files_to_search[:200]:  # Limit files scanned
             try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
+                enc = _detect_encoding(str(fpath))
+                text = fpath.read_text(encoding=enc, errors="replace")
                 for i, line in enumerate(text.splitlines(), 1):
                     if regex.search(line):
                         results.append(f"{fpath}:{i}: {line.strip()}")

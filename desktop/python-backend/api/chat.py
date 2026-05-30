@@ -26,7 +26,7 @@ router = APIRouter()
 # ─── Constants (base defaults, overridden by perf_detect) ──────────────────
 
 MAX_CONTENT_LENGTH = 100_000
-MAX_TOOL_RESULT_SIZE = 10_000  # 10KB per tool result
+MAX_TOOL_RESULT_SIZE = 50_000  # 50KB per tool result
 MAX_TOOL_CALLS_PER_TURN = 10
 MAX_TOOL_ITERATIONS = 5  # Max tool execution loops per turn
 
