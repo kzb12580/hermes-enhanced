@@ -183,6 +183,107 @@ def truncate_tool_result(result: str) -> str:
     return result
 
 
+import re as _re
+
+
+def _sanitize_messages(messages: list[dict]) -> list[dict]:
+    """Fix malformed tool_calls in session messages before sending to API.
+    
+    Common issues:
+    - tool_calls with missing function name
+    - tool_calls with empty arguments
+    - assistant messages with tool_calls but no content (need None, not "")
+    """
+    result = []
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            # Validate each tool_call
+            valid_calls = []
+            for tc in msg["tool_calls"]:
+                func = tc.get("function", {})
+                name = func.get("name", "")
+                if not name:
+                    logger.warning("Dropping tool_call with missing function name: %s", tc)
+                    continue
+                # Ensure arguments is a string
+                args = func.get("arguments", "{}")
+                if not isinstance(args, str):
+                    try:
+                        args = json.dumps(args, ensure_ascii=False)
+                    except Exception:
+                        args = "{}"
+                valid_calls.append({
+                    "id": tc.get("id", f"call_{hash(name)}"),
+                    "type": "function",
+                    "function": {"name": name, "arguments": args},
+                })
+            if valid_calls:
+                clean_msg = {"role": "assistant", "content": msg.get("content") or None, "tool_calls": valid_calls}
+            else:
+                # All tool_calls were invalid — keep as text-only assistant message
+                clean_msg = {"role": "assistant", "content": msg.get("content") or "(tool calls removed)"}
+            result.append(clean_msg)
+        elif msg.get("role") == "tool":
+            # Ensure tool messages have required fields
+            if msg.get("tool_call_id") and msg.get("content") is not None:
+                result.append(msg)
+            else:
+                logger.warning("Dropping malformed tool message: %s", list(msg.keys()))
+        else:
+            result.append(msg)
+    return result
+
+
+def _parse_text_tool_calls(text: str) -> list[dict]:
+    """Parse text-based tool calls from LLM output (fallback for models without function calling).
+    
+    Supports formats:
+    - <function=name>args</function>
+    - <function=name>{"key": "value"}</function>
+    - ```json\n{"name": "tool", "arguments": {...}}\n```
+    """
+    calls = []
+    
+    # Pattern 1: <function=name>args</function>
+    for match in _re.finditer(r'<function=(\w+)>(.*?)</function>', text, _re.DOTALL):
+        name = match.group(1)
+        args_raw = match.group(2).strip()
+        try:
+            args = json.loads(args_raw)
+        except json.JSONDecodeError:
+            # Try to parse as key=value pairs
+            args = {}
+            for part in args_raw.split(","):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    args[k.strip()] = v.strip().strip('"').strip("'")
+            if not args:
+                args = {"input": args_raw}
+        calls.append({
+            "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+        })
+    
+    # Pattern 2: ```json blocks with tool call format
+    if not calls:
+        for match in _re.finditer(r'```json\s*(\{[^`]*"name"\s*:\s*"(\w+)"[^`]*)\s*```', text, _re.DOTALL):
+            try:
+                data = json.loads(match.group(1))
+                name = data.get("name", "")
+                arguments = data.get("arguments", data.get("args", {}))
+                if name:
+                    calls.append({
+                        "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+                        "type": "function",
+                        "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+                    })
+            except json.JSONDecodeError:
+                pass
+    
+    return calls
+
+
 def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
     """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
@@ -195,84 +296,6 @@ def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Opti
         skills_context=skills_ctx,
         tools_description=tools_desc,
     )
-
-
-import re as _re
-
-def _parse_text_tool_calls(text: str) -> list[dict]:
-    """Parse text-based tool calls from LLM response.
-    
-    Handles formats:
-    - <tool_call>{"name": "tool", "arguments": {...}}</tool_call>
-    - {"name": "tool", "arguments": {...}}
-    - function_name(args)  — simple function call syntax
-    """
-    tool_calls = []
-    
-    # Pattern 1: <tool_call>...</tool_call>
-    for match in _re.finditer(r'<tool_call>(.*?)</tool_call>', text, _re.DOTALL):
-        try:
-            data = json.loads(match.group(1).strip())
-            tool_calls.append({
-                "id": f"text_tc_{len(tool_calls)}",
-                "type": "function",
-                "function": {
-                    "name": data.get("name", ""),
-                    "arguments": json.dumps(data.get("arguments", {})),
-                },
-            })
-        except json.JSONDecodeError:
-            pass
-    
-    if tool_calls:
-        return tool_calls
-    
-    # Pattern 2: {"name": "...", "arguments": {...}} — standalone JSON
-    for match in _re.finditer(r'\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*"arguments"\s*:\s*\{[^}]*\}[^{}]*\}', text):
-        try:
-            data = json.loads(match.group(0))
-            if "name" in data and "arguments" in data:
-                tool_calls.append({
-                    "id": f"text_tc_{len(tool_calls)}",
-                    "type": "function",
-                    "function": {
-                        "name": data["name"],
-                        "arguments": json.dumps(data["arguments"]),
-                    },
-                })
-        except json.JSONDecodeError:
-            pass
-    
-    if tool_calls:
-        return tool_calls
-    
-    # Pattern 3: tool_name({key: value}) or tool_name(key=value)
-    # Only match known tool names
-    known_tools = {t.name for t in all_tools()}
-    for match in _re.finditer(r'\b(' + '|'.join(_re.escape(t) for t in known_tools) + r')\s*\(([^)]*)\)', text):
-        tool_name = match.group(1)
-        args_str = match.group(2).strip()
-        try:
-            # Try JSON first
-            args = json.loads(args_str) if args_str else {}
-        except json.JSONDecodeError:
-            # Try key=value parsing
-            args = {}
-            for kv in _re.split(r',\s*', args_str):
-                if '=' in kv:
-                    k, v = kv.split('=', 1)
-                    v = v.strip().strip('"').strip("'")
-                    args[k.strip()] = v
-        tool_calls.append({
-            "id": f"text_tc_{len(tool_calls)}",
-            "type": "function",
-            "function": {
-                "name": tool_name,
-                "arguments": json.dumps(args),
-            },
-        })
-    
-    return tool_calls
 
 
 async def call_llm_streaming(
@@ -502,7 +525,9 @@ async def chat(message: ChatMessage):
     max_input_tokens = context_window - max_response - system_tokens - 500
 
     api_messages = [{"role": "system", "content": sys_prompt}]
-    api_messages.extend(trim_messages(session["messages"], max_input_tokens))
+    # Sanitize session messages — fix any malformed tool_calls before sending to API
+    sanitized = _sanitize_messages(trim_messages(session["messages"], max_input_tokens))
+    api_messages.extend(sanitized)
 
     # Prepare API call
     base_url = message.base_url or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
