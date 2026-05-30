@@ -10,7 +10,7 @@ class BaseTool(ABC):
     # Security & performance attributes (subclasses can override)
     requires_network: bool = False
     dangerous: bool = False
-    timeout: int = 60  # default execution timeout in seconds
+    timeout: int = 180  # default execution timeout in seconds
 
     @property
     @abstractmethod

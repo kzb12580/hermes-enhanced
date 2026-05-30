@@ -68,6 +68,7 @@ export class PythonManager {
   private consecutiveHealthFailures = 0
   private readonly maxConsecutiveHealthFailures = 3
   private lineBuffer = ''
+  private lastStderrLines: string[] = []
   private destroyed = false
   private healthCheckInProgress = false
   private restartTimestamps: number[] = []
@@ -282,20 +283,37 @@ export class PythonManager {
   // ─── 确保 VC++ Runtime 已安装 (Windows sidecar 依赖) ───
   private async ensureVCppRuntime(): Promise<void> {
     try {
-      // 检查 vcruntime140.dll 是否存在（VC++ 2015-2022 的标志）
       const systemRoot = process.env.SYSTEMROOT || 'C:\\Windows'
-      const vcruntimePath = join(systemRoot, 'System32', 'vcruntime140.dll')
-      if (existsSync(vcruntimePath)) {
-        this.addLog('[VC++] vcruntime140.dll 已存在，跳过安装')
+
+      // 检查所有 VC++ 2015-2022 运行时 DLL
+      const requiredDlls = [
+        'vcruntime140.dll',
+        'vcruntime140_1.dll',  // VS 2019 新增
+        'msvcp140.dll'         // C++ 标准库
+      ]
+
+      const missingDlls: string[] = []
+      for (const dll of requiredDlls) {
+        const dllPath = join(systemRoot, 'System32', dll)
+        if (!existsSync(dllPath)) {
+          missingDlls.push(dll)
+        }
+      }
+
+      if (missingDlls.length === 0) {
+        this.addLog('[VC++] 所有 VC++ Runtime DLL 已存在 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll)，跳过安装')
         return
       }
+
+      this.addLog(`[VC++] 缺失 ${missingDlls.length} 个 VC++ Runtime DLL: ${missingDlls.join(', ')}`)
+
       // 查找打包的 vc_redist 安装程序
       const vcredistPath = join(process.resourcesPath, 'vcredist', 'vc_redist.x64.exe')
       if (!existsSync(vcredistPath)) {
         this.addLog('[VC++] vc_redist.x64.exe 未打包，跳过安装')
         return
       }
-      this.addLog('[VC++] 检测到缺失的 VC++ Runtime，正在静默安装...')
+      this.addLog('[VC++] 正在静默安装 VC++ 2015-2022 Redistributable...')
       // 静默安装：/install /quiet /norestart
       const { stdout, stderr } = await execAsync(
         `"${vcredistPath}" /install /quiet /norestart`,
@@ -304,16 +322,35 @@ export class PythonManager {
       if (stdout) this.addLog(`[VC++] stdout: ${stdout.trim().slice(0, 200)}`)
       if (stderr) this.addLog(`[VC++] stderr: ${stderr.trim().slice(0, 200)}`)
       // 验证安装结果
-      if (existsSync(vcruntimePath)) {
-        this.addLog('[VC++] ✅ VC++ Runtime 安装成功')
+      const stillMissing: string[] = []
+      for (const dll of requiredDlls) {
+        if (!existsSync(join(systemRoot, 'System32', dll))) {
+          stillMissing.push(dll)
+        }
+      }
+      if (stillMissing.length === 0) {
+        this.addLog('[VC++] ✅ VC++ Runtime 安装成功，所有 DLL 就绪')
       } else {
-        this.addLog('[VC++] ⚠️ 安装完成但 vcruntime140.dll 仍未找到，sidecar 可能无法启动')
+        this.addLog(`[VC++] ⚠️ 安装完成但仍缺失: ${stillMissing.join(', ')}，sidecar 可能无法启动`)
       }
     } catch (err: any) {
       this.addLog(`[VC++] ⚠️ 安装失败: ${err.message}`)
       // 不阻塞启动，让 sidecar 尝试后 fallback 到系统 Python
     }
   }
+
+  /**
+   * 检查 sidecar 的 stderr 输出中是否包含 DLL 加载失败的特征。
+   * PyInstaller 打包的 exe 在缺少 VC++ Runtime 时会输出类似：
+   *   Failed to load Python DLL 'C:\...\python312.dll'
+   *   LoadLibrary: 找不到指定的模块。
+   *   PYI-xxxxx: ... (PyInstaller 内部错误码)
+   */
+  private detectDllLoadFailure(): boolean {
+    const patterns = ['PYI-', 'LoadLibrary', 'Failed to load Python DLL', 'python DLL']
+    const combined = this.lastStderrLines.join('\n')
+    return patterns.some((p) => combined.includes(p))
+   }
 
   private async installDependencies(pythonPath: string): Promise<boolean> {
     const reqPath = this.getRequirementsPath()
@@ -435,6 +472,8 @@ export class PythonManager {
 
     // ─── 尝试用指定模式启动后端 ───
   private async tryStart(pythonPath: string, serverScript: string | null, mode: string): Promise<boolean> {
+    // 重置 stderr 缓冲，用于事后检测 DLL 加载失败
+    this.lastStderrLines = []
     const args: string[] = []
     if (serverScript) args.push(serverScript)
     args.push('--port', String(this.options.port))
@@ -457,7 +496,13 @@ export class PythonManager {
     let exitCode: number | null = null
 
     this.process.stdout?.on('data', (data: Buffer) => this.processLogData(data, 'stdout'))
-    this.process.stderr?.on('data', (data: Buffer) => this.processLogData(data, 'stderr'))
+    this.process.stderr?.on('data', (data: Buffer) => {
+      // 捕获 stderr 行用于 DLL 失败检测
+      this.lastStderrLines.push(data.toString())
+      // 只保留最近 50 行，避免内存泄漏
+      if (this.lastStderrLines.length > 50) this.lastStderrLines.shift()
+      this.processLogData(data, 'stderr')
+    })
 
     this.process.on('error', (err) => {
       this.addLog(`[错误] 进程错误: ${err.message}`)
@@ -562,7 +607,14 @@ export class PythonManager {
         return
       }
       // sidecar 失败，清除缓存，fallback 到系统 Python
-      this.addLog('[启动] ❌ sidecar 失败，尝试 fallback 到系统 Python...')
+      if (this.detectDllLoadFailure()) {
+        this.addLog('[启动] ❌ sidecar 因 DLL 加载失败而退出')
+        this.addLog('[启动] 💡 这通常是因为缺少 Microsoft Visual C++ 2015-2022 Redistributable (x64)')
+        this.addLog('[启动] 💡 请从 https://aka.ms/vs/17/release/vc_redist.x64.exe 下载并安装后重试')
+        this.addLog('[启动] 🔄 当前尝试 fallback 到系统 Python...')
+      } else {
+        this.addLog('[启动] ❌ sidecar 失败，尝试 fallback 到系统 Python...')
+      }
       this.cachedBackendMode = null
       this.cachedPythonPath = null
     }

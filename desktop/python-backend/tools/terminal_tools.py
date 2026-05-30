@@ -39,6 +39,8 @@ class TerminalTool(BaseTool):
         "required": ["command"],
     }
 
+    timeout = 180  # class attribute — overrides BaseTool default for outer wrapper
+
     async def execute(self, command: str, workdir: str = "", timeout: int = DEFAULT_TIMEOUT, **kwargs) -> str:
         # Safety check
         cmd_lower = command.lower().strip()
@@ -46,7 +48,7 @@ class TerminalTool(BaseTool):
             if blocked.lower() in cmd_lower:
                 return f"Error: Command blocked for safety: contains '{blocked}'"
 
-        if timeout < 1 or timeout > 300:
+        if timeout < 1 or timeout > 600:
             timeout = DEFAULT_TIMEOUT
 
         # Determine shell
@@ -54,7 +56,14 @@ class TerminalTool(BaseTool):
         if is_windows:
             # Prefer pwsh (PowerShell 7) over Windows PowerShell
             shell = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
-            shell_cmd = [shell, "-NoProfile", "-Command", command]
+            # Force UTF-8 output encoding so CJK characters display correctly
+            utf8_command = (
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                "[Console]::InputEncoding  = [System.Text.Encoding]::UTF8; "
+                "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+                f"{command}"
+            )
+            shell_cmd = [shell, "-NoProfile", "-Command", utf8_command]
         else:
             shell_cmd = ["bash", "-c", command]
 
