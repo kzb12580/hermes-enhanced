@@ -11,7 +11,7 @@ import subprocess
 from .base import BaseTool
 from . import register
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 180
 MAX_OUTPUT = 50_000  # 50KB
 
 # Blocked commands (Windows-aware)
@@ -29,13 +29,12 @@ BLOCKED_PATTERNS = [
 class TerminalTool(BaseTool):
     name = "terminal"
     description = "Execute a shell command and return stdout/stderr. On Windows uses PowerShell, on Linux/macOS uses bash."
-    timeout = 180  # Allow long-running commands
     parameters = {
         "type": "object",
         "properties": {
             "command": {"type": "string", "description": "Shell command to execute"},
             "workdir": {"type": "string", "description": "Working directory (optional)", "default": ""},
-            "timeout": {"type": "integer", "description": "Timeout in seconds (default 30)", "default": 30},
+            "timeout": {"type": "integer", "description": "Timeout in seconds (default 180)", "default": 180},
         },
         "required": ["command"],
     }
