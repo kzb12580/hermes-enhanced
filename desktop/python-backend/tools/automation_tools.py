@@ -42,7 +42,10 @@ class MouseClickTool(BaseTool):
     async def execute(self, x: int, y: int, button: str = "left", clicks: int = 1, **kw) -> str:
         import pyautogui
         pyautogui.FAILSAFE = True  # Move mouse to corner to abort
-        await asyncio.to_thread(pyautogui.click, x, y, clicks=clicks, button=button)
+        try:
+            await asyncio.to_thread(pyautogui.click, x, y, clicks=clicks, button=button)
+        except pyautogui.FailSafeException:
+            return json.dumps({"ok": False, "error": "鼠标移到了屏幕角落，触发了安全保护。请将鼠标移到屏幕中间后重试。", "action": "click", "x": x, "y": y})
         return json.dumps({"ok": True, "action": "click", "x": x, "y": y, "button": button, "clicks": clicks})
 
 
@@ -93,7 +96,10 @@ class MouseDragTool(BaseTool):
 
     async def execute(self, x: int, y: int, duration: float = 0.5, button: str = "left", **kw) -> str:
         import pyautogui
-        await asyncio.to_thread(pyautogui.drag, x, y, duration=duration, button=button)
+        try:
+            await asyncio.to_thread(pyautogui.drag, x, y, duration=duration, button=button)
+        except pyautogui.FailSafeException:
+            return json.dumps({"ok": False, "error": "鼠标移到了屏幕角落，触发了安全保护。请将鼠标移到屏幕中间后重试。", "action": "drag", "x": x, "y": y})
         return json.dumps({"ok": True, "action": "drag", "x": x, "y": y})
 
 

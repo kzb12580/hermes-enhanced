@@ -75,7 +75,7 @@ let idleStreamTimer: ReturnType<typeof setTimeout> | null = null;
 // Each sendMessage() call increments this; only the matching call clears isSending.
 let sendGeneration = 0;
 
-const IDLE_STREAM_TIMEOUT_MS = 60_000;
+const IDLE_STREAM_TIMEOUT_MS = 300_000;
 
 const generateId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID

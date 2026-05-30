@@ -111,6 +111,20 @@ def edit_word(path: str, operations: list[dict]) -> dict:
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 elif op.get("align") == "right":
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            elif t == "insert":
+                idx = op.get("index", len(doc.paragraphs))
+                text = op.get("text", "")
+                if idx < len(doc.paragraphs):
+                    doc.paragraphs[idx].insert_paragraph_before(text)
+                else:
+                    doc.add_paragraph(text)
+            elif t == "delete_paragraph":
+                idx = op.get("index", -1)
+                if 0 <= idx < len(doc.paragraphs):
+                    p = doc.paragraphs[idx]
+                    p._element.getparent().remove(p._element)
+                else:
+                    return {"error": f"Invalid paragraph index: {idx}", "success": False}
             elif t == "add_table":
                 rows = op.get("rows", [])
                 if not rows or not rows[0]:
@@ -636,8 +650,9 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
                 chart = chart_cls()
                 chart.title = op.get("title", "")
                 chart.style = 10
-                chart.y_axis.title = op.get("y_axis", "")
-                chart.x_axis.title = op.get("x_axis", "")
+                if chart_cls is not PieChart:
+                    chart.y_axis.title = op.get("y_axis", "")
+                    chart.x_axis.title = op.get("x_axis", "")
                 data_ref = _safe_ref(ws, op.get("data_ref", {}))
                 cats_ref = _safe_ref(ws, op.get("cats_ref", {}))
                 chart.add_data(data_ref, titles_from_data=True)

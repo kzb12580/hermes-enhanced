@@ -16,11 +16,11 @@ MAX_OUTPUT = 50_000  # 50KB
 
 # Blocked commands (Windows-aware)
 BLOCKED_PATTERNS = [
-    "rm -rf /", "format ", "del /f /s /q C:", "rmdir /s /q C:",
+    "rm -rf /", "format c:", "format d:", "format e:", "del /f /s /q C:", "rmdir /s /q C:",
     "shutdown", "bcdedit", "diskpart", "reg delete",
     "rm -rf /*", ":(){ :|:& };:", "mkfs",
     # Extended blocklist
-    "rm -rf /", "format ", "del /s", "rd /s", "shutdown", "reboot",
+    "rm -rf /", "del /s", "rd /s", "shutdown", "reboot",
     "reg delete", "reg add", "net user", "net localgroup",
     "Invoke-WebRequest", "certutil", "bitsadmin", "powershell -enc", "cmd /c",
 ]
