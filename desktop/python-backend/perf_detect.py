@@ -71,23 +71,23 @@ def get_adaptive_limits(profile: dict) -> dict:
 
     limits = {
         "low": {
-            "max_tool_iterations": 15,
-            "max_tool_result_size": 8_000,      # 8KB
-            "max_tool_calls_per_turn": 15,
-            "max_content_length": 50_000,
-            "tool_timeout": 120,
+            "max_tool_iterations": 30,
+            "max_tool_result_size": 32_000,     # 32KB
+            "max_tool_calls_per_turn": 30,
+            "max_content_length": 100_000,
+            "tool_timeout": 180,
         },
         "medium": {
-            "max_tool_iterations": 50,
-            "max_tool_result_size": 32_000,     # 32KB
+            "max_tool_iterations": 90,
+            "max_tool_result_size": 50_000,     # 50KB
             "max_tool_calls_per_turn": 50,
-            "max_content_length": 200_000,
-            "tool_timeout": 300,
+            "max_content_length": 500_000,
+            "tool_timeout": 600,
         },
         "high": {
             "max_tool_iterations": 90,
             "max_tool_result_size": 50_000,     # 50KB
-            "max_tool_calls_per_turn": 100,
+            "max_tool_calls_per_turn": 50,
             "max_content_length": 500_000,
             "tool_timeout": 600,
         },

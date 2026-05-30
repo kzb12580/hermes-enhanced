@@ -27,7 +27,7 @@ LanguageType = Literal["en", "zh", "es", "fr", "de", "ja", "ko"]
 _config: dict = {
     "model": "hermes-3-llama-3.1-8b",
     "temperature": 0.7,
-    "max_tokens": 8192,
+    "max_tokens": 32768,
     "theme": "dark",
     "language": "en",
     "auto_save": True,
