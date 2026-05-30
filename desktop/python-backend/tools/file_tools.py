@@ -25,6 +25,14 @@ _ALLOWED_ROOTS: list[Path] = [
     Path(tempfile.gettempdir()).resolve(),
 ]
 
+# On Windows, allow all local drive roots (C:\, D:\, H:\, etc.)
+if sys.platform == "win32":
+    import string
+    for drive_letter in string.ascii_uppercase:
+        drive = Path(f"{drive_letter}:\\")
+        if drive.exists():
+            _ALLOWED_ROOTS.append(drive.resolve())
+
 _BLOCKED_PREFIXES: list[Path] = [
     Path("/etc"), Path("/root/.ssh"), Path("/proc"), Path("/sys"), Path("/dev"),
     Path("/boot"), Path("/sbin"), Path("/usr/sbin"),

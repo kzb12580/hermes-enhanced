@@ -489,6 +489,20 @@ async def chat(message: ChatMessage):
                 # Continue loop for follow-up LLM call
                 logger.info("Tool iteration %d done, calling LLM again", iteration + 1)
             
+            # If loop exhausted (all iterations had tool calls), call LLM one final time
+            # WITHOUT tools so it must generate a text response
+            last_had_tools = len(raw_tool_calls) > 0 if 'raw_tool_calls' in dir() else False
+            if last_had_tools:
+                logger.info("Tool loop exhausted, calling LLM for final text response (no tools)")
+                final_response = ""
+                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools=None):
+                    if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
+                        final_response += chunk
+                        yield f"event: token\ndata: {chunk}\n\n"
+                if final_response:
+                    current_messages.append({"role": "assistant", "content": final_response})
+                    session["messages"].append({"role": "assistant", "content": final_response})
+            
             # Save session
             session_manager._save()
             
