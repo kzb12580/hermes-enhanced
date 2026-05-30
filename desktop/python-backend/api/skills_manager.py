@@ -263,9 +263,12 @@ wb.save('output.xlsx')
                     break
         return matched
     
-    def get_skills_context(self, query: Optional[str] = None) -> str:
+    def get_skills_context(self, query: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
         """Get skills context for system prompt."""
-        if query:
+        if active_skills:
+            # Filter to only active skills by name
+            skills = [s for s in self._skills.values() if s.name in active_skills]
+        elif query:
             skills = self.get_skills_for_query(query)
         else:
             skills = self.get_all_skills()

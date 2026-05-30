@@ -117,6 +117,11 @@ class ChatMessage(BaseModel):
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=128000)
     attachments: Optional[list[dict]] = None
+    # Frontend features that were silently dropped:
+    thinking_mode: Optional[str] = None  # off/auto/on
+    thinking_budget: Optional[int] = None
+    skills: Optional[list[str]] = None  # active skill IDs
+    proxy_url: Optional[str] = None
 
 
 class SessionCreate(BaseModel):
@@ -178,10 +183,10 @@ def truncate_tool_result(result: str) -> str:
     return result
 
 
-def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
+def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
     """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
-    skills_ctx = skill_manager.get_skills_context()
+    skills_ctx = skill_manager.get_skills_context(active_skills)
     tools_desc = build_tools_description(openai_tools())
     
     return _build_system_prompt(
@@ -411,8 +416,9 @@ async def chat(message: ChatMessage):
         "content": user_content,
     })
 
-    # Build API messages
-    sys_prompt = build_system_prompt(message.system_prompt)
+    # Build API messages — use message-specific skills if provided
+    skills_override = message.skills if message.skills else None
+    sys_prompt = build_system_prompt(message.system_prompt, active_skills=skills_override)
     context_window, max_response = get_model_context_config(message.model or "default")
     system_tokens = estimate_tokens(sys_prompt)
     max_input_tokens = context_window - max_response - system_tokens - 500
