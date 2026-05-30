@@ -56,11 +56,17 @@ def _auto_register():
     from .file_tools import ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool
     from .terminal_tools import TerminalTool
     from .web_tools import WebSearchTool, WebExtractTool
+    from .vision_tool import VisionTool
+    from .screen_capture_tool import ScreenCaptureTool
+    from .ocr_tool import OCRTool
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
         TerminalTool,
         WebSearchTool, WebExtractTool,
+        VisionTool,
+        ScreenCaptureTool,
+        OCRTool,
     ]:
         try:
             register(tool_cls())
