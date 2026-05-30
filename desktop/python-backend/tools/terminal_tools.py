@@ -29,6 +29,7 @@ BLOCKED_PATTERNS = [
 class TerminalTool(BaseTool):
     name = "terminal"
     description = "Execute a shell command and return stdout/stderr. On Windows uses PowerShell, on Linux/macOS uses bash."
+    timeout = 180  # Allow long-running commands
     parameters = {
         "type": "object",
         "properties": {
@@ -46,7 +47,7 @@ class TerminalTool(BaseTool):
             if blocked.lower() in cmd_lower:
                 return f"Error: Command blocked for safety: contains '{blocked}'"
 
-        if timeout < 1 or timeout > 120:
+        if timeout < 1 or timeout > 300:
             timeout = DEFAULT_TIMEOUT
 
         # Determine shell

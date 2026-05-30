@@ -197,6 +197,84 @@ def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Opti
     )
 
 
+import re as _re
+
+def _parse_text_tool_calls(text: str) -> list[dict]:
+    """Parse text-based tool calls from LLM response.
+    
+    Handles formats:
+    - <tool_call>{"name": "tool", "arguments": {...}}</tool_call>
+    - {"name": "tool", "arguments": {...}}
+    - function_name(args)  — simple function call syntax
+    """
+    tool_calls = []
+    
+    # Pattern 1: <tool_call>...</tool_call>
+    for match in _re.finditer(r'<tool_call>(.*?)</tool_call>', text, _re.DOTALL):
+        try:
+            data = json.loads(match.group(1).strip())
+            tool_calls.append({
+                "id": f"text_tc_{len(tool_calls)}",
+                "type": "function",
+                "function": {
+                    "name": data.get("name", ""),
+                    "arguments": json.dumps(data.get("arguments", {})),
+                },
+            })
+        except json.JSONDecodeError:
+            pass
+    
+    if tool_calls:
+        return tool_calls
+    
+    # Pattern 2: {"name": "...", "arguments": {...}} — standalone JSON
+    for match in _re.finditer(r'\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*"arguments"\s*:\s*\{[^}]*\}[^{}]*\}', text):
+        try:
+            data = json.loads(match.group(0))
+            if "name" in data and "arguments" in data:
+                tool_calls.append({
+                    "id": f"text_tc_{len(tool_calls)}",
+                    "type": "function",
+                    "function": {
+                        "name": data["name"],
+                        "arguments": json.dumps(data["arguments"]),
+                    },
+                })
+        except json.JSONDecodeError:
+            pass
+    
+    if tool_calls:
+        return tool_calls
+    
+    # Pattern 3: tool_name({key: value}) or tool_name(key=value)
+    # Only match known tool names
+    known_tools = {t.name for t in all_tools()}
+    for match in _re.finditer(r'\b(' + '|'.join(_re.escape(t) for t in known_tools) + r')\s*\(([^)]*)\)', text):
+        tool_name = match.group(1)
+        args_str = match.group(2).strip()
+        try:
+            # Try JSON first
+            args = json.loads(args_str) if args_str else {}
+        except json.JSONDecodeError:
+            # Try key=value parsing
+            args = {}
+            for kv in _re.split(r',\s*', args_str):
+                if '=' in kv:
+                    k, v = kv.split('=', 1)
+                    v = v.strip().strip('"').strip("'")
+                    args[k.strip()] = v
+        tool_calls.append({
+            "id": f"text_tc_{len(tool_calls)}",
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(args),
+            },
+        })
+    
+    return tool_calls
+
+
 async def call_llm_streaming(
     base_url: str,
     api_key: str,
@@ -462,6 +540,14 @@ async def chat(message: ChatMessage):
                         except json.JSONDecodeError:
                             pass
                 
+                # If no API tool calls, try parsing text-based tool calls
+                # (for models that don't support function calling natively)
+                if not raw_tool_calls and full_response:
+                    text_tool_calls = _parse_text_tool_calls(full_response)
+                    if text_tool_calls:
+                        raw_tool_calls = text_tool_calls
+                        logger.info("Parsed %d text-based tool calls from response", len(text_tool_calls))
+                
                 # If no tool calls, we're done
                 if not raw_tool_calls:
                     break
@@ -515,8 +601,12 @@ async def chat(message: ChatMessage):
                 trimmed_messages = []
                 for msg in current_messages:
                     if msg.get("role") == "tool":
-                        continue  # Drop tool results
-                    if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                        # Truncate tool results instead of dropping entirely
+                        content = msg.get("content", "")
+                        if len(content) > 500:
+                            content = content[:500] + "...[truncated]"
+                        trimmed_messages.append({**msg, "content": content})
+                    elif msg.get("role") == "assistant" and msg.get("tool_calls"):
                         trimmed = {k: v for k, v in msg.items() if k != "tool_calls"}
                         if trimmed.get("content"):
                             trimmed_messages.append(trimmed)
