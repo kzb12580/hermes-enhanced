@@ -8,11 +8,13 @@ import logging
 import os
 import signal
 import sys
+import time
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -66,6 +68,7 @@ def _parse_args():
 # ---------------------------------------------------------------------------
 _host = os.environ.get("HERMES_HOST", "127.0.0.1")
 _port = int(os.environ.get("HERMES_PORT", "9876"))
+_start_time = time.time()
 
 
 # ---------------------------------------------------------------------------
@@ -95,9 +98,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — allow the Electron renderer (localhost)
-# Per CORS spec, allow_credentials=True is NOT allowed with allow_origins=['*'].
-# Since we use wildcard origins, credentials must be False.
-# CORS: 桌面应用允许所有来源（安全由 Electron contextIsolation 保证）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -112,8 +112,146 @@ async def global_exception_handler(request, exc):
     logger.error("Unhandled exception: %s", exc, exc_info=True)
     return {"error": "Internal server error", "success": False}
 
-# 安全说明: 桌面应用仅监听 127.0.0.1:9876，CORS 限制为 localhost
-# 不需要 API Token 认证（本地进程间通信）
+
+# ---------------------------------------------------------------------------
+# 诊断 & 热重载 API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/diagnose")
+async def diagnose():
+    """全面诊断后端状态 — 工具、模型、依赖、路径"""
+    import importlib
+    from pathlib import Path
+    results = {
+        "backend": {
+            "uptime_seconds": round(time.time() - _start_time, 1),
+            "host": _host,
+            "port": _port,
+            "python": sys.version,
+        },
+        "tools": [],
+        "vision_model": {},
+        "gpu": {},
+        "skills_count": 0,
+    }
+
+    # 1. 检查已注册的工具
+    try:
+        from tools import all_tools
+        tools = all_tools()
+        for t in tools:
+            tool_info = {"name": t.name, "timeout": getattr(t, "timeout", 60)}
+            # 检查工具是否有 requires_network
+            if hasattr(t, "requires_network"):
+                tool_info["requires_network"] = t.requires_network
+            results["tools"].append(tool_info)
+        results["tools_count"] = len(tools)
+    except Exception as e:
+        results["tools_error"] = str(e)
+
+    # 2. 检查 GPU
+    try:
+        import torch
+        results["gpu"] = {
+            "available": torch.cuda.is_available(),
+            "name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "vram_gb": round(torch.cuda.get_device_properties(0).total_mem / (1024**3), 1) if torch.cuda.is_available() else 0,
+            "cuda_version": torch.version.cuda,
+            "torch_version": torch.__version__,
+        }
+    except ImportError:
+        results["gpu"] = {"available": False, "error": "torch not installed"}
+
+    # 3. 检查视觉模型
+    try:
+        from tools.vision_tool import VisionTool
+        vt = VisionTool()
+        model_path = vt._find_model_path()
+        results["vision_model"] = {
+            "found": model_path is not None,
+            "path": str(model_path) if model_path else None,
+            "env_var": os.environ.get("HERMES_VISION_MODEL_PATH"),
+        }
+    except Exception as e:
+        results["vision_model"] = {"error": str(e)}
+
+    # 4. 检查技能
+    try:
+        from api.skills_manager import skill_manager
+        results["skills_count"] = len(skill_manager.get_all_skills())
+    except Exception as e:
+        results["skills_error"] = str(e)
+
+    return results
+
+
+@app.post("/api/tools/reload")
+async def reload_tools():
+    """热重载工具模块 — 修改代码后调用此接口生效"""
+    try:
+        from tools import _auto_register
+        import tools as tools_module
+
+        # 清空工具注册表
+        tools_module._tools.clear()
+
+        # 清除 Python 缓存
+        for mod_name in list(sys.modules.keys()):
+            if mod_name.startswith("tools."):
+                mod = sys.modules.pop(mod_name)
+                # 删除 .pyc 缓存文件
+                if hasattr(mod, "__file__") and mod.__file__:
+                    import pathlib
+                    pyc = pathlib.Path(mod.__file__).with_suffix(".pyc")
+                    if pyc.exists():
+                        pyc.unlink()
+
+        # 重新导入和注册
+        _auto_register()
+
+        from tools import all_tools
+        tools = all_tools()
+        return {
+            "success": True,
+            "tools_count": len(tools),
+            "tools": [t.name for t in tools],
+        }
+    except Exception as e:
+        logger.error("Tool reload failed: %s", e, exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+class VisionModelPathRequest(BaseModel):
+    path: str
+
+
+@app.post("/api/config/vision-model-path")
+async def set_vision_model_path(req: VisionModelPathRequest):
+    """设置视觉模型路径 — 动态配置，不需要重启"""
+    from pathlib import Path
+    p = Path(req.path).expanduser()
+    if not p.exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {p}")
+    if not any(p.glob("*.safetensors")):
+        raise HTTPException(status_code=400, detail=f"No .safetensors files found in: {p}")
+
+    # 设置环境变量（当前进程生效）
+    os.environ["HERMES_VISION_MODEL_PATH"] = str(p)
+
+    # 尝试重置模型缓存
+    try:
+        from tools.vision_tool import VisionTool
+        # 找到已注册的 vision_locate 工具并重置
+        from tools import get_tool
+        vt = get_tool("vision_locate")
+        if vt:
+            vt._model = None
+            vt._processor = None
+    except Exception:
+        pass
+
+    return {"success": True, "path": str(p), "message": "Model path updated. Next vision_locate call will use this path."}
+
 
 # Register routers
 app.include_router(health_router)

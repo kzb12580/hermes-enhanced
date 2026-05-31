@@ -5,9 +5,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
 import { VisionModelDownload } from './VisionModelDownload';
 import { SkillsPanel } from './SkillsPanel';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EmailConfig } from '../email/EmailConfig';
 
-type SettingsTab = 'general' | 'models' | 'skills' | 'network' | 'email' | 'apikeys' | 'about';
+type SettingsTab = 'general' | 'models' | 'skills' | 'network' | 'email' | 'apikeys' | 'diagnostics' | 'about';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'general', label: '通用', icon: <Settings2 size={16} /> },
@@ -16,6 +17,7 @@ const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'network', label: '网络', icon: <Wifi size={16} /> },
   { id: 'email', label: '邮件', icon: <Mail size={16} /> },
   { id: 'apikeys', label: 'API 密钥', icon: <Key size={16} /> },
+  { id: 'diagnostics', label: '诊断', icon: <Wrench size={16} /> },
   { id: 'about', label: '关于', icon: <Info size={16} /> },
 ];
 
@@ -225,6 +227,9 @@ export function SettingsPanel() {
             )}
             {activeTab === 'apikeys' && (
               <ApiKeysSettings />
+            )}
+            {activeTab === 'diagnostics' && (
+              <DiagnosticsPanel />
             )}
             {activeTab === 'about' && (
               <AboutSection />
