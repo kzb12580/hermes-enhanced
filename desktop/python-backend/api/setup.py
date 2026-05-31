@@ -552,6 +552,11 @@ async def repair_vision_deps():
         ("sentencepiece", "sentencepiece"),
         ("protobuf", "google.protobuf"),
         ("safetensors", "safetensors"),
+        ("opencv-python-headless", "cv2"),
+        ("peft", "peft"),
+        ("decord", "decord"),
+        ("lmdb", "lmdb"),
+        ("numpy", "numpy"),
     ]
     for pkg_name, import_name in vision_deps:
         try:

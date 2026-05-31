@@ -37,11 +37,17 @@ REQUIREMENTS = [
     ("python-docx", ">=1.1.0"),
     ("python-pptx", ">=0.6.23"),
     ("openpyxl", ">=3.1.0"),
+    # Vision model dependencies (LocateAnything-3B)
     ("transformers", ">=4.40.0,<5.0.0"),
     ("accelerate", ">=0.26.0"),
     ("sentencepiece", ">=0.1.99"),
     ("protobuf", ">=4.25.0"),
     ("safetensors", ">=0.4.0"),
+    ("opencv-python-headless", ">=4.8.0"),
+    ("peft", ">=0.7.0"),
+    ("decord", ">=0.6.0"),
+    ("lmdb", ">=1.4.0"),
+    ("numpy", ">=1.25.0"),
 ]
 
 OPTIONAL_REQUIREMENTS = [
