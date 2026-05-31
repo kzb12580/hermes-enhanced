@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput, Wrench } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
