@@ -41,6 +41,7 @@ REQUIREMENTS = [
     ("accelerate", ">=0.26.0"),
     ("sentencepiece", ">=0.1.99"),
     ("protobuf", ">=4.25.0"),
+    ("safetensors", ">=0.4.0"),
 ]
 
 OPTIONAL_REQUIREMENTS = [
