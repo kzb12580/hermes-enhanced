@@ -31,11 +31,16 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [backendReady, setBackendReady] = useState(false);
   const [backendChecking, setBackendChecking] = useState(true);
   const [backendError, setBackendError] = useState('');
+  const [backendWaitTime, setBackendWaitTime] = useState(0);
 
   useEffect(() => {
     checkBackend();
     const interval = setInterval(checkBackend, 3000);
-    return () => clearInterval(interval);
+    // 计时器：记录等待后端的时间
+    const timer = setInterval(() => {
+      setBackendWaitTime(prev => prev + 1);
+    }, 1000);
+    return () => { clearInterval(interval); clearInterval(timer); };
   }, []);
 
   const checkBackend = async () => {
@@ -191,14 +196,28 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
               <Loader2 size={20} className="spin" style={{ color: '#60a5fa' }} />
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, color: '#93c5fd', fontWeight: 500 }}>
                   正在启动后端服务...
                 </div>
                 <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
-                  首次启动可能需要 1-2 分钟，请耐心等待
+                  {backendWaitTime < 15
+                    ? '首次启动可能需要 1-2 分钟，请耐心等待'
+                    : `已等待 ${backendWaitTime} 秒，后端仍在启动中...`}
                 </div>
+                {backendWaitTime >= 20 && (
+                  <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
+                    ⚠️ 等待时间较长，请检查后端服务是否正常运行
+                  </div>
+                )}
               </div>
+              {backendWaitTime >= 10 && (
+                <button onClick={() => { setBackendReady(true); setBackendChecking(false); }} style={{
+                  ...btnSecondaryStyle, padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap',
+                }}>
+                  跳过等待
+                </button>
+              )}
             </div>
           )}
 

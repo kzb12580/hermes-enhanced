@@ -30,9 +30,15 @@ export default function App() {
     // 检查是否已完成初始设置
     checkSetupStatus();
 
+    // 安全超时：3 秒后如果仍在加载，自动显示引导页（防止黑屏卡死）
+    const safetyTimer = setTimeout(() => {
+      setSetupDone(prev => prev === null ? false : prev);
+    }, 3000);
+
     return () => {
       cleanup?.();
       useSystemStore.getState().stopHealthPolling();
+      clearTimeout(safetyTimer);
     };
   }, []);
 
@@ -57,7 +63,7 @@ export default function App() {
     setSetupDone(true);
   };
 
-  // 加载中
+  // 加载中（超过 5 秒自动跳过，防止黑屏卡死）
   if (setupDone === null) {
     return (
       <div style={{
@@ -65,10 +71,10 @@ export default function App() {
         height: '100vh', background: '#0f172a', color: '#9ca3af',
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{
+          <div className="spin" style={{
             width: 32, height: 32, border: '3px solid #374151',
             borderTopColor: '#3b82f6', borderRadius: '50%',
-            animation: 'spin 1s linear infinite', margin: '0 auto 16px',
+            margin: '0 auto 16px',
           }} />
           <p>正在初始化...</p>
         </div>
