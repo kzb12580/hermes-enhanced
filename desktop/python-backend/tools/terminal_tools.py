@@ -20,10 +20,42 @@ BLOCKED_PATTERNS = [
     "shutdown", "bcdedit", "diskpart", "reg delete",
     "rm -rf /*", ":(){ :|:& };:", "mkfs",
     # Extended blocklist
-    "rm -rf /", "del /s", "rd /s", "shutdown", "reboot",
-    "reg delete", "reg add", "net user", "net localgroup",
-    "Invoke-WebRequest", "certutil", "bitsadmin", "powershell -enc", "cmd /c",
+    "del /s", "rd /s", "reboot",
+    "reg add", "net user", "net localgroup",
+    "Invoke-WebRequest", "certutil", "bitsadmin",
 ]
+
+
+def _check_blocked(command: str) -> str:
+    """检查命令是否被阻止，返回错误信息或空字符串"""
+    import re
+    cmd = command.strip()
+    cmd_lower = cmd.lower()
+
+    # 子串匹配
+    for blocked in BLOCKED_PATTERNS:
+        if blocked.lower() in cmd_lower:
+            return f"Error: Command blocked for safety: contains '{blocked}'"
+
+    # 正则匹配绕过模式
+    dangerous_patterns = [
+        r'rm\s+-rf\s+/',           # rm -rf / (有空格变体)
+        r'rm\s+-rf\s+\*',          # rm -rf *
+        r'shutdown\b',             # shutdown (词边界)
+        r'reboot\b',               # reboot
+        r'powershell\s+-e[cn]',    # powershell -enc/-ec
+        r'cmd\s*/c\b',             # cmd /c
+        r'cmd\.exe\s*/c\b',        # cmd.exe /c
+        r'>\s*/dev/sd',            # 写入磁盘设备
+        r'dd\s+.*of=/dev/',        # dd 写入设备
+        r'mkfs\b',                 # 格式化
+        r'fdisk\b',                # 分区工具
+    ]
+    for pattern in dangerous_patterns:
+        if re.search(pattern, cmd, re.IGNORECASE):
+            return f"Error: Command blocked for safety: matches dangerous pattern '{pattern}'"
+
+    return ""
 
 
 class TerminalTool(BaseTool):
@@ -43,10 +75,18 @@ class TerminalTool(BaseTool):
 
     async def execute(self, command: str, workdir: str = "", timeout: int = DEFAULT_TIMEOUT, **kwargs) -> str:
         # Safety check
-        cmd_lower = command.lower().strip()
-        for blocked in BLOCKED_PATTERNS:
-            if blocked.lower() in cmd_lower:
-                return f"Error: Command blocked for safety: contains '{blocked}'"
+        blocked_err = _check_blocked(command)
+        if blocked_err:
+            return blocked_err
+
+        # Validate workdir
+        if workdir:
+            from pathlib import Path
+            wp = Path(workdir).resolve()
+            # 防止在敏感目录执行命令
+            blocked_dirs = ['/etc', '/boot', '/sys', '/proc', '/dev']
+            if any(str(wp).startswith(d) for d in blocked_dirs):
+                return f"Error: Working directory not allowed: {workdir}"
 
         if timeout < 1 or timeout > 600:
             timeout = DEFAULT_TIMEOUT

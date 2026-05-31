@@ -259,9 +259,11 @@ def build_tools_description(tools: list[dict]) -> str:
     
     descriptions = []
     for tool in tools:
-        name = tool.get("name", "unknown")
-        desc = tool.get("description", "No description")
-        params = tool.get("parameters", {})
+        # 兼容 OpenAI 格式 {"type": "function", "function": {...}} 和扁平格式
+        func = tool.get("function", tool)
+        name = func.get("name", "unknown")
+        desc = func.get("description", "No description")
+        params = func.get("parameters", {})
         
         param_desc = ""
         if params and "properties" in params:

@@ -237,14 +237,14 @@ class VisionTool(BaseTool):
                 dtype = torch.float32
 
             self._processor = AutoProcessor.from_pretrained(
-                str(model_path), trust_remote_code=True
+                str(model_path), trust_remote_code=False
             )
 
             self._model = AutoModel.from_pretrained(
                 str(model_path),
                 torch_dtype=dtype,
                 device_map="auto",
-                trust_remote_code=True,
+                trust_remote_code=False,
             )
 
             # 设置 generation_config

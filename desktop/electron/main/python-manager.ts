@@ -913,7 +913,7 @@ export class PythonManager {
     console.log(logEntry)
     // 写入日志文件
     try {
-      appendFileSync(this.logFilePath, logEntry + '\n')
+      appendFile(this.logFilePath, logEntry + '\n')
     } catch { /* ignore */ }
   }
 

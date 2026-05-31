@@ -62,6 +62,11 @@ class VerifyCommandTool(BaseTool):
 
     async def execute(self, command: str, expected_in_output: str = "", **kwargs) -> str:
         import asyncio
+        # 安全检查：复用 terminal_tools 黑名单
+        from .terminal_tools import _check_blocked
+        blocked_err = _check_blocked(command)
+        if blocked_err:
+            return json.dumps({"ok": False, "error": blocked_err}, ensure_ascii=False)
         is_windows = __import__('platform').system() == "Windows"
         if is_windows:
             import shutil
@@ -89,6 +94,13 @@ class VerifyCommandTool(BaseTool):
                 result["error"] = stderr.decode('utf-8', errors='replace').strip()[:500]
             
             return json.dumps(result, ensure_ascii=False)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except:
+                pass
+            return json.dumps({"ok": False, "error": "Command timed out (25s)"}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 

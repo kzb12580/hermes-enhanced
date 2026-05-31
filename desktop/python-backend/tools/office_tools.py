@@ -193,6 +193,7 @@ def edit_word(path: str, operations: list[dict]) -> dict:
 def read_word(path: str) -> dict:
     """读取 Word 文档内容"""
     try:
+        path = _safe_path(path)
         err = _check_file(path, "document")
         if err: return err
         from docx import Document
@@ -553,6 +554,7 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
 def read_excel(path: str, sheet_name: str = "", max_rows: int = 1000) -> dict:
     """读取 Excel 文件"""
     try:
+        path = _safe_path(path)
         err = _check_file(path, "excel")
         if err: return err
         # 文件大小检查

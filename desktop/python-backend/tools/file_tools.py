@@ -73,8 +73,11 @@ if sys.platform == "win32":
             _ALLOWED_ROOTS.append(drive.resolve())
 
 _BLOCKED_PREFIXES: list[Path] = [
-    Path("/etc"), Path("/root/.ssh"), Path("/proc"), Path("/sys"), Path("/dev"),
-    Path("/boot"), Path("/sbin"), Path("/usr/sbin"),
+    Path("/etc"), Path("/root/.ssh"), Path("/root/.gnupg"), Path("/root/.aws"),
+    Path("/root/.config"), Path("/root/.bash_history"), Path("/root/.zsh_history"),
+    Path("/proc"), Path("/sys"), Path("/dev"), Path("/boot"), Path("/run"),
+    Path("/var/run"), Path("/var/log"),
+    Path("/sbin"), Path("/usr/sbin"),
 ]
 
 # Windows blocked paths

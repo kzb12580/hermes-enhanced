@@ -196,53 +196,58 @@ def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
     """Trim message history to fit within token limit.
     
     Strategy: Keep messages from the end, but never split a tool-call chain.
-    A tool-call chain = assistant message with tool_calls + all its tool results.
-    This ensures the AI always sees complete reasoning context.
+    A tool-call chain = assistant message with tool_calls + ALL its tool results.
+    This ensures the API always receives complete tool-call/result pairs.
     """
     if not messages:
         return messages
     
-    result = []
+    # Step 1: Group messages into blocks that must stay together
+    # A "block" is either a single message or an assistant+tool_calls followed by all its tool results
+    blocks = []  # list of (messages_list, token_count)
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            # This is the start of a tool-call chain
+            chain = [msg]
+            chain_tokens = estimate_tokens(msg.get("content", "")) + estimate_tokens(json.dumps(msg["tool_calls"]))
+            # Collect all matching tool results
+            tool_call_ids = {tc.get("id") for tc in msg["tool_calls"]}
+            j = i + 1
+            while j < len(messages) and messages[j].get("role") == "tool":
+                tc_id = messages[j].get("tool_call_id", "")
+                if tc_id in tool_call_ids:
+                    chain.append(messages[j])
+                    chain_tokens += estimate_tokens(messages[j].get("content", ""))
+                j += 1
+            blocks.append((chain, chain_tokens))
+            i = j
+        else:
+            msg_tokens = estimate_tokens(msg.get("content", "")) + estimate_tokens(json.dumps(msg.get("tool_calls", ""))) if msg.get("tool_calls") else estimate_tokens(msg.get("content", ""))
+            blocks.append(([msg], msg_tokens))
+            i += 1
+    
+    # Step 2: Keep blocks from the end until token limit
+    kept = []
     total_tokens = 0
-    
-    # Iterate from the end, keeping messages
-    for msg in reversed(messages[1:]):
-        msg_tokens = 0
-        if "content" in msg and msg["content"]:
-            msg_tokens += estimate_tokens(msg["content"])
-        if "tool_calls" in msg:
-            msg_tokens += estimate_tokens(json.dumps(msg["tool_calls"]))
-        
-        if total_tokens + msg_tokens > max_input_tokens:
+    for chain, chain_tokens in reversed(blocks):
+        if total_tokens + chain_tokens > max_input_tokens:
             break
-        
-        result.append(msg)
-        total_tokens += msg_tokens
+        kept.append(chain)
+        total_tokens += chain_tokens
+    kept.reverse()
     
-    result.reverse()
+    # Step 3: Flatten and ensure first message is present
+    result = []
+    for chain in kept:
+        result.extend(chain)
     
-    # Now ensure we didn't orphan tool results — if the first kept message is a
-    # tool result, find its parent assistant message and include it
-    if result and result[0].get("role") == "tool":
-        tool_call_id = result[0].get("tool_call_id", "")
-        # Search backwards in dropped messages for the matching assistant
-        for msg in reversed(messages[1:]):
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                for tc in msg["tool_calls"]:
-                    if tc.get("id") == tool_call_id:
-                        # Found the parent — prepend it and any preceding context
-                        parent_tokens = estimate_tokens(msg.get("content", ""))
-                        if msg.get("tool_calls"):
-                            parent_tokens += estimate_tokens(json.dumps(msg["tool_calls"]))
-                        if total_tokens + parent_tokens <= max_input_tokens:
-                            result.insert(0, msg)
-                            total_tokens += parent_tokens
-                        break
-    
-    # Prepend the first message (user's initial question / context)
-    first_tokens = estimate_tokens(messages[0].get("content", ""))
-    if total_tokens + first_tokens <= max_input_tokens:
-        result.insert(0, messages[0])
+    # Always include the first message (system/user context)
+    if result and messages and result[0] is not messages[0]:
+        first_tokens = estimate_tokens(messages[0].get("content", ""))
+        if total_tokens + first_tokens <= max_input_tokens:
+            result.insert(0, messages[0])
     
     return result
 
@@ -558,7 +563,7 @@ async def list_sessions():
 @router.post("/api/chat/sessions")
 async def create_session(request: SessionCreate):
     """Create a new session."""
-    session_id = str(int(time.time() * 1000))
+    import uuid; session_id = str(uuid.uuid4())[:13]
     session = session_manager.create_session(session_id, request.name)
     return {"session_id": session_id, "name": request.name}
 
@@ -600,6 +605,8 @@ async def upload_file(file: UploadFile = FastAPIFile(...)):
     """Upload a file and return its server path."""
     import uuid
 
+    MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
+
     upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
@@ -608,7 +615,16 @@ async def upload_file(file: UploadFile = FastAPIFile(...)):
     unique_name = f"{uuid.uuid4().hex[:12]}_{file.filename or 'file'}"
     file_path = os.path.join(upload_dir, unique_name)
 
-    contents = await file.read()
+    # 分块读取，检查大小限制
+    contents = b""
+    while True:
+        chunk = await file.read(8192)
+        if not chunk:
+            break
+        contents += chunk
+        if len(contents) > MAX_UPLOAD_SIZE:
+            return {"error": f"File too large: max {MAX_UPLOAD_SIZE // 1024 // 1024}MB", "success": False}
+
     with open(file_path, "wb") as f:
         f.write(contents)
 
@@ -675,6 +691,7 @@ async def chat(message: ChatMessage):
         """Generate SSE stream for chat response with tool execution loop."""
         try:
             current_messages = list(api_messages)
+            raw_tool_calls = []  # 初始化，防止循环未执行时未绑定
             
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
                 # Call LLM with streaming
@@ -741,16 +758,23 @@ async def chat(message: ChatMessage):
                 
                 # Send tool results and add to messages
                 for result in tool_results:
-                    yield f"event: tool_result\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\n\n"
+                    yield f"event: tool_result\\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\\n\\n"
                     current_messages.append(result)
                     session["messages"].append(result)
+                
+                # Context trimming: 每 5 次迭代裁剪一次，防止 context 超限
+                if (iteration + 1) % 5 == 0:
+                    context_window, max_response = get_model_context_config(model or "default")
+                    system_tokens = estimate_tokens(session.get("system_prompt", ""))
+                    max_input_tokens = context_window - max_response - system_tokens - 500
+                    current_messages = list(trim_messages(current_messages, max_input_tokens))
                 
                 # Continue loop for follow-up LLM call
                 logger.info("Tool iteration %d done, calling LLM again", iteration + 1)
             
             # If loop exhausted (all iterations had tool calls), call LLM one final time
             # WITHOUT tools so it must generate a text response
-            last_had_tools = len(raw_tool_calls) > 0 if 'raw_tool_calls' in dir() else False
+            last_had_tools = len(raw_tool_calls) > 0
             if last_had_tools:
                 logger.info("Tool loop exhausted, calling LLM for final text response (no tools)")
                 # Strip heavy tool messages to free context space for the final response

@@ -24,7 +24,13 @@ process.on('SIGINT', () => {
 
 process.on('uncaughtException', (err) => {
   console.error('[主进程] 未捕获异常:', err)
-  // 不退出 — 保持窗口可见，让 Python 后端重试
+  // 优雅关闭 Python 后端后退出（进程状态已不可靠）
+  const { pythonManager } = require('./python-manager')
+  pythonManager?.stop?.().catch(() => {}).finally(() => {
+    process.exit(1)
+  })
+  // 如果 3 秒内 cleanup 未完成，强制退出
+  setTimeout(() => process.exit(1), 3000)
 })
 
 process.on('unhandledRejection', (reason) => {
@@ -249,18 +255,15 @@ function registerIPCHandlers(): void {
     app.quit()
   })
 
-  ipcMain.handle(IPC_CHANNELS.APP_RESTART, () => {
+  ipcMain.handle(IPC_CHANNELS.APP_RESTART, async () => {
     // Stop Python backend before relaunching
-    const cleanup = async () => {
-      try {
-        if (pythonManager) await pythonManager.stop()
-      } catch (err) {
-        console.error('[主进程] Error stopping Python before restart:', err)
-      }
-      app.relaunch()
-      app.exit(0)
+    try {
+      if (pythonManager) await pythonManager.stop()
+    } catch (err) {
+      console.error('[主进程] Error stopping Python before restart:', err)
     }
-    cleanup()
+    app.relaunch()
+    app.exit(0)
   })
 
   // ---------- 更新器 ----------

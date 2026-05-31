@@ -11,6 +11,15 @@ from . import register
 SKILLS_DIR = Path.home() / ".hermes" / "desktop" / "skills"
 
 
+def _sanitize_name(name: str) -> str:
+    """净化 skill 名称，防止路径穿越"""
+    import re
+    sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '', name).lower()
+    if not sanitized or sanitized.startswith('.'):
+        raise ValueError(f"Invalid skill name: '{name}'")
+    return sanitized
+
+
 def _ensure_dir():
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -32,7 +41,8 @@ class SaveSkillTool(BaseTool):
 
     async def execute(self, name: str, description: str, steps: str, tags: list = None, **kwargs) -> str:
         _ensure_dir()
-        skill = {
+        name = _sanitize_name(name)
+        data = {
             "name": name,
             "description": description,
             "steps": steps,
@@ -79,6 +89,7 @@ class LoadSkillTool(BaseTool):
     }
 
     async def execute(self, name: str, **kwargs) -> str:
+        name = _sanitize_name(name)
         path = SKILLS_DIR / f"{name}.json"
         if not path.exists():
             return json.dumps({"ok": False, "error": f"Skill '{name}' not found"}, ensure_ascii=False)
@@ -99,6 +110,7 @@ class DeleteSkillTool(BaseTool):
     }
 
     async def execute(self, name: str, **kwargs) -> str:
+        name = _sanitize_name(name)
         path = SKILLS_DIR / f"{name}.json"
         if not path.exists():
             return json.dumps({"ok": False, "error": f"Skill '{name}' not found"}, ensure_ascii=False)
