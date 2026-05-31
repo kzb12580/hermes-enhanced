@@ -16,6 +16,9 @@ logger = logging.getLogger("hermes-backend.tools.vision")
 MODEL_ID = "nvidia/LocateAnything-3B"
 DEFAULT_MODEL_DIR = Path.home() / ".hermes" / "desktop" / "models"
 
+# 最大图片尺寸（防止 CUDA OOM）
+MAX_IMAGE_DIM = 1280
+
 
 class VisionTool(BaseTool):
     """Locate GUI elements and understand screen content using nvidia/LocateAnything-3B."""
@@ -40,7 +43,7 @@ class VisionTool(BaseTool):
         },
         "required": ["image_path"],
     }
-    timeout = 60  # 增加超时，GPU 推理也需要时间
+    timeout = 120  # GPU 推理 + 图片处理可能较慢
 
     def __init__(self):
         self._model = None
@@ -49,7 +52,7 @@ class VisionTool(BaseTool):
     def _find_model_path(self) -> Path | None:
         """Find downloaded model directory — supports multiple download locations."""
 
-        # 1. 自定义目录 (~/.hermes/desktop/models/)
+        # 1. 自定义目录
         candidates = [
             DEFAULT_MODEL_DIR / "LocateAnything-3B",
             DEFAULT_MODEL_DIR / "nvidia--LocateAnything-3B",
@@ -70,7 +73,7 @@ class VisionTool(BaseTool):
                     if snapshots.exists():
                         for s in snapshots.iterdir():
                             if any(s.glob("*.safetensors")):
-                                logger.info("Found model in HF cache: %s", s)
+                                logger.info("Found model in HF cache snapshot: %s", s)
                                 return s
                     # 直接在根目录
                     if any(d.glob("*.safetensors")):
@@ -78,19 +81,26 @@ class VisionTool(BaseTool):
                         return d
 
         # 3. 常见手动下载路径
-        common_paths = [
-            Path.home() / "LocateAnything-3B",
-            Path.home() / "models" / "LocateAnything-3B",
-            Path("C:/models/LocateAnything-3B") if os.name == "nt" else Path("/opt/models/LocateAnything-3B"),
-            Path("D:/models/LocateAnything-3B") if os.name == "nt" else None,
-            Path("E:/models/LocateAnything-3B") if os.name == "nt" else None,
-        ]
+        if os.name == "nt":
+            common_paths = [
+                Path.home() / "LocateAnything-3B",
+                Path.home() / "models" / "LocateAnything-3B",
+                Path("C:/models/LocateAnything-3B"),
+                Path("D:/models/LocateAnything-3B"),
+                Path("E:/models/LocateAnything-3B"),
+            ]
+        else:
+            common_paths = [
+                Path.home() / "LocateAnything-3B",
+                Path.home() / "models" / "LocateAnything-3B",
+                Path("/opt/models/LocateAnything-3B"),
+            ]
         for p in common_paths:
-            if p and p.exists() and any(p.glob("*.safetensors")):
+            if p.exists() and any(p.glob("*.safetensors")):
                 logger.info("Found model in common path: %s", p)
                 return p
 
-        # 4. 用户自定义路径（通过环境变量或配置文件）
+        # 4. 环境变量
         custom_path = os.environ.get("HERMES_VISION_MODEL_PATH")
         if custom_path:
             p = Path(custom_path)
@@ -113,7 +123,7 @@ class VisionTool(BaseTool):
 
         model_path = self._find_model_path()
         if not model_path:
-            logger.error("Model not found. Run setup wizard to download or set HERMES_VISION_MODEL_PATH.")
+            logger.error("Model not found. Run setup wizard or set HERMES_VISION_MODEL_PATH.")
             return False
 
         logger.info("Loading vision model from %s", model_path)
@@ -133,7 +143,6 @@ class VisionTool(BaseTool):
             )
 
             if device == "cuda":
-                # GPU: 使用 device_map="auto" 自动分配显存
                 self._model = AutoModel.from_pretrained(
                     str(model_path),
                     torch_dtype=dtype,
@@ -141,13 +150,16 @@ class VisionTool(BaseTool):
                     trust_remote_code=True,
                 )
             else:
-                # CPU: 不用 device_map
                 self._model = AutoModel.from_pretrained(
                     str(model_path),
                     torch_dtype=dtype,
                     trust_remote_code=True,
                 )
                 self._model = self._model.to("cpu")
+
+            # 设置 generation_config 避免 use_cache 问题
+            if hasattr(self._model, "generation_config"):
+                self._model.generation_config.use_cache = True
 
             logger.info("Vision model loaded on %s (dtype=%s)", device, dtype)
             return True
@@ -167,30 +179,67 @@ class VisionTool(BaseTool):
 
         try:
             from PIL import Image
+            import torch
+
             image = Image.open(image_path).convert("RGB")
 
+            # 大图缩放防止 CUDA OOM
+            if max(image.size) > MAX_IMAGE_DIM:
+                ratio = MAX_IMAGE_DIM / max(image.size)
+                new_size = (int(image.width * ratio), int(image.height * ratio))
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+                logger.info("Resized image to %s to prevent OOM", new_size)
+
+            # 构建 messages（给 apply_chat_template 用）
             messages = [
                 {"role": "user", "content": [
                     {"type": "image", "image": image},
                     {"type": "text", "text": question},
                 ]}
             ]
-            prompt = self._processor.apply_chat_template(messages, add_generation_prompt=True)
-            inputs = self._processor(text=prompt, images=[image], return_tensors="pt")
+
+            # 关键修复：apply_chat_template 只生成 prompt 字符串
+            # 不传 images，避免 processor.__call__ 被重复调用
+            prompt = self._processor.apply_chat_template(
+                messages, add_generation_prompt=True
+            )
+
+            # 单独用 processor 处理图片和文本
+            inputs = self._processor(
+                text=prompt,
+                images=[image],
+                return_tensors="pt",
+            )
             inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
 
-            import torch
+            # 生成
             with torch.no_grad():
                 output_ids = self._model.generate(
                     **inputs,
                     max_new_tokens=1024,
                     do_sample=False,
+                    use_cache=True,
                 )
-            response = self._processor.decode(output_ids[0], skip_special_tokens=True)
-            # Extract assistant response
+
+            # 解码
+            if isinstance(output_ids, str):
+                # 某些模型直接返回字符串
+                response = output_ids
+            elif hasattr(output_ids, "sequences"):
+                response = self._processor.decode(
+                    output_ids.sequences[0], skip_special_tokens=True
+                )
+            else:
+                response = self._processor.decode(
+                    output_ids[0], skip_special_tokens=True
+                )
+
+            # 提取 assistant 回复
             if "assistant" in response:
                 response = response.split("assistant")[-1].strip()
+
             return response
+
         except Exception as e:
             logger.error("Vision inference failed: %s", e, exc_info=True)
             return f"Error during vision inference: {e}"
