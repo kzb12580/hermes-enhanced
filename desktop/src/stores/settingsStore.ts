@@ -159,6 +159,12 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'hermes-settings',
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          console.error('[settingsStore] persist rehydrate failed, clearing storage:', error);
+          try { localStorage.removeItem('hermes-settings'); } catch {}
+        }
+      },
       partialize: (state) => ({
         currentModel: state.currentModel,
         currentProvider: state.currentProvider,

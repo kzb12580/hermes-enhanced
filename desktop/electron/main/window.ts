@@ -45,6 +45,23 @@ export function createMainWindow(): BrowserWindow {
     mainWindow?.focus()
   })
 
+  // 捕获渲染进程加载失败
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[窗口] 页面加载失败: ${errorDescription} (${errorCode}), URL: ${validatedURL}`)
+  })
+
+  // 捕获渲染进程崩溃
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[窗口] 渲染进程崩溃: ${details.reason}, 退出码: ${details.exitCode}`)
+  })
+
+  // 捕获渲染进程控制台错误
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) { // 2=warning, 3=error
+      console.error(`[渲染进程] ${message} (${sourceId}:${line})`)
+    }
+  })
+
   // Right-click context menu handled by React ContextMenu component
   // (see src/components/ui/ContextMenu.tsx)
 
