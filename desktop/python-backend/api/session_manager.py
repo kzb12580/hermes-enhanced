@@ -52,7 +52,7 @@ class SessionManager:
             "id": session_id,
             "name": name or f"Session {session_id[:8]}",
             "messages": [],
-            "created_at": time.time(),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
         }
         self._sessions[session_id] = session
         self._save()
@@ -65,7 +65,7 @@ class SessionManager:
                 "id": s["id"],
                 "name": s["name"],
                 "message_count": len(s.get("messages", [])),
-                "created_at": s.get("created_at"),
+                "created_at": s.get("created_at", ""),
             }
             for s in self._sessions.values()
         ]

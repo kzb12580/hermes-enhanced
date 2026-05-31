@@ -8,7 +8,7 @@ from pathlib import Path
 from .base import BaseTool
 from . import register
 
-SKILLS_DIR = Path.home() / ".hermes" / "desktop" / "skills"
+SKILLS_DIR = Path.home() / ".hermes-desktop" / "skills"
 
 
 def _sanitize_name(name: str) -> str:

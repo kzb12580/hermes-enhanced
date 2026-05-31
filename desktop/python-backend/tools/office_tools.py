@@ -41,9 +41,10 @@ def create_word(path: str, title: str = "", content: str = "", template: str = "
     """创建 Word 文档（支持模板、字体、行距）"""
     try:
         if template:
+            template = _safe_path(template)
             err = _check_file(template, "template")
             if err: return err
-        if len(content) > MAX_CONTENT_LEN:
+            doc = Document(template)
             return {"error": "Content too large (>10MB)", "success": False}
 
         from docx import Document
@@ -79,6 +80,7 @@ def create_word(path: str, title: str = "", content: str = "", template: str = "
 def edit_word(path: str, operations: list[dict]) -> dict:
     """编辑 Word 文档"""
     try:
+        path = _safe_path(path)
         err = _check_file(path, "document")
         if err: return err
         from docx import Document
@@ -136,9 +138,13 @@ def edit_word(path: str, operations: list[dict]) -> dict:
                         table.rows[r].cells[c].text = str(cell_val)
             elif t == "add_image":
                 img_path = op.get("image_path", "")
-                err = _check_file(img_path, "image")
-                if err: return err
-                doc.add_picture(img_path, width=Inches(max(0.1, min(op.get("width", 5), 20))))
+                if img_path:
+                    img_path = str(_safe_path(img_path))
+                    if isinstance(img_path, str) and img_path.startswith(("Error", "⚠️")):
+                        return {"error": f"Op #{i}: {img_path}", "success": False}
+                    err = _check_file(img_path, "image")
+                    if err: return err
+                    doc.add_picture(img_path, width=Inches(op.get("width", 6)))
             elif t == "add_page_break":
                 doc.add_page_break()
             elif t == "replace":
@@ -261,9 +267,10 @@ def create_ppt(path: str, slides: list[dict], template: str = "",
     """
     try:
         if template:
+            template = _safe_path(template)
             err = _check_file(template, "template")
             if err: return err
-
+            doc = Document(template)
         from pptx import Presentation
         from pptx.util import Inches, Pt, Emu
         from pptx.dml.color import RGBColor
@@ -608,6 +615,7 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
       - merge_cells: 合并单元格 {range, sheet}
     """
     try:
+        path = _safe_path(path)
         err = _check_file(path, "excel")
         if err: return err
         from openpyxl import load_workbook

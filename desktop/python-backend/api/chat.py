@@ -557,7 +557,7 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
 @router.get("/api/chat/sessions")
 async def list_sessions():
     """List all sessions."""
-    return {"sessions": session_manager.list_sessions()}
+    return session_manager.list_sessions()
 
 
 @router.post("/api/chat/sessions")
@@ -565,7 +565,7 @@ async def create_session(request: SessionCreate):
     """Create a new session."""
     import uuid; session_id = str(uuid.uuid4())[:13]
     session = session_manager.create_session(session_id, request.name)
-    return {"session_id": session_id, "name": request.name}
+    return {"id": session_id, "name": session["name"], "created_at": session.get("created_at"), "message_count": 0}
 
 
 @router.get("/api/chat/sessions/{session_id}")

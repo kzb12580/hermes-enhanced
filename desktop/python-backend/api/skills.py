@@ -16,16 +16,14 @@ router = APIRouter()
 async def list_skills():
     """List all available skills."""
     skills = skill_manager.get_all_skills()
-    return {
-        "skills": [
-            {
-                "name": s.name,
-                "description": s.description,
-                "triggers": s.triggers,
-            }
-            for s in skills
-        ]
-    }
+    return [
+        {
+            "name": s.name,
+            "description": s.description,
+            "triggers": s.triggers,
+        }
+        for s in skills
+    ]
 
 
 @router.get("/api/skills/{name}")
@@ -50,16 +48,14 @@ class SkillQuery(BaseModel):
 async def match_skills(request: SkillQuery):
     """Find skills matching a query."""
     skills = skill_manager.get_skills_for_query(request.query)
-    return {
-        "skills": [
-            {
-                "name": s.name,
-                "description": s.description,
-                "triggers": s.triggers,
-            }
-            for s in skills
-        ]
-    }
+    return [
+        {
+            "name": s.name,
+            "description": s.description,
+            "triggers": s.triggers,
+        }
+        for s in skills
+    ]
 
 
 @router.post("/api/skills/reload")
@@ -71,7 +67,7 @@ async def reload_skills():
         if not skill_manager._skills:
             skill_manager._load_builtin_hardcoded()
         return {
-            "success": True,
+            "status": "ok",
             "count": len(skill_manager._skills),
             "skills": [s.name for s in skill_manager.get_all_skills()],
         }
