@@ -355,7 +355,7 @@ class ApiClient {
 
   /** List all sessions */
   async listSessions(): Promise<SessionInfo[]> {
-    const res = await this.fetchWithRetry(`${this.baseUrl}/api/sessions`, {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/chat/sessions`, {
       headers: this.getHeaders(true),
     });
     if (!res.ok) {
@@ -367,7 +367,7 @@ class ApiClient {
 
   /** Create a new session */
   async createSession(name?: string): Promise<SessionInfo> {
-    const res = await this.fetchWithRetry(`${this.baseUrl}/api/sessions`, {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/chat/sessions`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ name }),
@@ -383,7 +383,7 @@ class ApiClient {
   async deleteSession(sessionId: string): Promise<void> {
     const encodedId = encodeURIComponent(sessionId);
     const res = await this.fetchWithRetry(
-      `${this.baseUrl}/api/sessions/${encodedId}`,
+      `${this.baseUrl}/api/chat/sessions/${encodedId}`,
       {
         method: 'DELETE',
         headers: this.getHeaders(),
@@ -421,7 +421,7 @@ class ApiClient {
 
   /** Search skills by query */
   async searchSkills(query: string): Promise<SkillInfo[]> {
-    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills/search`, {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/skills/match`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ query }),

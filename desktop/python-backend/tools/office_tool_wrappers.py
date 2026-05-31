@@ -75,9 +75,9 @@ OFFICE_TOOL_DEFINITIONS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "type": {"type": "string", "enum": ["insert", "replace", "delete_paragraph", "add_heading", "add_table"], "description": "操作类型"},
-                            "content": {"type": "string", "description": "内容"},
-                            "position": {"type": "integer", "description": "段落位置"},
+                            "type": {"type": "string", "enum": ["insert", "replace", "delete_paragraph", "add_heading", "add_table", "add_paragraph", "add_image", "add_page_break", "set_header", "set_footer", "add_toc"], "description": "操作类型"},
+                            "text": {"type": "string", "description": "内容文本"},
+                            "index": {"type": "integer", "description": "段落位置"},
                         },
                         "required": ["type"],
                     },
@@ -112,14 +112,15 @@ OFFICE_TOOL_DEFINITIONS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "type": {"type": "string", "enum": ["title", "content", "two_column", "image", "chart", "table", "blank"], "description": "幻灯片类型"},
+                            "type": {"type": "string", "enum": ["title", "content", "two_column", "image", "chart", "table", "blank", "section", "bullet", "end"], "description": "幻灯片类型"},
                             "title": {"type": "string", "description": "标题"},
                             "content": {"type": "string", "description": "内容（支持换行分隔）"},
                             "left": {"type": "string", "description": "左栏内容（two_column类型）"},
                             "right": {"type": "string", "description": "右栏内容（two_column类型）"},
                             "image_path": {"type": "string", "description": "图片路径（image类型）"},
-                            "chart_data": {"type": "object", "description": "图表数据（chart类型）"},
-                            "table_data": {"type": "array", "description": "表格数据（table类型）"},
+                            "data": {"type": "object", "description": "图表数据（chart类型），含 categories 和 series"},
+                            "rows": {"type": "array", "description": "表格行数据（table类型）"},
+                            "headers": {"type": "array", "items": {"type": "string"}, "description": "表格表头（table类型）"},
                         },
                         "required": ["type"],
                     },

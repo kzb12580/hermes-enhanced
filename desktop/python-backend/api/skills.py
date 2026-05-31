@@ -60,3 +60,21 @@ async def match_skills(request: SkillQuery):
             for s in skills
         ]
     }
+
+
+@router.post("/api/skills/reload")
+async def reload_skills():
+    """Reload all skills from disk."""
+    try:
+        skill_manager._skills.clear()
+        skill_manager._load_from_files()
+        if not skill_manager._skills:
+            skill_manager._load_builtin_hardcoded()
+        return {
+            "success": True,
+            "count": len(skill_manager._skills),
+            "skills": [s.name for s in skill_manager.get_all_skills()],
+        }
+    except Exception as e:
+        logger.error("Failed to reload skills: %s", e)
+        return {"success": False, "error": str(e)}
