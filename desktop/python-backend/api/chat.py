@@ -223,6 +223,57 @@ def truncate_tool_result(result: str) -> str:
     return result
 
 
+def _compress_session_tools(session: dict, keep_recent: int = 6):
+    """Compress old tool results in session to prevent context bloat.
+    
+    Keeps the most recent `keep_recent` tool results at full size.
+    Older tool results are compressed to a one-line summary.
+    This prevents the session from growing unbounded and losing context.
+    """
+    messages = session.get("messages", [])
+    if not messages:
+        return
+    
+    # Find all tool result message indices
+    tool_indices = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") == "tool":
+            tool_indices.append(i)
+    
+    if len(tool_indices) <= keep_recent:
+        return  # Not enough tool results to compress
+    
+    # Compress old tool results
+    compress_count = 0
+    cutoff = tool_indices[-keep_recent]  # Don't compress this or later
+    
+    for i in tool_indices:
+        if i >= cutoff:
+            break
+        msg = messages[i]
+        content = msg.get("content", "")
+        if len(content) > 200:
+            # Extract tool name from the preceding assistant message
+            tool_name = "tool"
+            tool_call_id = msg.get("tool_call_id", "")
+            for j in range(i - 1, max(0, i - 5), -1):
+                prev = messages[j]
+                if prev.get("role") == "assistant" and prev.get("tool_calls"):
+                    for tc in prev["tool_calls"]:
+                        if tc.get("id") == tool_call_id:
+                            tool_name = tc.get("function", {}).get("name", "tool")
+                            break
+                    break
+            
+            # Create a compact summary
+            first_line = content.split("\n")[0][:150]
+            msg["content"] = f"[{tool_name}] {first_line}... ({len(content)} chars)"
+            compress_count += 1
+    
+    if compress_count > 0:
+        logger.info("Compressed %d old tool results in session", compress_count)
+
+
 import re as _re
 
 
@@ -689,6 +740,9 @@ async def chat(message: ChatMessage):
             
             # Save session
             session_manager._save()
+
+            # ── Compress old tool results in session to prevent context bloat ──
+            _compress_session_tools(session)
             
             # Send done event
             yield "event: done\ndata: \n\n"
