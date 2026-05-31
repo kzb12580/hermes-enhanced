@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 import socket
 from urllib.parse import unquote, urlparse
@@ -11,6 +12,8 @@ import httpx
 
 from .base import BaseTool
 from . import register
+
+logger = logging.getLogger("hermes-backend.tools.web")
 
 MAX_SEARCH_RESULTS = 5
 MAX_EXTRACT_LENGTH = 20_000
@@ -66,7 +69,7 @@ def _validate_url(url: str) -> str | None:
 
 class WebSearchTool(BaseTool):
     name = "web_search"
-    description = "Search the web using DuckDuckGo. Returns titles, URLs, and snippets."
+    description = "Search the web. Returns titles, URLs, and snippets. Supports multiple search engines (DuckDuckGo, Bing, Sogou)."
     requires_network = True
     parameters = {
         "type": "object",
@@ -78,36 +81,50 @@ class WebSearchTool(BaseTool):
     }
 
     async def execute(self, query: str, limit: int = MAX_SEARCH_RESULTS, **kwargs) -> str:
-        """Search using DuckDuckGo Lite (more reliable than HTML endpoint)."""
+        """Search using multiple engines with fallback."""
         results = []
 
-        # Strategy 1: DuckDuckGo Lite (lightweight, stable)
+        # Strategy 1: DuckDuckGo Lite
         try:
             results = await self._search_ddg_lite(query, limit)
             if results:
                 return f"Search results for: {query}\n\n" + "\n".join(results)
         except Exception as e:
-            pass  # Fall through to next strategy
+            logger.debug("DDG Lite failed: %s", e)
 
-        # Strategy 2: DuckDuckGo HTML (fallback)
+        # Strategy 2: Bing (better for China)
+        try:
+            results = await self._search_bing(query, limit)
+            if results:
+                return f"Search results for: {query}\n\n" + "\n".join(results)
+        except Exception as e:
+            logger.debug("Bing failed: %s", e)
+
+        # Strategy 3: DuckDuckGo HTML
         try:
             results = await self._search_ddg_html(query, limit)
             if results:
                 return f"Search results for: {query}\n\n" + "\n".join(results)
         except Exception as e:
-            pass
+            logger.debug("DDG HTML failed: %s", e)
 
-        # Strategy 3: Basic web scraping (last resort)
+        # Strategy 4: Sogou (China-friendly)
+        try:
+            results = await self._search_sogou(query, limit)
+            if results:
+                return f"Search results for: {query}\n\n" + "\n".join(results)
+        except Exception as e:
+            logger.debug("Sogou failed: %s", e)
+
+        # Strategy 5: DuckDuckGo API (last resort)
         try:
             results = await self._search_basic(query, limit)
             if results:
                 return f"Search results for: {query}\n\n" + "\n".join(results)
         except Exception as e:
-            pass
+            logger.debug("DDG API failed: %s", e)
 
-        if not results:
-            return f"No search results found for: {query}. DuckDuckGo may be temporarily unavailable."
-        return f"Search results for: {query}\n\n" + "\n".join(results)
+        return f"No search results found for: {query}. All search engines may be temporarily unavailable."
 
     async def _search_ddg_lite(self, query: str, limit: int) -> list[str]:
         """Search using DuckDuckGo Lite endpoint."""
@@ -120,7 +137,7 @@ class WebSearchTool(BaseTool):
             "Connection": "keep-alive",
         }
 
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.post(
                 url,
                 data={"q": query, "b": ""},
@@ -133,8 +150,6 @@ class WebSearchTool(BaseTool):
         html = resp.text
         results = []
 
-        # Parse DuckDuckGo Lite HTML (simpler structure)
-        # Result links are in <a> tags with class="result-link"
         link_pattern = re.compile(r'<a[^>]+class="result-link"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', re.DOTALL)
         snippet_pattern = re.compile(r'<td[^>]+class="result-snippet"[^>]*>(.*?)</td>', re.DOTALL)
 
@@ -147,7 +162,6 @@ class WebSearchTool(BaseTool):
             if i < len(snippets):
                 snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
 
-            # Extract real URL from DuckDuckGo redirect
             if "uddg=" in url:
                 url_match = re.search(r'uddg=([^&]+)', url)
                 if url_match:
@@ -155,6 +169,82 @@ class WebSearchTool(BaseTool):
 
             if title and url:
                 result_text = f"**{title}**\n{url}"
+                if snippet:
+                    result_text += f"\n{snippet}"
+                results.append(result_text)
+
+        return results
+
+    async def _search_bing(self, query: str, limit: int) -> list[str]:
+        """Search using Bing (works well in China)."""
+        url = "https://www.bing.com/search"
+        params = {"q": query, "count": str(limit)}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+
+        if resp.status_code != 200:
+            return []
+
+        html = resp.text
+        results = []
+
+        # Parse Bing results
+        pattern = re.compile(
+            r'<li[^>]+class="b_algo"[^>]*>.*?<h2[^>]*><a[^>]+href="([^"]*)"[^>]*>(.*?)</a></h2>.*?<p[^>]*>(.*?)</p>',
+            re.DOTALL
+        )
+        matches = pattern.findall(html)
+
+        for result_url, title, snippet in matches[:limit]:
+            title = re.sub(r'<[^>]+>', '', title).strip()
+            snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+
+            if title and result_url:
+                result_text = f"**{title}**\n{result_url}"
+                if snippet:
+                    result_text += f"\n{snippet}"
+                results.append(result_text)
+
+        return results
+
+    async def _search_sogou(self, query: str, limit: int) -> list[str]:
+        """Search using Sogou (China search engine)."""
+        url = "https://www.sogou.com/web"
+        params = {"query": query}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+
+        if resp.status_code != 200:
+            return []
+
+        html = resp.text
+        results = []
+
+        # Parse Sogou results
+        pattern = re.compile(
+            r'<h3[^>]*><a[^>]+href="([^"]*)"[^>]*>(.*?)</a></h3>.*?<p[^>]*>(.*?)</p>',
+            re.DOTALL
+        )
+        matches = pattern.findall(html)
+
+        for result_url, title, snippet in matches[:limit]:
+            title = re.sub(r'<[^>]+>', '', title).strip()
+            snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+
+            if title and result_url:
+                result_text = f"**{title}**\n{result_url}"
                 if snippet:
                     result_text += f"\n{snippet}"
                 results.append(result_text)
@@ -174,7 +264,7 @@ class WebSearchTool(BaseTool):
             "Pragma": "no-cache",
         }
 
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.post(
                 url,
                 data={"q": query, "b": ""},
@@ -187,20 +277,16 @@ class WebSearchTool(BaseTool):
         html = resp.text
         results = []
 
-        # Try multiple parsing patterns (DuckDuckGo changes frequently)
         patterns = [
-            # Pattern 1: Classic result__a
             (
                 r'<a[^>]+class="result__a"[^>]+href="([^"]*)"[^>]*>(.*?)</a>.*?'
                 r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
                 re.DOTALL
             ),
-            # Pattern 2: Newer structure
             (
                 r'<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
                 0
             ),
-            # Pattern 3: Generic links
             (
                 r'<a[^>]+href="(https?://[^"]+)"[^>]*class="[^"]*result[^"]*"[^>]*>(.*?)</a>',
                 re.DOTALL
@@ -220,7 +306,6 @@ class WebSearchTool(BaseTool):
                     title = re.sub(r'<[^>]+>', '', title).strip()
                     snippet = re.sub(r'<[^>]+>', '', snippet).strip()
 
-                    # Extract real URL
                     if "uddg=" in result_url:
                         url_match = re.search(r'uddg=([^&]+)', result_url)
                         if url_match:
@@ -250,7 +335,7 @@ class WebSearchTool(BaseTool):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
 
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.get(url, params=params, headers=headers)
 
         if resp.status_code != 200:
@@ -263,7 +348,6 @@ class WebSearchTool(BaseTool):
 
         results = []
 
-        # Extract results from different fields
         if data.get("Abstract"):
             results.append(f"**{data.get('Heading', 'Result')}**\n{data.get('AbstractURL', '')}\n{data['Abstract']}")
 

@@ -192,13 +192,15 @@ def detect_cuda() -> dict:
 def detect_tesseract() -> dict:
     """检测 Tesseract OCR"""
     result = {"available": False, "path": None, "languages": []}
+
+    # 1. PATH 中查找
     try:
         out = subprocess.run(
             ["tesseract", "--version"], capture_output=True, text=True, timeout=5
         )
         if out.returncode == 0:
             result["available"] = True
-            # 获取语言包
+            result["path"] = shutil.which("tesseract")
             lang_out = subprocess.run(
                 ["tesseract", "--list-langs"], capture_output=True, text=True, timeout=5
             )
@@ -207,8 +209,65 @@ def detect_tesseract() -> dict:
                     l.strip() for l in lang_out.stdout.strip().split("\n")[1:]
                     if l.strip()
                 ]
+            return result
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
+
+    # 2. Windows 常见路径
+    if os.name == "nt":
+        win_paths = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            r"C:\Tesseract-OCR\tesseract.exe",
+            r"D:\Tesseract-OCR\tesseract.exe",
+            r"C:\ProgramData\chocolatey\bin\tesseract.exe",
+        ]
+        for p in win_paths:
+            if os.path.isfile(p):
+                result["available"] = True
+                result["path"] = p
+                # 添加到 PATH
+                parent = os.path.dirname(p)
+                if parent not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = parent + os.pathsep + os.environ.get("PATH", "")
+                # 获取语言包
+                try:
+                    lang_out = subprocess.run(
+                        [p, "--list-langs"], capture_output=True, text=True, timeout=5
+                    )
+                    if lang_out.returncode == 0:
+                        result["languages"] = [
+                            l.strip() for l in lang_out.stdout.strip().split("\n")[1:]
+                            if l.strip()
+                        ]
+                except Exception:
+                    pass
+                return result
+
+    # 3. Windows 注册表
+    if os.name == "nt":
+        try:
+            import winreg
+            for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                for subkey in [
+                    r"SOFTWARE\Tesseract-OCR",
+                    r"SOFTWARE\WOW6432Node\Tesseract-OCR",
+                ]:
+                    try:
+                        with winreg.OpenKey(root, subkey) as key:
+                            val, _ = winreg.QueryValueEx(key, "InstallDir")
+                            exe = os.path.join(val, "tesseract.exe")
+                            if os.path.isfile(exe):
+                                result["available"] = True
+                                result["path"] = exe
+                                if val not in os.environ.get("PATH", ""):
+                                    os.environ["PATH"] = val + os.pathsep + os.environ.get("PATH", "")
+                                return result
+                    except (FileNotFoundError, OSError):
+                        continue
+        except ImportError:
+            pass
+
     return result
 
 # ── 安装函数 ──────────────────────────────────────────────────────────────
@@ -289,16 +348,11 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
     """下载 LocateAnything-3B 模型"""
     print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
 
-    # 检查是否已下载
-    try:
-        from transformers.utils import cached_file
-        from huggingface_hub import try_to_load_from_cache
-        cached = try_to_load_from_cache(model_id, "config.json")
-        if cached and not isinstance(cached, str) and not force:
-            print("  ✅ 模型已存在，跳过下载")
-            return True
-    except Exception:
-        pass
+    # 先检查是否已下载（多种路径）
+    existing_path = _find_existing_model()
+    if existing_path and not force:
+        print(f"  ✅ 模型已存在: {existing_path}")
+        return True
 
     # 尝试用 huggingface-cli 下载（更快、支持断点续传）
     if shutil.which("huggingface-cli"):
@@ -318,9 +372,9 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
     # 回退到 Python 下载
     print("  使用 transformers 下载...")
     try:
-        from transformers import AutoProcessor, AutoModelForCausalLM
+        from transformers import AutoProcessor, AutoModel
         AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        AutoModelForCausalLM.from_pretrained(
+        AutoModel.from_pretrained(
             model_id, trust_remote_code=True,
             device_map="auto", torch_dtype="auto"
         )
@@ -330,6 +384,41 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
         print(f"  ❌ 模型下载失败: {e}")
         print(f"  💡 手动下载: huggingface-cli download {model_id}")
         return False
+
+
+def _find_existing_model() -> str | None:
+    """搜索已下载的模型（支持多种路径）"""
+    from pathlib import Path
+    import os
+
+    candidates = [
+        Path.home() / ".hermes" / "desktop" / "models" / "LocateAnything-3B",
+        Path.home() / ".hermes" / "desktop" / "models" / "nvidia--LocateAnything-3B",
+    ]
+    for p in candidates:
+        if p.exists() and any(p.glob("*.safetensors")):
+            return str(p)
+
+    # HF cache
+    hf_cache = Path.home() / ".cache" / "huggingface" / "hub"
+    if hf_cache.exists():
+        for d in hf_cache.iterdir():
+            if "LocateAnything" in d.name:
+                snapshots = d / "snapshots"
+                if snapshots.exists():
+                    for s in snapshots.iterdir():
+                        if any(s.glob("*.safetensors")):
+                            return str(s)
+                if any(d.glob("*.safetensors")):
+                    return str(d)
+
+    # 环境变量
+    env_path = os.environ.get("HERMES_VISION_MODEL_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    return None
+
 
 def install_tesseract(os_name: str) -> bool:
     """安装 Tesseract OCR（系统级）"""

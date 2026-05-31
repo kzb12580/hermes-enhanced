@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download, CheckCircle, ArrowRight, Loader2, RefreshCw
+  Download, CheckCircle, ArrowRight, Loader2, RefreshCw, Wrench, CheckCheck, XCircle
 } from 'lucide-react';
 
 const BACKEND = 'http://127.0.0.1:9876';
+
+interface RepairResult {
+  name: string;
+  status: string;
+  detail: string;
+  fixable?: boolean;
+}
 
 // ── Main Component ──────────────────────────────────────────────────────
 export function SetupWizard({ onComplete }: { onComplete: () => void }) {
@@ -15,12 +22,17 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [modelDone, setModelDone] = useState(false);
   const [modelError, setModelError] = useState('');
 
+  // Repair state
+  const [repairing, setRepairing] = useState(false);
+  const [repairResults, setRepairResults] = useState<RepairResult[]>([]);
+  const [repairSummary, setRepairSummary] = useState('');
+  const [repairDone, setRepairDone] = useState(false);
+
   // Backend status
   const [backendReady, setBackendReady] = useState(false);
   const [backendChecking, setBackendChecking] = useState(true);
   const [backendError, setBackendError] = useState('');
 
-  // Check backend status on mount
   useEffect(() => {
     checkBackend();
     const interval = setInterval(checkBackend, 3000);
@@ -67,7 +79,6 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       const data = await res.json();
 
       if (data.success) {
-        // SSE listen for progress
         const es = new EventSource(`${BACKEND}/api/setup/status/stream`);
         es.onmessage = (ev) => {
           try {
@@ -101,7 +112,25 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     }
   };
 
-  const steps = ['模型下载', '完成'];
+  const startRepair = async () => {
+    setRepairing(true);
+    setRepairResults([]);
+    setRepairSummary('');
+    setRepairDone(false);
+
+    try {
+      const res = await fetch(`${BACKEND}/api/setup/repair`, { method: 'POST' });
+      const data = await res.json();
+      setRepairResults(data.results || []);
+      setRepairSummary(data.summary || '');
+      setRepairDone(true);
+    } catch {
+      setRepairSummary('检测请求失败');
+    }
+    setRepairing(false);
+  };
+
+  const steps = ['模型下载', '依赖检测', '完成'];
 
   return (
     <div style={{
@@ -113,7 +142,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
           Hermes 桌面版设置
         </h1>
         <p style={{ fontSize: 14, color: '#9ca3af' }}>
-          可选：下载 6GB 视觉模型，用于屏幕元素识别和 GUI 自动化
+          下载视觉模型并检测依赖环境
         </p>
       </div>
 
@@ -274,15 +303,101 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 <Loader2 size={16} className="spin" /> 下载中...
               </button>
             )}
-            <button onClick={handleComplete} style={modelDone ? btnStyle : btnSecondaryStyle}>
-              {modelDone ? '完成' : '跳过'} <ArrowRight size={16} />
+            <button onClick={() => setStep(1)} style={modelDone ? btnStyle : btnSecondaryStyle}>
+              下一步 <ArrowRight size={16} />
+            </button>
+            <button onClick={handleComplete} style={btnSecondaryStyle}>
+              跳过 <ArrowRight size={16} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 1: Complete */}
+      {/* Step 1: Repair / Dependency Check */}
       {step === 1 && (
+        <div>
+          <h2 style={{ fontSize: 18, color: '#e5e7eb', marginBottom: 16 }}>
+            <Wrench size={20} style={{ verticalAlign: 'middle', marginRight: 8 }} />
+            依赖检测与修复
+          </h2>
+
+          <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 16 }}>
+            自动检测视觉模型所需的依赖包，缺失的会自动安装。<br />
+            修复完成后 AI 就能直接使用视觉功能，无需再手动安装。
+          </p>
+
+          {/* Repair button */}
+          {!repairDone && (
+            <button
+              onClick={startRepair}
+              disabled={repairing}
+              style={{
+                ...btnStyle,
+                fontSize: 16, padding: '12px 24px', marginBottom: 20,
+                opacity: repairing ? 0.5 : 1,
+              }}
+            >
+              {repairing ? (
+                <><Loader2 size={18} className="spin" /> 检测中...</>
+              ) : (
+                <><Wrench size={18} /> 开始检测</>
+              )}
+            </button>
+          )}
+
+          {/* Repair Results */}
+          {repairDone && (
+            <div style={{
+              padding: 16, borderRadius: 8, marginBottom: 20,
+              background: 'rgba(30,30,30,0.8)', border: '1px solid #374151',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <CheckCheck size={16} color="#3b82f6" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#e5e7eb' }}>检测结果</span>
+              </div>
+              {repairResults.map((r, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 0', fontSize: 13,
+                  borderBottom: i < repairResults.length - 1 ? '1px solid #1f2937' : 'none',
+                }}>
+                  {r.status === 'ok' ? (
+                    <CheckCircle size={14} color="#22c55e" />
+                  ) : r.status === 'fixed' ? (
+                    <RefreshCw size={14} color="#f59e0b" />
+                  ) : (
+                    <XCircle size={14} color="#ef4444" />
+                  )}
+                  <span style={{ fontWeight: 500, color: '#d1d5db', minWidth: 120 }}>{r.name}</span>
+                  <span style={{
+                    color: r.status === 'ok' ? '#22c55e' : r.status === 'fixed' ? '#f59e0b' : '#ef4444',
+                  }}>
+                    {r.detail}
+                  </span>
+                </div>
+              ))}
+              {repairSummary && (
+                <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 12, paddingTop: 12, borderTop: '1px solid #374151' }}>
+                  {repairSummary}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
+            <button onClick={() => setStep(0)} style={btnSecondaryStyle}>
+              上一步
+            </button>
+            <button onClick={() => setStep(2)} style={repairDone ? btnStyle : btnSecondaryStyle}>
+              下一步 <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Complete */}
+      {step === 2 && (
         <div style={{ textAlign: 'center', padding: 32 }}>
           <CheckCircle size={64} color="#22c55e" />
           <h2 style={{ fontSize: 22, color: '#e5e7eb', marginTop: 16, marginBottom: 8 }}>

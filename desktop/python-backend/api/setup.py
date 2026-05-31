@@ -515,3 +515,159 @@ def _estimate_progress(phase: str, text: str) -> int:
         return min(start + pct * span // 100, 99)
 
     return min(start, 99)
+
+
+# ── 一键检测修复 ──────────────────────────────────────────────────────
+
+@router.post("/api/setup/repair")
+async def repair_vision_deps():
+    """一键检测并修复视觉模型依赖、Tesseract 路径等问题"""
+    import importlib
+    import subprocess
+    results = []
+
+    # 1. 检查 PyTorch + CUDA
+    try:
+        import torch
+        cuda_ok = torch.cuda.is_available()
+        results.append({
+            "name": "PyTorch",
+            "status": "ok",
+            "detail": f"v{torch.__version__}, CUDA: {'✅ ' + torch.cuda.get_device_name(0) if cuda_ok else '❌ 不可用'}",
+            "fixable": False,
+        })
+    except ImportError:
+        results.append({
+            "name": "PyTorch",
+            "status": "error",
+            "detail": "未安装",
+            "fixable": True,
+            "fix_cmd": "pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124",
+        })
+
+    # 2. 检查视觉模型依赖
+    vision_deps = [
+        ("transformers", "transformers"),
+        ("accelerate", "accelerate"),
+        ("sentencepiece", "sentencepiece"),
+        ("protobuf", "google.protobuf"),
+        ("safetensors", "safetensors"),
+    ]
+    for pkg_name, import_name in vision_deps:
+        try:
+            mod = importlib.import_module(import_name)
+            ver = getattr(mod, "__version__", "installed")
+            results.append({
+                "name": pkg_name,
+                "status": "ok",
+                "detail": f"v{ver}",
+                "fixable": False,
+            })
+        except ImportError:
+            results.append({
+                "name": pkg_name,
+                "status": "missing",
+                "detail": "未安装",
+                "fixable": True,
+                "fix_cmd": f"pip install {pkg_name}",
+            })
+
+    # 3. 检查视觉模型文件
+    from pathlib import Path
+    import os
+    model_found = False
+    model_path = None
+
+    search_paths = [
+        Path.home() / ".hermes" / "desktop" / "models" / "LocateAnything-3B",
+        Path.home() / ".hermes" / "desktop" / "models" / "nvidia--LocateAnything-3B",
+    ]
+    hf_cache = Path.home() / ".cache" / "huggingface" / "hub"
+    if hf_cache.exists():
+        for d in hf_cache.iterdir():
+            if "LocateAnything" in d.name:
+                snapshots = d / "snapshots"
+                if snapshots.exists():
+                    for s in snapshots.iterdir():
+                        search_paths.append(s)
+                search_paths.append(d)
+
+    env_path = os.environ.get("HERMES_VISION_MODEL_PATH")
+    if env_path:
+        search_paths.append(Path(env_path))
+
+    for p in search_paths:
+        if p.exists() and any(p.glob("*.safetensors")):
+            model_found = True
+            model_path = str(p)
+            break
+
+    results.append({
+        "name": "LocateAnything-3B",
+        "status": "ok" if model_found else "missing",
+        "detail": model_path if model_found else "未找到模型文件",
+        "fixable": not model_found,
+        "fix_cmd": "在设置页面下载模型，或设置环境变量 HERMES_VISION_MODEL_PATH",
+    })
+
+    # 4. 检查 Tesseract
+    import shutil
+    tess_path = shutil.which("tesseract")
+    tess_languages = []
+    if tess_path:
+        try:
+            lang_out = subprocess.run(
+                ["tesseract", "--list-langs"], capture_output=True, text=True, timeout=5
+            )
+            if lang_out.returncode == 0:
+                tess_languages = [l.strip() for l in lang_out.stdout.strip().split("\n")[1:] if l.strip()]
+        except Exception:
+            pass
+
+    if not tess_path and os.name == "nt":
+        win_paths = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            r"C:\Tesseract-OCR\tesseract.exe",
+        ]
+        for wp in win_paths:
+            if os.path.isfile(wp):
+                tess_path = wp
+                break
+
+    has_chi = "chi_sim" in tess_languages
+    results.append({
+        "name": "Tesseract OCR",
+        "status": "ok" if tess_path else "missing",
+        "detail": f"{tess_path or '未安装'}" + (f" (中文: {'✅' if has_chi else '❌'})" if tess_path else ""),
+        "fixable": not tess_path,
+        "fix_cmd": "下载安装: https://github.com/UB-Mannheim/tesseract/wiki (勾选 Chinese Simplified)",
+    })
+
+    # 5. 自动安装缺失的 Python 包
+    auto_fixed = []
+    for r in results:
+        if r["status"] == "missing" and r.get("fixable") and r["name"] not in ("Tesseract OCR", "LocateAnything-3B", "PyTorch"):
+            try:
+                cmd = r["fix_cmd"]
+                logger.info("Auto-fixing: %s", cmd)
+                proc = subprocess.run(
+                    cmd.split(), capture_output=True, text=True, timeout=300
+                )
+                if proc.returncode == 0:
+                    r["status"] = "fixed"
+                    r["detail"] = "已自动安装"
+                    auto_fixed.append(r["name"])
+                else:
+                    r["detail"] = f"自动安装失败: {proc.stderr[:200]}"
+            except Exception as e:
+                r["detail"] = f"自动安装异常: {e}"
+
+    all_ok = all(r["status"] in ("ok", "fixed") for r in results)
+    return {
+        "all_ok": all_ok,
+        "results": results,
+        "auto_fixed": auto_fixed,
+        "summary": f"检测完成: {sum(1 for r in results if r['status'] in ('ok', 'fixed'))}/{len(results)} 项正常"
+                   + (f"，自动修复了 {', '.join(auto_fixed)}" if auto_fixed else ""),
+    }
