@@ -62,6 +62,7 @@ def _auto_register():
     from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
     from . import office_tools
     from .memory_tools import SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool
+    from .session_tools import SearchSessionTool, GetSessionHistoryTool
     from .todo_tools import TodoCreateTool, TodoUpdateTool, TodoListTool
     from .automation_tools import (
         MouseClickTool, MouseMoveTool, MouseDragTool, MouseScrollTool,
@@ -70,6 +71,8 @@ def _auto_register():
         WaitTool, GetMousePosTool, ScreenSizeTool,
     )
     from .verify_tools import VerifyFileTool, VerifyCommandTool
+    from .code_tools import ExecuteCodeTool
+    from .skill_tools import SaveSkillTool, ListSkillsTool, LoadSkillTool, DeleteSkillTool
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
@@ -80,6 +83,8 @@ def _auto_register():
         OCRTool,
         # Memory tools
         SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool,
+        # Session tools
+        SearchSessionTool, GetSessionHistoryTool,
         # Todo tools
         TodoCreateTool, TodoUpdateTool, TodoListTool,
         # Automation tools
@@ -89,6 +94,10 @@ def _auto_register():
         WaitTool, GetMousePosTool, ScreenSizeTool,
         # Verify tools
         VerifyFileTool, VerifyCommandTool,
+        # Code execution
+        ExecuteCodeTool,
+        # Skill tools
+        SaveSkillTool, ListSkillsTool, LoadSkillTool, DeleteSkillTool,
     ]:
         try:
             register(tool_cls())
