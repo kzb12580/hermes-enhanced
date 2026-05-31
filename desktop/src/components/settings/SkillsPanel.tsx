@@ -23,7 +23,8 @@ export function SkillsPanel() {
       const res = await fetch(`${getBackendUrl()}/api/skills`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setSkills(data.skills || []);
+      // API 返回数组格式 [{name, description, triggers}]
+      setSkills(Array.isArray(data) ? data : (data.skills || []));
     } catch (err) {
       console.error('Failed to load skills:', err);
     }
@@ -43,7 +44,8 @@ export function SkillsPanel() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setMatchedSkills(data.skills || []);
+      // API 返回数组格式 [{name, description, triggers}]
+      setMatchedSkills(Array.isArray(data) ? data : (data.skills || []));
     } catch (err) {
       console.error('Failed to search skills:', err);
     }

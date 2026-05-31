@@ -63,6 +63,28 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
     wait: '⏳ 等待',
     get_mouse_position: '🖱️ 获取位置',
     get_screen_size: '📐 屏幕尺寸',
+    // Memory tools
+    save_memory: '💾 保存记忆',
+    search_memory: '🔍 搜索记忆',
+    list_memories: '📋 列出记忆',
+    delete_memory: '🗑️ 删除记忆',
+    // Session tools
+    search_session: '🔍 搜索会话',
+    get_session_history: '📜 会话历史',
+    // Todo tools
+    todo_create: '📝 创建待办',
+    todo_update: '✏️ 更新待办',
+    todo_list: '📋 待办列表',
+    // Verify tools
+    verify_file: '✅ 验证文件',
+    verify_command: '✅ 验证命令',
+    // Code execution
+    execute_code: '💻 执行代码',
+    // Skill tools
+    save_skill: '⚡ 保存技能',
+    list_skills: '⚡ 技能列表',
+    load_skill: '⚡ 加载技能',
+    delete_skill: '⚡ 删除技能',
   };
 
   const displayName = toolNameCN[toolCall.name] || toolCall.name;

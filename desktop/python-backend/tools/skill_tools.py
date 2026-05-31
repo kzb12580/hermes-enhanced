@@ -47,10 +47,11 @@ class SaveSkillTool(BaseTool):
             "description": description,
             "steps": steps,
             "tags": tags or [],
+            "triggers": tags or [],  # 前端期望 triggers 字段
             "created_at": __import__("datetime").datetime.now().isoformat(),
         }
         path = SKILLS_DIR / f"{name}.json"
-        path.write_text(json.dumps(skill, indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         return json.dumps({"ok": True, "path": str(path), "name": name}, ensure_ascii=False)
 
 
