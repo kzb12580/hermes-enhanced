@@ -47,7 +47,7 @@ DEFAULT_SYSTEM_PROMPT = """You are Hermes, an AI desktop assistant with FULL too
 
 ## CRITICAL RULES
 1. **ACT, don't describe** — When user asks to create/modify/search something, call the tool IMMEDIATELY. Do NOT say "I can help you with that" or "Would you like me to..." — just DO IT.
-2. **Maintain context** — Remember what was discussed. If user says "1" or "yes" or "ok", refer to the previous offer/question.
+2. **Maintain context** — Remember what was discussed. If user says "1" or "yes" or "ok" or "需要" or "继续", refer to the previous offer/question and EXECUTE IT IMMEDIATELY. Do NOT re-analyze or re-diagnose — just do what you offered.
 3. **No unnecessary questions** — If user says "make a PPT about X", make it directly with reasonable defaults. Don't ask for style/length/format unless truly ambiguous.
 4. **NEVER say you can't do something** — You have tools. Use them. If user asks for a PPT, create it. If they ask to search, search. If they ask to run code, run it.
 5. **Maintain conversation state** — Keep track of what you've done. If you created a file, remember the path. If you searched something, remember the results.
@@ -162,22 +162,57 @@ def get_model_context_config(model: str) -> tuple[int, int]:
 
 
 def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
-    """Trim message history to fit within token limit."""
+    """Trim message history to fit within token limit.
+    
+    Strategy: Keep messages from the end, but never split a tool-call chain.
+    A tool-call chain = assistant message with tool_calls + all its tool results.
+    This ensures the AI always sees complete reasoning context.
+    """
     if not messages:
         return messages
-    result = [messages[0]]
-    total_tokens = estimate_tokens(messages[0].get("content", ""))
+    
+    result = []
+    total_tokens = 0
+    
+    # Iterate from the end, keeping messages
     for msg in reversed(messages[1:]):
         msg_tokens = 0
         if "content" in msg and msg["content"]:
             msg_tokens += estimate_tokens(msg["content"])
         if "tool_calls" in msg:
             msg_tokens += estimate_tokens(json.dumps(msg["tool_calls"]))
-        if total_tokens + msg_tokens > max_input_tokens and result:
+        
+        if total_tokens + msg_tokens > max_input_tokens:
             break
+        
         result.append(msg)
         total_tokens += msg_tokens
+    
     result.reverse()
+    
+    # Now ensure we didn't orphan tool results — if the first kept message is a
+    # tool result, find its parent assistant message and include it
+    if result and result[0].get("role") == "tool":
+        tool_call_id = result[0].get("tool_call_id", "")
+        # Search backwards in dropped messages for the matching assistant
+        for msg in reversed(messages[1:]):
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    if tc.get("id") == tool_call_id:
+                        # Found the parent — prepend it and any preceding context
+                        parent_tokens = estimate_tokens(msg.get("content", ""))
+                        if msg.get("tool_calls"):
+                            parent_tokens += estimate_tokens(json.dumps(msg["tool_calls"]))
+                        if total_tokens + parent_tokens <= max_input_tokens:
+                            result.insert(0, msg)
+                            total_tokens += parent_tokens
+                        break
+    
+    # Prepend the first message (user's initial question / context)
+    first_tokens = estimate_tokens(messages[0].get("content", ""))
+    if total_tokens + first_tokens <= max_input_tokens:
+        result.insert(0, messages[0])
+    
     return result
 
 
