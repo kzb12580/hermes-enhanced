@@ -198,7 +198,7 @@ export function InputBar() {
   const canSend = (input.trim().length > 0 || pendingAttachments.length > 0) && !isGenerating && !isUploading;
 
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+    <div className="border-t border-border bg-bg-secondary p-4">
       <div className="max-w-3xl mx-auto relative">
         {/* 模型切换栏 */}
         <div className="flex items-center gap-2 mb-2">
@@ -207,13 +207,13 @@ export function InputBar() {
             <button
               onClick={() => setShowModelPicker(!showModelPicker)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
-                bg-[var(--bg-tertiary)] text-[var(--text-secondary)]
-                hover:bg-[var(--bg-surface)] transition-colors border border-[var(--border)]"
+                bg-bg-tertiary text-text-secondary
+                hover:bg-bg-surface transition-colors border border-border"
             >
-              <span className="text-[var(--accent)] font-medium">
+              <span className="text-accent font-medium">
                 {currentProviderName}
               </span>
-              <span className="text-[var(--text-muted)]">/</span>
+              <span className="text-text-muted">/</span>
               <span>{modelShort}</span>
               <ChevronDown size={12} className={`transition-transform ${showModelPicker ? 'rotate-180' : ''}`} />
             </button>
@@ -221,12 +221,12 @@ export function InputBar() {
             {/* 模型下拉菜单 */}
             {showModelPicker && (
               <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto
-                bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-xl z-50">
+                bg-bg-primary border border-border rounded-lg shadow-xl z-50">
                 {providers
                   .filter((p) => p.enabled && p.models.length > 0)
                   .map((provider) => (
                     <div key={provider.id}>
-                      <div className="px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-tertiary)] sticky top-0">
+                      <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg-tertiary sticky top-0">
                         {provider.name}
                       </div>
                       {provider.models.map((model) => (
@@ -238,8 +238,8 @@ export function InputBar() {
                           }}
                           className={`w-full text-left px-3 py-1.5 text-xs transition-colors
                             ${model === currentModel && provider.id === currentProvider
-                              ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                              ? 'bg-accent/15 text-accent'
+                              : 'text-text-secondary hover:bg-bg-tertiary'
                             }`}
                         >
                           {model}
@@ -248,7 +248,7 @@ export function InputBar() {
                     </div>
                   ))}
                 {providers.filter((p) => p.enabled && p.models.length > 0).length === 0 && (
-                  <div className="px-3 py-4 text-xs text-[var(--text-muted)] text-center">
+                  <div className="px-3 py-4 text-xs text-text-muted text-center">
                     暂无可用模型，请在设置中添加
                   </div>
                 )}
@@ -264,10 +264,10 @@ export function InputBar() {
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
                   border transition-colors
                   ${thinkingMode === 'on'
-                    ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/30'
+                    ? 'bg-accent/10 text-accent border-accent/30'
                     : thinkingMode === 'auto'
-                      ? 'bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/30'
-                      : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border)]'
+                      ? 'bg-success/10 text-success border-success/30'
+                      : 'bg-bg-tertiary text-text-muted border-border'
                   }`}
               >
                 <ThinkingIcon size={12} />
@@ -278,8 +278,8 @@ export function InputBar() {
               {/* 思考模式下拉 */}
               {showThinkingPicker && (
                 <div className="absolute bottom-full left-0 mb-1 w-56
-                  bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-xl z-50">
-                  <div className="px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-tertiary)]">
+                  bg-bg-primary border border-border rounded-lg shadow-xl z-50">
+                  <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg-tertiary">
                     思考模式
                   </div>
                   {THINKING_MODES.map((mode) => {
@@ -293,14 +293,14 @@ export function InputBar() {
                         }}
                         className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-start gap-2
                           ${mode.value === thinkingMode
-                            ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                            ? 'bg-accent/15 text-accent'
+                            : 'text-text-secondary hover:bg-bg-tertiary'
                           }`}
                       >
                         <Icon size={14} className="mt-0.5 flex-shrink-0" />
                         <div>
                           <div className="font-medium">{mode.label}</div>
-                          <div className="text-[var(--text-muted)] text-[10px] mt-0.5">
+                          <div className="text-text-muted text-[10px] mt-0.5">
                             {mode.desc}
                           </div>
                         </div>
@@ -310,8 +310,8 @@ export function InputBar() {
 
                   {/* 思考预算 */}
                   {thinkingMode !== 'off' && (
-                    <div className="px-3 py-2 border-t border-[var(--border)]">
-                      <label className="text-[10px] text-[var(--text-muted)] block mb-1">
+                    <div className="px-3 py-2 border-t border-border">
+                      <label className="text-[10px] text-text-muted block mb-1">
                         思考预算: {thinkingBudget} tokens
                       </label>
                       <input
@@ -323,9 +323,9 @@ export function InputBar() {
                         onChange={(e) =>
                           updateSettings({ thinkingBudget: parseInt(e.target.value) })
                         }
-                        className="w-full h-1 accent-[var(--accent)]"
+                        className="w-full h-1 accent-accent"
                       />
-                      <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
+                      <div className="flex justify-between text-[10px] text-text-muted">
                         <span>1K</span>
                         <span>32K</span>
                       </div>
@@ -340,17 +340,17 @@ export function InputBar() {
         {/* Active skills bar */}
         {activeSkills.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            <Sparkles size={12} className="text-[var(--accent)] flex-shrink-0" />
+            <Sparkles size={12} className="text-accent flex-shrink-0" />
             {activeSkills.map((skillId) => (
               <span
                 key={skillId}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
-                  bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/20"
+                  bg-accent/15 text-accent border border-accent/20"
               >
                 {skillId}
                 <button
                   onClick={() => toggleActiveSkill(skillId)}
-                  className="hover:text-[var(--error)] transition-colors"
+                  className="hover:text-error transition-colors"
                 >
                   <X size={10} />
                 </button>
@@ -366,23 +366,23 @@ export function InputBar() {
               <span
                 key={idx}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
-                  bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]"
+                  bg-bg-tertiary text-text-secondary border border-border"
               >
                 📎 {att.filename}
                 <button
                   onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
-                  className="hover:text-[var(--error)] transition-colors"
+                  className="hover:text-error transition-colors"
                 >
                   <X size={10} />
                 </button>
               </span>
             ))}
-            {isUploading && <span className="text-xs text-[var(--text-muted)]">上传中...</span>}
+            {isUploading && <span className="text-xs text-text-muted">上传中...</span>}
           </div>
         )}
 
         {/* 输入框 */}
-        <div className="flex items-end gap-2 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
+        <div className="flex items-end gap-2 bg-bg-primary rounded-xl border border-border focus-within:border-accent transition-colors">
           <input
             type="file"
             ref={fileInputRef}
@@ -392,7 +392,7 @@ export function InputBar() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex-shrink-0 p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            className="flex-shrink-0 p-3 text-text-muted hover:text-text-primary transition-colors"
             title="添加附件"
           >
             <Paperclip size={18} />
@@ -402,8 +402,8 @@ export function InputBar() {
             onClick={() => setShowSkillsPanel(true)}
             className={`flex-shrink-0 p-3 transition-colors ${
               activeSkills.length > 0
-                ? 'text-[var(--accent)] hover:text-[var(--accent-hover)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                ? 'text-accent hover:text-accent-hover'
+                : 'text-text-muted hover:text-text-primary'
             }`}
             title="技能管理"
           >
@@ -418,7 +418,7 @@ export function InputBar() {
             onContextMenu={handleContextMenu}
             placeholder="输入消息... (Shift+Enter 换行)"
             rows={1}
-            className="flex-1 bg-transparent resize-none py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none max-h-[200px]"
+            className="flex-1 bg-transparent resize-none py-3 text-sm text-text-primary placeholder-text-muted outline-none max-h-[200px]"
             style={{ minHeight: '24px' }}
             disabled={isGenerating}
           />
@@ -427,7 +427,7 @@ export function InputBar() {
             {isGenerating ? (
               <button
                 onClick={handleStop}
-                className="p-2 rounded-lg bg-[var(--error)] text-white hover:opacity-80 transition-opacity"
+                className="p-2 rounded-lg bg-error text-white hover:opacity-80 transition-opacity"
                 title="停止生成"
               >
                 <Square size={16} />
@@ -439,8 +439,8 @@ export function InputBar() {
                 className={`
                   p-2 rounded-lg transition-all
                   ${canSend
-                    ? 'bg-[var(--accent)] text-[var(--bg-primary)] hover:bg-[var(--accent-hover)]'
-                    : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] cursor-not-allowed'
+                    ? 'bg-accent text-bg-primary hover:bg-accent-hover'
+                    : 'bg-bg-tertiary text-text-muted cursor-not-allowed'
                   }
                 `}
                 title="发送消息"
@@ -452,7 +452,7 @@ export function InputBar() {
         </div>
 
         {/* Hint text */}
-        <p className="text-center text-xs text-[var(--text-muted)] mt-2">
+        <p className="text-center text-xs text-text-muted mt-2">
           {sendShortcut === 'enter'
             ? 'Enter 发送 · Shift+Enter 换行'
             : 'Ctrl+Enter 发送 · Enter 换行'}

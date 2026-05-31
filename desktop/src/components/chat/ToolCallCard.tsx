@@ -18,10 +18,10 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   }, [toolCall.status]);
 
   const statusIcon = {
-    pending: <Loader2 size={14} className="animate-spin text-[var(--text-muted)]" />,
-    running: <Loader2 size={14} className="animate-spin text-[var(--accent)]" />,
-    completed: <CheckCircle size={14} className="text-[var(--success)]" />,
-    error: <XCircle size={14} className="text-[var(--error)]" />,
+    pending: <Loader2 size={14} className="animate-spin text-text-muted" />,
+    running: <Loader2 size={14} className="animate-spin text-accent" />,
+    completed: <CheckCircle size={14} className="text-success" />,
+    error: <XCircle size={14} className="text-error" />,
   };
 
   const statusText = {
@@ -106,27 +106,27 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   }
 
   return (
-    <div className="my-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden fade-in">
+    <div className="my-2 rounded-lg border border-border bg-bg-secondary overflow-hidden fade-in">
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-[var(--bg-tertiary)] transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-bg-tertiary transition-colors"
       >
         {expanded ? (
-          <ChevronDown size={14} className="text-[var(--text-muted)] flex-shrink-0" />
+          <ChevronDown size={14} className="text-text-muted flex-shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-[var(--text-muted)] flex-shrink-0" />
+          <ChevronRight size={14} className="text-text-muted flex-shrink-0" />
         )}
-        <Wrench size={14} className="text-[var(--accent)] flex-shrink-0" />
-        <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+        <Wrench size={14} className="text-accent flex-shrink-0" />
+        <span className="text-sm font-medium text-text-primary truncate">
           {displayName}
         </span>
         {toolCall.status === 'running' && (
-          <span className="text-xs text-[var(--accent)] animate-pulse">
+          <span className="text-xs text-accent animate-pulse">
             正在{displayName}...
           </span>
         )}
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-text-muted">
           {statusIcon[toolCall.status]}
           <span>{statusText[toolCall.status]}</span>
         </span>
@@ -134,13 +134,13 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-[var(--border)] p-3 space-y-3">
+        <div className="border-t border-border p-3 space-y-3">
           {/* Arguments */}
           <div>
-            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">
               参数
             </h4>
-            <pre className="text-xs font-mono bg-[var(--bg-primary)] rounded p-2 overflow-x-auto text-[var(--text-secondary)] max-h-48 overflow-y-auto">
+            <pre className="text-xs font-mono bg-bg-primary rounded p-2 overflow-x-auto text-text-secondary max-h-48 overflow-y-auto">
               {parsedArgs}
             </pre>
           </div>
@@ -148,17 +148,17 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {/* Result */}
           {toolCall.result && (
             <div>
-              <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
+              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">
                 结果
               </h4>
-              <pre className="text-xs font-mono bg-[var(--bg-primary)] rounded p-2 overflow-x-auto text-[var(--text-secondary)] max-h-64 overflow-y-auto">
+              <pre className="text-xs font-mono bg-bg-primary rounded p-2 overflow-x-auto text-text-secondary max-h-64 overflow-y-auto">
                 {parsedResult}
               </pre>
             </div>
           )}
 
           {toolCall.status === 'running' && !toolCall.result && (
-            <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <div className="flex items-center gap-2 text-xs text-text-muted">
               <Loader2 size={12} className="animate-spin" />
               <span>正在执行工具...</span>
             </div>

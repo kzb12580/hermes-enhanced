@@ -49,17 +49,17 @@ export function CodeBlock({ code, language = '', showLineNumbers = false }: Code
   return (
     <div className="relative group rounded-lg overflow-hidden my-2 bg-[#282c34]">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs">
+      <div className="flex items-center justify-between px-4 py-1.5 bg-bg-tertiary text-text-muted text-xs">
         <span className="font-mono">{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-[var(--bg-surface)] transition-colors opacity-0 group-hover:opacity-100"
+          className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-bg-surface transition-colors opacity-0 group-hover:opacity-100"
           title="复制代码"
         >
           {copied ? (
             <>
-              <Check size={12} className="text-[var(--success)]" />
-              <span className="text-[var(--success)]">已复制</span>
+              <Check size={12} className="text-success" />
+              <span className="text-success">已复制</span>
             </>
           ) : (
             <>

@@ -84,9 +84,9 @@ export function SessionList() {
   if (sessions.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 text-center">
-        <MessageSquare size={28} className="text-[var(--text-muted)] mb-2" />
-        <p className="text-sm text-[var(--text-muted)]">暂无对话</p>
-        <p className="text-xs text-[var(--text-muted)] mt-1">点击上方按钮开始新对话</p>
+        <MessageSquare size={28} className="text-text-muted mb-2" />
+        <p className="text-sm text-text-muted">暂无对话</p>
+        <p className="text-xs text-text-muted mt-1">点击上方按钮开始新对话</p>
       </div>
     );
   }
@@ -104,8 +104,8 @@ export function SessionList() {
             className={`
               group relative rounded-lg px-3 py-2.5 cursor-pointer transition-colors
               ${isActive
-                ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]/50'
+                ? 'bg-bg-tertiary text-text-primary'
+                : 'text-text-secondary hover:bg-bg-tertiary/50'
               }
             `}
             onClick={() => !isEditing && switchSession(session.id)}
@@ -121,18 +121,18 @@ export function SessionList() {
                     if (e.key === 'Enter') handleConfirmRename();
                     if (e.key === 'Escape') handleCancelRename();
                   }}
-                  className="flex-1 bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm rounded px-2 py-1 outline-none border border-[var(--accent)] min-w-0"
+                  className="flex-1 bg-bg-primary text-text-primary text-sm rounded px-2 py-1 outline-none border border-accent min-w-0"
                   autoFocus
                 />
                 <button
                   onClick={handleConfirmRename}
-                  className="p-1 rounded hover:bg-[var(--success)]/20 text-[var(--success)]"
+                  className="p-1 rounded hover:bg-success/20 text-success"
                 >
                   <Check size={14} />
                 </button>
                 <button
                   onClick={handleCancelRename}
-                  className="p-1 rounded hover:bg-[var(--error)]/20 text-[var(--error)]"
+                  className="p-1 rounded hover:bg-error/20 text-error"
                 >
                   <X size={14} />
                 </button>
@@ -143,7 +143,7 @@ export function SessionList() {
                 <div className="text-sm font-medium truncate pr-14">
                   {session.title}
                 </div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                <div className="text-xs text-text-muted mt-0.5">
                   {formatTime(session.updatedAt)}
                   {session.messages.length > 0 && (
                     <span className="ml-2">· {session.messages.length} 条消息</span>
@@ -157,7 +157,7 @@ export function SessionList() {
                       e.stopPropagation();
                       handleStartRename(session.id, session.title);
                     }}
-                    className="p-1 rounded hover:bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    className="p-1 rounded hover:bg-bg-surface text-text-muted hover:text-text-primary"
                     title="重命名"
                   >
                     <Pencil size={13} />
@@ -169,8 +169,8 @@ export function SessionList() {
                     }}
                     className={`p-1 rounded transition-colors ${
                       isConfirmingDelete
-                        ? 'bg-[var(--error)]/20 text-[var(--error)]'
-                        : 'hover:bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--error)]'
+                        ? 'bg-error/20 text-error'
+                        : 'hover:bg-bg-surface text-text-muted hover:text-error'
                     }`}
                     title={isConfirmingDelete ? '再次点击确认删除' : '删除'}
                   >

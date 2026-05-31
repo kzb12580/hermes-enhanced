@@ -104,18 +104,18 @@ export function ChatView() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-secondary)] flex-shrink-0 app-drag">
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-secondary flex-shrink-0 app-drag">
         <div className="flex items-center gap-2">
           {/* Toggle sidebar */}
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors app-no-drag"
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors app-no-drag"
             title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
           >
             {sidebarCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
 
-          <h1 className="text-sm font-medium text-[var(--text-primary)] truncate max-w-[300px]">
+          <h1 className="text-sm font-medium text-text-primary truncate max-w-[300px]">
             {session?.title || 'Hermes Desktop'}
           </h1>
         </div>
@@ -125,10 +125,10 @@ export function ChatView() {
           <div className="flex items-center gap-1.5 text-xs">
             <div
               className={`w-2 h-2 rounded-full ${
-                isBackendOnline ? 'bg-[var(--success)]' : 'bg-[var(--error)]'
+                isBackendOnline ? 'bg-success' : 'bg-error'
               }`}
             />
-            <span className="text-[var(--text-muted)]">
+            <span className="text-text-muted">
               {isBackendOnline ? '已连接' : '未连接'}
             </span>
           </div>
@@ -138,21 +138,21 @@ export function ChatView() {
             <div className="flex items-center gap-0.5 ml-2 app-no-drag">
               <button
                 onClick={minimize}
-                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
                 title="最小化"
               >
                 <Minus size={14} />
               </button>
               <button
                 onClick={maximize}
-                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
                 title="最大化"
               >
                 <Square size={12} />
               </button>
               <button
                 onClick={close}
-                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--error)]/80 hover:text-white text-[var(--text-muted)] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-error/80 hover:text-white text-text-muted transition-colors"
                 title="关闭"
               >
                 <X size={14} />
@@ -170,13 +170,13 @@ export function ChatView() {
         {messages.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-[var(--bg-tertiary)] flex items-center justify-center mb-4">
-              <Bot size={32} className="text-[var(--accent)]" />
+            <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
+              <Bot size={32} className="text-accent" />
             </div>
-            <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+            <h2 className="text-xl font-semibold text-text-primary mb-2">
               Hermes Desktop
             </h2>
-            <p className="text-sm text-[var(--text-muted)] max-w-md">
+            <p className="text-sm text-text-muted max-w-md">
               智能 AI 助手，支持代码生成、文件操作、网页搜索等多种工具。
               输入消息开始对话。
             </p>
@@ -196,10 +196,10 @@ export function ChatView() {
                     if (!store.currentSessionId) store.createSession();
                     store.sendMessage(item.text);
                   }}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border bg-bg-secondary hover:bg-bg-tertiary transition-colors text-left"
                 >
                   <span className="text-lg">{item.icon}</span>
-                  <span className="text-sm text-[var(--text-secondary)]">{item.text}</span>
+                  <span className="text-sm text-text-secondary">{item.text}</span>
                 </button>
               ))}
             </div>
@@ -214,13 +214,13 @@ export function ChatView() {
             {/* Generation indicator: show only when generating and no streaming assistant message yet */}
             {isGenerating && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.isStreaming) && (
               <div className="flex gap-3 px-4 py-3 fade-in">
-                <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
-                  <Bot size={16} className="text-[var(--text-secondary)]" />
+                <div className="w-8 h-8 rounded-full bg-bg-tertiary flex items-center justify-center">
+                  <Bot size={16} className="text-text-secondary" />
                 </div>
                 <div className="flex items-center gap-1.5 px-4 py-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--accent)] pulse-dot" />
-                  <div className="w-2 h-2 rounded-full bg-[var(--accent)] pulse-dot" />
-                  <div className="w-2 h-2 rounded-full bg-[var(--accent)] pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
                 </div>
               </div>
             )}
@@ -232,7 +232,7 @@ export function ChatView() {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--error)]/10 border-t border-[var(--error)]/30 text-sm text-[var(--error)]">
+        <div className="flex items-center gap-2 px-4 py-2 bg-error/10 border-t border-error/30 text-sm text-error">
           <AlertCircle size={14} />
           <span className="flex-1">{error}</span>
           <button

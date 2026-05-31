@@ -145,15 +145,15 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 fade-in" onClick={onClose}>
       <div
         className="relative w-[860px] max-w-[90vw] h-[620px] max-h-[85vh] flex flex-col
-          bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden"
+          bg-bg-primary border border-border rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-bg-secondary">
           <div className="flex items-center gap-2">
-            <Sparkles size={18} className="text-[var(--accent)]" />
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">技能管理</h2>
-            <span className="text-xs text-[var(--text-muted)]">
+            <Sparkles size={18} className="text-accent" />
+            <h2 className="text-sm font-semibold text-text-primary">技能管理</h2>
+            <span className="text-xs text-text-muted">
               {activeSkills.length} 已激活
             </span>
           </div>
@@ -161,14 +161,14 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
             <button
               onClick={handleReload}
               disabled={reloading}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-50"
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
               title="重新加载技能"
             >
               <RefreshCw size={14} className={reloading ? 'animate-spin' : ''} />
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             >
               <X size={16} />
             </button>
@@ -176,21 +176,21 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
         </div>
 
         {/* Search + category filter */}
-        <div className="px-5 py-3 border-b border-[var(--border)]">
+        <div className="px-5 py-3 border-b border-border">
           <div className="flex items-center gap-3 mb-2.5">
             <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="搜索技能名称、描述、标签..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-sm
-                  text-[var(--text-primary)] placeholder-[var(--text-muted)]
-                  border border-transparent focus:border-[var(--accent)] outline-none transition-colors"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-bg-tertiary text-sm
+                  text-text-primary placeholder-text-muted
+                  border border-transparent focus:border-accent outline-none transition-colors"
               />
             </div>
-            {loading && <Loader2 size={16} className="text-[var(--text-muted)] animate-spin" />}
+            {loading && <Loader2 size={16} className="text-text-muted animate-spin" />}
           </div>
           {/* Category tabs */}
           <div className="flex items-center gap-1 flex-wrap">
@@ -202,8 +202,8 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                   onClick={() => setFilterCategory(cat.key)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
                     filterCategory === cat.key
-                      ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                      ? 'bg-accent/15 text-accent'
+                      : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary'
                   }`}
                 >
                   <Icon size={12} />
@@ -217,9 +217,9 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
         {/* Body: list + detail */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left: skill list */}
-          <div className="w-[300px] border-r border-[var(--border)] overflow-y-auto">
+          <div className="w-[300px] border-r border-border overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] text-xs">
+              <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs">
                 <Puzzle size={24} className="mb-2 opacity-50" />
                 未找到匹配的技能
               </div>
@@ -233,8 +233,8 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                       key={skill.id}
                       className={`flex items-center transition-all duration-150
                         ${isSelected
-                          ? 'bg-[var(--accent)]/10 border-l-2 border-[var(--accent)]'
-                          : 'border-l-2 border-transparent hover:bg-[var(--bg-tertiary)]'
+                          ? 'bg-accent/10 border-l-2 border-accent'
+                          : 'border-l-2 border-transparent hover:bg-bg-tertiary'
                         }`}
                     >
                       <button
@@ -242,23 +242,23 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                         className="flex-1 text-left px-4 py-2.5 flex items-center gap-3"
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
-                          ${isActive ? 'bg-[var(--accent)]/20' : 'bg-[var(--bg-tertiary)]'}`}>
+                          ${isActive ? 'bg-accent/20' : 'bg-bg-tertiary'}`}>
                           {skill.is_builtin ? (
-                            <Zap size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+                            <Zap size={14} className={isActive ? 'text-accent' : 'text-text-muted'} />
                           ) : (
-                            <User size={14} className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+                            <User size={14} className={isActive ? 'text-accent' : 'text-text-muted'} />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+                            <span className="text-sm font-medium text-text-primary truncate">
                               {skill.name}
                             </span>
                             {isActive && (
-                              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+                              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-accent" />
                             )}
                           </div>
-                          <span className="text-xs text-[var(--text-muted)] truncate block">
+                          <span className="text-xs text-text-muted truncate block">
                             {skill.description}
                           </span>
                         </div>
@@ -271,8 +271,8 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                         }}
                         className={`flex-shrink-0 px-2 py-1 mr-2 rounded text-xs transition-colors
                           ${isActive
-                            ? 'bg-[var(--accent)] text-white hover:opacity-80'
-                            : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-surface)]'
+                            ? 'bg-accent text-white hover:opacity-80'
+                            : 'bg-bg-tertiary text-text-muted hover:bg-bg-surface'
                           }`}
                         title={isActive ? '点击停用' : '点击激活'}
                       >
@@ -294,36 +294,36 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center
                       ${activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
-                        ? 'bg-[var(--accent)]/20'
-                        : 'bg-[var(--bg-tertiary)]'
+                        ? 'bg-accent/20'
+                        : 'bg-bg-tertiary'
                       }`}>
                       {selected.is_builtin ? (
                         <Zap size={20} className={
                           activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--text-muted)]'
+                            ? 'text-accent'
+                            : 'text-text-muted'
                         } />
                       ) : (
                         <User size={20} className={
                           activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--text-muted)]'
+                            ? 'text-accent'
+                            : 'text-text-muted'
                         } />
                       )}
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-[var(--text-primary)]">{selected.name}</h3>
+                      <h3 className="text-base font-semibold text-text-primary">{selected.name}</h3>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded
                           ${selected.is_builtin
-                            ? 'bg-[var(--success)]/10 text-[var(--success)]'
-                            : 'bg-[var(--accent)]/10 text-[var(--accent)]'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-accent/10 text-accent'
                           }`}>
                           {selected.is_builtin ? <BookOpen size={10} /> : <User size={10} />}
                           {selected.is_builtin ? '内置' : '自定义'}
                         </span>
                         {selected.category && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
                             {selected.category}
                           </span>
                         )}
@@ -336,8 +336,8 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                     onClick={() => onToggleActive(selected.id || selected.name)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
                       ${activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
-                        ? 'bg-[var(--accent)] text-[var(--bg-primary)] hover:opacity-80'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] border border-[var(--border)]'
+                        ? 'bg-accent text-bg-primary hover:opacity-80'
+                        : 'bg-bg-tertiary text-text-secondary hover:bg-bg-surface border border-border'
                       }`}
                   >
                     {activeSkills.includes(selected.id) || activeSkills.includes(selected.name) ? (
@@ -356,20 +356,20 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
 
                 {/* Description */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">描述</h4>
-                  <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{selected.description}</p>
+                  <h4 className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wider">描述</h4>
+                  <p className="text-sm text-text-secondary leading-relaxed">{selected.description}</p>
                 </div>
 
                 {/* Tags */}
                 {selected.tags && selected.tags.length > 0 && (
                   <div className="mb-4">
-                    <h4 className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">标签</h4>
+                    <h4 className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wider">标签</h4>
                     <div className="flex flex-wrap gap-1.5">
                       {selected.tags.map((tag) => (
                         <span
                           key={tag}
                           className="inline-flex items-center px-2 py-0.5 rounded-md text-xs
-                            bg-[var(--accent)]/10 text-[var(--accent)]"
+                            bg-accent/10 text-accent"
                         >
                           {tag}
                         </span>
@@ -380,13 +380,13 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
 
                 {/* Triggers */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">触发词</h4>
+                  <h4 className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wider">触发词</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {selected.triggers.map((trigger) => (
                       <span
                         key={trigger}
                         className="inline-flex items-center px-2 py-0.5 rounded-md text-xs
-                          bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]"
+                          bg-bg-tertiary text-text-secondary border border-border"
                       >
                         {trigger}
                       </span>
@@ -397,13 +397,13 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                 {/* Tools (from detail) */}
                 {selectedDetail?.tools && selectedDetail.tools.length > 0 && (
                   <div className="mb-4">
-                    <h4 className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">工具</h4>
+                    <h4 className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wider">工具</h4>
                     <div className="flex flex-wrap gap-1.5">
                       {selectedDetail.tools.map((tool) => (
                         <span
                           key={tool}
                           className="inline-flex items-center px-2 py-0.5 rounded-md text-xs
-                            bg-[var(--success)]/10 text-[var(--success)]"
+                            bg-success/10 text-success"
                         >
                           {tool}
                         </span>
@@ -415,9 +415,9 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                 {/* Content preview */}
                 {selectedDetail?.content && (
                   <div>
-                    <h4 className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">技能内容</h4>
-                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
-                      <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed font-mono">
+                    <h4 className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wider">技能内容</h4>
+                    <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+                      <pre className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed font-mono">
                         {selectedDetail.content}
                       </pre>
                     </div>
@@ -425,7 +425,7 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
+              <div className="flex flex-col items-center justify-center h-full text-text-muted">
                 <Sparkles size={32} className="mb-3 opacity-30" />
                 <span className="text-sm">选择一个技能查看详情</span>
               </div>

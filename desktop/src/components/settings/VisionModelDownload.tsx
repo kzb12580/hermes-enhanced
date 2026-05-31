@@ -140,7 +140,7 @@ export function VisionModelDownload() {
 
   if (checking) {
     return (
-      <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm py-4">
+      <div className="flex items-center gap-2 text-text-muted text-sm py-4">
         <Loader2 size={14} className="animate-spin" />
         检查模型状态...
       </div>
@@ -150,34 +150,34 @@ export function VisionModelDownload() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
-        <HardDrive size={16} className="text-[var(--accent)]" />
-        <h3 className="text-sm font-medium text-[var(--text-primary)]">视觉模型（可选）</h3>
+        <HardDrive size={16} className="text-accent" />
+        <h3 className="text-sm font-medium text-text-primary">视觉模型（可选）</h3>
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
+      <p className="text-xs text-text-muted">
         LocateAnything-3B (~6GB) 用于屏幕元素识别和 GUI 自动化。
         如果只需要聊天和办公功能，可以不下载。
       </p>
 
       {/* Model status */}
       {modelExists ? (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--success)]/10 border border-[var(--success)]/20">
+        <div className="flex items-center justify-between p-3 rounded-lg bg-success/10 border border-success/20">
           <div className="flex items-center gap-2">
-            <CheckCircle size={16} className="text-[var(--success)]" />
-            <span className="text-sm text-[var(--success)]">模型已安装</span>
+            <CheckCircle size={16} className="text-success" />
+            <span className="text-sm text-success">模型已安装</span>
           </div>
           <div className="flex gap-2">
             <button
               onClick={startRepair}
               disabled={repairing}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
             >
               {repairing ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
               检测修复
             </button>
             <button
               onClick={deleteModel}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--error)] hover:bg-[var(--error)]/10 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-error hover:bg-error/10 transition-colors"
             >
               <Trash2 size={12} /> 删除
             </button>
@@ -187,7 +187,7 @@ export function VisionModelDownload() {
         <>
           {/* Mirror selection */}
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">下载源</label>
+            <label className="text-xs font-medium text-text-muted mb-1.5 block">下载源</label>
             <div className="flex gap-2 flex-wrap">
               {MIRRORS.map(m => (
                 <button
@@ -196,11 +196,11 @@ export function VisionModelDownload() {
                   disabled={downloading}
                   className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
                     mirror === m.key
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                      ? 'bg-accent text-white'
+                      : 'bg-bg-tertiary text-text-muted hover:text-text-primary'
                   } ${downloading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  {m.label} {m.note && <span className="text-[var(--warning)]">({m.note})</span>}
+                  {m.label} {m.note && <span className="text-warning">({m.note})</span>}
                 </button>
               ))}
             </div>
@@ -209,22 +209,22 @@ export function VisionModelDownload() {
           {/* Progress */}
           {downloading && (
             <div>
-              <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+              <div className="h-2 rounded-full bg-bg-tertiary overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-purple-500 transition-all duration-300"
+                  className="h-full rounded-full bg-gradient-to-r from-accent to-purple-500 transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-xs text-[var(--text-muted)]">{status || '准备中...'}</span>
-                <span className="text-xs text-[var(--text-muted)]">{progress}%</span>
+                <span className="text-xs text-text-muted">{status || '准备中...'}</span>
+                <span className="text-xs text-text-muted">{progress}%</span>
               </div>
             </div>
           )}
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--error)]/10 text-[var(--error)] text-xs">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-error/10 text-error text-xs">
               <AlertCircle size={14} />
               {error}
             </div>
@@ -235,7 +235,7 @@ export function VisionModelDownload() {
             <button
               onClick={startDownload}
               disabled={downloading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {downloading ? (
                 <><Loader2 size={14} className="animate-spin" /> 下载中...</>
@@ -248,7 +248,7 @@ export function VisionModelDownload() {
             <button
               onClick={startRepair}
               disabled={repairing}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {repairing ? (
                 <><Loader2 size={14} className="animate-spin" /> 检测中...</>
@@ -262,32 +262,32 @@ export function VisionModelDownload() {
 
       {/* Repair Results */}
       {repairDone && (
-        <div className="space-y-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
+        <div className="space-y-2 p-3 rounded-lg bg-bg-tertiary border border-border">
           <div className="flex items-center gap-2 mb-2">
-            <CheckCheck size={14} className="text-[var(--accent)]" />
-            <span className="text-xs font-medium text-[var(--text-primary)]">检测结果</span>
+            <CheckCheck size={14} className="text-accent" />
+            <span className="text-xs font-medium text-text-primary">检测结果</span>
           </div>
           {repairResults.map((r, i) => (
             <div key={i} className="flex items-center gap-2 text-xs">
               {r.status === 'ok' ? (
-                <CheckCircle size={12} className="text-[var(--success)] flex-shrink-0" />
+                <CheckCircle size={12} className="text-success flex-shrink-0" />
               ) : r.status === 'fixed' ? (
-                <RefreshCw size={12} className="text-[var(--warning)] flex-shrink-0" />
+                <RefreshCw size={12} className="text-warning flex-shrink-0" />
               ) : (
-                <XCircle size={12} className="text-[var(--error)] flex-shrink-0" />
+                <XCircle size={12} className="text-error flex-shrink-0" />
               )}
-              <span className="font-medium text-[var(--text-primary)] min-w-[100px]">{r.name}</span>
+              <span className="font-medium text-text-primary min-w-[100px]">{r.name}</span>
               <span className={`${
-                r.status === 'ok' ? 'text-[var(--success)]' :
-                r.status === 'fixed' ? 'text-[var(--warning)]' :
-                'text-[var(--error)]'
+                r.status === 'ok' ? 'text-success' :
+                r.status === 'fixed' ? 'text-warning' :
+                'text-error'
               }`}>
                 {r.detail}
               </span>
             </div>
           ))}
           {repairSummary && (
-            <div className="text-xs text-[var(--text-muted)] mt-2 pt-2 border-t border-[var(--border)]">
+            <div className="text-xs text-text-muted mt-2 pt-2 border-t border-border">
               {repairSummary}
             </div>
           )}
