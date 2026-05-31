@@ -47,7 +47,7 @@ module.exports = {
         'text-primary': 'var(--text-primary)',
         'text-secondary': 'var(--text-secondary)',
         'text-muted': 'var(--text-muted)',
-        'accent-hover': 'var(--accent-hover)',
+        'accent-hover': 'var(--hermes-accent-hover)',
         'error': 'var(--error)',
         'success': 'var(--success)',
         'warning': 'var(--warning)',

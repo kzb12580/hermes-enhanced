@@ -6,7 +6,7 @@
   min-width: 180px;
   max-width: 280px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  border: 1px solid hsl(var(--border));
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15),
               0 2px 8px rgba(0, 0, 0, 0.1);
@@ -45,7 +45,7 @@
 }
 
 .context-menu-item:hover:not(:disabled) {
-  background: var(--accent);
+  background: hsl(var(--accent));
   color: white;
 }
 
@@ -94,7 +94,7 @@
 
 .context-menu-divider {
   height: 1px;
-  background: var(--border);
+  background: hsl(var(--border));
   margin: 4px 8px;
 }
 
