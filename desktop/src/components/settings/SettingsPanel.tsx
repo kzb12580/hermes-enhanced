@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
@@ -19,19 +19,135 @@ const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'about', label: '关于', icon: <Info size={16} /> },
 ];
 
+// ── 右键菜单组件 ──────────────────────────────────────────────────────
+interface ContextMenuItem {
+  label: string;
+  icon?: React.ReactNode;
+  action: () => void;
+  disabled?: boolean;
+}
+
+function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: ContextMenuItem[]; onClose: () => void }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  useEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setPos({
+        x: Math.max(0, x + rect.width > vw ? vw - rect.width - 8 : x),
+        y: Math.max(0, y + rect.height > vh ? vh - rect.height - 8 : y),
+      });
+    }
+  }, [x, y]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [onClose]);
+
+  return (
+    <div ref={menuRef} style={{
+      position: 'fixed', left: pos.x, top: pos.y, zIndex: 99999,
+      background: 'var(--bg-secondary, #1f2937)', border: '1px solid var(--border, #374151)',
+      borderRadius: 8, padding: 4, minWidth: 160, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    }}>
+      {items.map((item, i) => (
+        <button key={i} disabled={item.disabled} onClick={() => { item.action(); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            padding: '6px 12px', border: 'none', borderRadius: 6,
+            background: 'transparent', cursor: item.disabled ? 'default' : 'pointer',
+            color: item.disabled ? 'var(--text-muted, #6b7280)' : 'var(--text-primary, #e5e7eb)',
+            fontSize: 13, opacity: item.disabled ? 0.5 : 1,
+          }}
+          onMouseEnter={e => { if (!item.disabled) (e.target as HTMLElement).style.background = 'var(--bg-tertiary, #374151)'; }}
+          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; }}
+        >
+          {item.icon && <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center' }}>{item.icon}</span>}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Hook: 输入框右键菜单 ──────────────────────────────────────────────
+function useInputContextMenu() {
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    const hasSelection = target.selectionStart !== target.selectionEnd;
+
+    const items: ContextMenuItem[] = [
+      {
+        label: '撤销',
+        icon: <span style={{ fontSize: 12 }}>↩</span>,
+        action: () => document.execCommand('undo'),
+      },
+      {
+        label: '剪切',
+        icon: <Scissors size={14} />,
+        action: () => document.execCommand('cut'),
+        disabled: !hasSelection,
+      },
+      {
+        label: '复制',
+        icon: <Copy size={14} />,
+        action: () => document.execCommand('copy'),
+        disabled: !hasSelection,
+      },
+      {
+        label: '粘贴',
+        icon: <ClipboardPaste size={14} />,
+        action: async () => {
+          try {
+            const text = await navigator.clipboard.readText();
+            document.execCommand('insertText', false, text);
+          } catch {
+            document.execCommand('paste');
+          }
+        },
+      },
+      {
+        label: '全选',
+        icon: <TextCursorInput size={14} />,
+        action: () => { target.focus(); target.select(); },
+      },
+    ];
+
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  return { menu, handleContextMenu, closeMenu };
+}
+
 export function SettingsPanel() {
   const { setSettingsOpen } = useSystemStore();
   const settings = useSettingsStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const ctx = useInputContextMenu();
 
   const handleClose = () => setSettingsOpen(false);
 
-  // Close on backdrop click
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) handleClose();
   };
 
-  // Close on Escape
   React.useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleClose();
@@ -80,7 +196,7 @@ export function SettingsPanel() {
           </nav>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6" onContextMenu={ctx.handleContextMenu}>
             {activeTab === 'general' && (
               <GeneralSettings />
             )}
@@ -116,23 +232,20 @@ export function SettingsPanel() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {ctx.menu && (
+        <ContextMenu x={ctx.menu.x} y={ctx.menu.y} items={ctx.menu.items} onClose={ctx.closeMenu} />
+      )}
     </div>
   );
 }
 
 function GeneralSettings() {
   const {
-    language,
-    fontSize,
-    sendShortcut,
-    showSystemMessages,
-    autoScroll,
-    temperature,
-    maxTokens,
-    systemPrompt,
-    backendUrl,
-    openLinksInExternalBrowser,
-    updateSettings,
+    language, fontSize, sendShortcut, showSystemMessages, autoScroll,
+    temperature, maxTokens, systemPrompt, backendUrl,
+    openLinksInExternalBrowser, updateSettings,
   } = useSettingsStore();
 
   return (
@@ -189,7 +302,6 @@ function GeneralSettings() {
               key={lang}
               onClick={() => {
                 updateSettings({ language: lang });
-                // Dynamically import and set i18n
                 import('../../lib/i18n').then(({ setLang }) => setLang(lang));
               }}
               className={`
@@ -498,21 +610,15 @@ function NetworkSettings() {
 
       {/* 诊断结果 */}
       {diagnosis && !diagnosis.error && (
-        <div className="rounded-lg border border-[var(--border)] p-4 space-y-2">
-          <p className="text-sm font-medium text-[var(--text-secondary)]">诊断结果</p>
-          {diagnosis.tests?.map((t: any, i: number) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
-              <span className={t.ok ? 'text-green-400' : 'text-red-400'}>{t.ok ? '✅' : '❌'}</span>
-              <span className="text-[var(--text-primary)]">{t.name}</span>
-              <span className="text-[var(--text-muted)] text-xs">
-                {t.ok ? `HTTP ${t.status}` : t.error?.substring(0, 60)}
-              </span>
-            </div>
-          ))}
+        <div className="rounded-lg border border-[var(--border)] p-4 space-y-2 text-sm">
+          <pre className="text-[var(--text-secondary)] whitespace-pre-wrap">{JSON.stringify(diagnosis, null, 2)}</pre>
+        </div>
+      )}
+      {diagnosis?.error && (
+        <div className="rounded-lg border border-red-500/30 p-4 text-sm text-red-400">
+          {diagnosis.error}
         </div>
       )}
     </div>
   );
 }
-
-export default SettingsPanel;
