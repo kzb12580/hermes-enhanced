@@ -39,11 +39,15 @@ class TodoCreateTool(BaseTool):
         "required": ["tasks"],
     }
 
-    async def execute(self, tasks: list[dict], **kwargs) -> str:
+    async def execute(self, tasks: list[dict] = None, **kwargs) -> str:
         global _todos
-        _todos = tasks
+        # Accept both 'tasks' and 'todos' as parameter name (LLM sometimes uses 'todos')
+        task_list = tasks or kwargs.get("todos", [])
+        if not task_list:
+            return json.dumps({"ok": False, "error": "No tasks provided"}, ensure_ascii=False)
+        _todos = task_list
         return json.dumps(
-            {"ok": True, "total": len(tasks), "tasks": _todos},
+            {"ok": True, "total": len(_todos), "tasks": _todos},
             ensure_ascii=False,
         )
 

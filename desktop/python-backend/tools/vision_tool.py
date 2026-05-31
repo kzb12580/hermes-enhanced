@@ -74,7 +74,7 @@ class VisionTool(BaseTool):
             return True
         try:
             import torch
-            from transformers import AutoModelForCausalLM, AutoProcessor
+            from transformers import AutoModel, AutoProcessor
         except ImportError:
             logger.error("torch or transformers not installed")
             return False
@@ -91,7 +91,7 @@ class VisionTool(BaseTool):
             self._processor = AutoProcessor.from_pretrained(
                 str(model_path), trust_remote_code=True
             )
-            self._model = AutoModelForCausalLM.from_pretrained(
+            self._model = AutoModel.from_pretrained(
                 str(model_path),
                 torch_dtype=dtype,
                 device_map="auto" if device == "cuda" else None,
@@ -126,7 +126,7 @@ class VisionTool(BaseTool):
                 ]}
             ]
             prompt = self._processor.apply_chat_template(messages, add_generation_prompt=True)
-            inputs = self._processor(prompt, images=[image], return_tensors="pt")
+            inputs = self._processor(text=prompt, images=[image], return_tensors="pt")
             inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
 
             import torch
