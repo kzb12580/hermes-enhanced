@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "2.2.7",
+  "version": "2.2.8",
   "description": "Hermes Desktop - AI 智能助手桌面客户端",
   "main": "./out/main/index.js",
   "author": "kzb12580",
