@@ -758,7 +758,7 @@ async def chat(message: ChatMessage):
                 
                 # Send tool results and add to messages
                 for result in tool_results:
-                    yield f"event: tool_result\\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\\n\\n"
+                    yield f"event: tool_result\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\n\n"
                     current_messages.append(result)
                     session["messages"].append(result)
                 
