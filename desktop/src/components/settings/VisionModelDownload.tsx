@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Loader2, CheckCircle, AlertCircle, RefreshCw, Trash2, HardDrive, Wrench, CheckCheck, XCircle } from 'lucide-react';
-
-const BACKEND = 'http://127.0.0.1:9876';
+import { getBackendUrl } from '../../lib/utils';
 
 const MIRRORS = [
   { key: 'hf-mirror', label: 'hf-mirror（国内推荐）', note: '' },
@@ -39,7 +38,8 @@ export function VisionModelDownload() {
   const checkModel = async () => {
     setChecking(true);
     try {
-      const res = await fetch(`${BACKEND}/api/setup/model-status`);
+      const res = await fetch(`${getBackendUrl()}/api/setup/model-status`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setModelExists(data.exists);
       if (data.exists) setDone(true);
@@ -56,15 +56,15 @@ export function VisionModelDownload() {
     setError('');
 
     try {
-      const res = await fetch(`${BACKEND}/api/setup/download-model`, {
+      const res = await fetch(`${getBackendUrl()}/api/setup/download-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mirror }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-
       if (data.success) {
-        const es = new EventSource(`${BACKEND}/api/setup/status/stream`);
+        const es = new EventSource(`${getBackendUrl()}/api/setup/status/stream`);
         es.onmessage = (ev) => {
           try {
             const d = JSON.parse(ev.data);
@@ -101,7 +101,8 @@ export function VisionModelDownload() {
   const deleteModel = async () => {
     if (!confirm('确定删除视觉模型？(~6GB)')) return;
     try {
-      await fetch(`${BACKEND}/api/setup/delete-model`, { method: 'DELETE' });
+      const res = await fetch(`${getBackendUrl()}/api/setup/delete-model`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setModelExists(false);
       setDone(false);
       setProgress(0);
@@ -120,7 +121,8 @@ export function VisionModelDownload() {
     setRepairDone(false);
 
     try {
-      const res = await fetch(`${BACKEND}/api/setup/repair`, { method: 'POST' });
+      const res = await fetch(`${getBackendUrl()}/api/setup/repair`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRepairResults(data.results || []);
       setRepairSummary(data.summary || '');

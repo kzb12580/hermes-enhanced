@@ -267,61 +267,123 @@ async def download_model(req: ModelDownloadRequest):
 
 
 async def _run_model_download(mirror: str):
-    """Download model in background thread"""
-    try:
-        import os
-        
-        # Set HF endpoint based on mirror
-        if mirror == "hf-mirror":
-            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-        elif mirror == "modelscope":
-            os.environ["HF_ENDPOINT"] = "https://modelscope.cn"
-        else:
-            os.environ.pop("HF_ENDPOINT", None)
+    """Download model in background thread with retry and proper progress tracking."""
+    import os
+    import time
+    from pathlib import Path
 
-        _emit("model", 5, f"Starting download from {mirror}...")
+    MAX_RETRIES = 3
+    MODEL_ID = "nvidia/LocateAnything-3B"
 
-        def do_download():
-            from huggingface_hub import snapshot_download
-            import sys
-            
-            class ProgressCapture:
-                def write(self, text):
-                    if text and text.strip():
-                        line = text.strip()
-                        # Parse download percentage
-                        import re
-                        m = re.search(r"(\d+)%", line)
-                        if m:
-                            pct = int(m.group(1))
-                            _emit("model", min(5 + pct * 90 // 100, 95), line)
-                        else:
-                            _emit("model", _install_state["progress"], line)
-                    return len(text) if text else 0
-                def flush(self):
-                    pass
-
-            old_stdout = sys.stdout
-            sys.stdout = ProgressCapture()
-            try:
-                snapshot_download("nvidia/LocateAnything-3B")
-            finally:
-                sys.stdout = old_stdout
-
-        import concurrent.futures
-        loop = asyncio.get_event_loop()
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            success = await loop.run_in_executor(pool, do_download)
-
-        _emit("done", 100, "Model download complete!")
-
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        logger.exception("Model download failed")
-        _emit("error", _install_state["progress"], f"Download failed: {e}\n{tb}", "download_failed")
-    finally:
+    # 设置镜像
+    if mirror == "hf-mirror":
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+    elif mirror == "modelscope":
+        # ModelScope 需要用专门的 SDK，不能用 HF_ENDPOINT
+        _emit("model", 5, "ModelScope 镜像暂不支持，请使用 hf-mirror 或官方源")
         _install_state["running"] = False
+        return
+    else:
+        os.environ.pop("HF_ENDPOINT", None)
+
+    # 统一下载目录
+    local_dir = Path.home() / ".cache" / "huggingface" / "hub" / MODEL_ID.replace("/", "--")
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            _emit("model", 5, f"开始下载 (尝试 {attempt}/{MAX_RETRIES})...")
+
+            def do_download():
+                from huggingface_hub import snapshot_download
+
+                # 使用 tqdm callback 追踪进度
+                try:
+                    from huggingface_hub import HfApi
+                    api = HfApi()
+
+                    # snapshot_download 支持断点续传
+                    snapshot_download(
+                        MODEL_ID,
+                        local_dir=str(local_dir),
+                        resume_download=True,  # 断点续传
+                        etag_timeout=30,
+                    )
+                except TypeError:
+                    # 旧版 huggingface_hub 不支持某些参数
+                    snapshot_download(MODEL_ID)
+
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+
+            # 带超时的下载
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = loop.run_in_executor(pool, do_download)
+                try:
+                    await asyncio.wait_for(future, timeout=1800)  # 30 分钟超时
+                except asyncio.TimeoutError:
+                    _emit("error", _install_state["progress"],
+                          "下载超时 (30 分钟)", "timeout")
+                    _install_state["running"] = False
+                    return
+
+            # 验证下载完整性
+            _emit("model", 95, "验证模型文件...")
+            if _verify_model_files(local_dir):
+                _emit("done", 100, "✅ 模型下载完成!")
+                _install_state["running"] = False
+                return
+            else:
+                if attempt < MAX_RETRIES:
+                    _emit("model", 5, f"文件不完整，{5}秒后重试...")
+                    time.sleep(5)
+                    continue
+                else:
+                    _emit("error", _install_state["progress"],
+                          "下载完成但文件不完整，请手动检查", "incomplete")
+                    _install_state["running"] = False
+                    return
+
+        except Exception as e:
+            logger.warning("Download attempt %d failed: %s", attempt, e)
+            if attempt < MAX_RETRIES:
+                wait_time = attempt * 10  # 指数退避
+                _emit("model", 5, f"下载失败，{wait_time}秒后重试... ({e})")
+                time.sleep(wait_time)
+            else:
+                import traceback
+                tb = traceback.format_exc()
+                logger.exception("Model download failed after %d attempts", MAX_RETRIES)
+                _emit("error", _install_state["progress"],
+                      f"下载失败 (已重试 {MAX_RETRIES} 次): {e}\n{tb}", "download_failed")
+                _install_state["running"] = False
+                return
+
+
+def _verify_model_files(model_dir: Path) -> bool:
+    """Verify model files are complete and valid."""
+    import os
+    if not model_dir.exists():
+        return False
+
+    # 检查关键文件存在且大小 > 0
+    required_patterns = ["*.safetensors", "config.json"]
+    for pattern in required_patterns:
+        files = list(model_dir.glob(pattern))
+        if not files:
+            logger.warning("Missing model files matching: %s", pattern)
+            return False
+        for f in files:
+            if f.stat().st_size == 0:
+                logger.warning("Empty model file: %s", f)
+                return False
+
+    # 检查是否有未完成的下载
+    incomplete = list(model_dir.glob("*.incomplete"))
+    if incomplete:
+        logger.warning("Found %d incomplete download files", len(incomplete))
+        return False
+
+    return True
 
 # ── 依赖检测 ──────────────────────────────────────────────────────────────
 

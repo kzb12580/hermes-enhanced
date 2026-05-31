@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle, XCircle, AlertCircle, RefreshCw, Wrench, HardDrive, Zap, Cpu, Settings } from 'lucide-react';
-
-const BACKEND = 'http://127.0.0.1:9876';
+import { getBackendUrl } from '../../lib/utils';
 
 interface DiagResult {
   backend?: { uptime_seconds: number; host: string; port: number; python: string };
@@ -22,7 +21,8 @@ export function DiagnosticsPanel() {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch(`${BACKEND}/api/diagnose`);
+      const res = await fetch(`${getBackendUrl()}/api/diagnose`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDiag(await res.json());
     } catch (e) {
       setMessage('诊断请求失败: ' + e);
@@ -34,7 +34,8 @@ export function DiagnosticsPanel() {
     setReloading(true);
     setMessage('');
     try {
-      const res = await fetch(`${BACKEND}/api/tools/reload`, { method: 'POST' });
+      const res = await fetch(`${getBackendUrl()}/api/tools/reload`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success) {
         setMessage(`✅ 工具热重载成功: ${data.tools_count} 个工具`);

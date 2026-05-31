@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Download, CheckCircle, ArrowRight, Loader2, RefreshCw, Wrench, CheckCheck, XCircle
 } from 'lucide-react';
-
-const BACKEND = 'http://127.0.0.1:9876';
+import { getBackendUrl } from '../../lib/utils';
 
 interface RepairResult {
   name: string;
@@ -41,7 +40,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
   const checkBackend = async () => {
     try {
-      const res = await fetch(`${BACKEND}/api/health`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`${getBackendUrl()}/api/health`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
         setBackendReady(true);
         setBackendChecking(false);
@@ -71,15 +70,15 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     setModelError('');
 
     try {
-      const res = await fetch(`${BACKEND}/api/setup/download-model`, {
+      const res = await fetch(`${getBackendUrl()}/api/setup/download-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mirror: modelMirror }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-
       if (data.success) {
-        const es = new EventSource(`${BACKEND}/api/setup/status/stream`);
+        const es = new EventSource(`${getBackendUrl()}/api/setup/status/stream`);
         es.onmessage = (ev) => {
           try {
             const d = JSON.parse(ev.data);
@@ -119,7 +118,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     setRepairDone(false);
 
     try {
-      const res = await fetch(`${BACKEND}/api/setup/repair`, { method: 'POST' });
+      const res = await fetch(`${getBackendUrl()}/api/setup/repair`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRepairResults(data.results || []);
       setRepairSummary(data.summary || '');

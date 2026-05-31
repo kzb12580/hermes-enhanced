@@ -3,8 +3,8 @@ import {
   Mail, Send, Inbox, Settings, CheckCircle, AlertCircle,
   Loader2, Plus, Trash2, RefreshCw
 } from 'lucide-react';
-
-const BACKEND = 'http://127.0.0.1:9876';
+import DOMPurify from 'dompurify';
+import { getBackendUrl } from '../../lib/utils';
 
 interface EmailConfig {
   email: string;
@@ -64,7 +64,8 @@ export function EmailConfig() {
 
   const loadConfig = async () => {
     try {
-      const res = await fetch(`${BACKEND}/api/email/config`);
+      const res = await fetch(`${getBackendUrl()}/api/email/config`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.email) setConfig(data);
     } catch (e) { /* ignore */ }
@@ -73,11 +74,12 @@ export function EmailConfig() {
   const saveConfig = async () => {
     setSaving(true);
     try {
-      await fetch(`${BACKEND}/api/email/config`, {
+      const res = await fetch(`${getBackendUrl()}/api/email/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setTestResult({ ok: true, msg: '配置已保存' });
     } catch (e) {
       setTestResult({ ok: false, msg: '保存失败' });
@@ -89,11 +91,12 @@ export function EmailConfig() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`${BACKEND}/api/email/test`, {
+      const res = await fetch(`${getBackendUrl()}/api/email/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setTestResult({ ok: data.success, msg: data.success ? '连接成功！' : data.error });
     } catch (e) {
@@ -105,7 +108,8 @@ export function EmailConfig() {
   const loadEmails = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND}/api/email/inbox?limit=20`);
+      const res = await fetch(`${getBackendUrl()}/api/email/inbox?limit=20`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEmails(data.emails || []);
     } catch (e) { /* ignore */ }
@@ -123,7 +127,8 @@ export function EmailConfig() {
     setDetailLoading(true);
     setSelectedEmail(null);
     try {
-      const res = await fetch(`${BACKEND}/api/email/detail/${uid}`);
+      const res = await fetch(`${getBackendUrl()}/api/email/detail/${uid}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data.error) {
         setSelectedEmail(data);
@@ -322,7 +327,7 @@ export function EmailConfig() {
                   {selectedEmail.body_html ? (
                     <div
                       style={{ color: '#d1d5db', fontSize: 14, lineHeight: 1.6 }}
-                      dangerouslySetInnerHTML={{ __html: selectedEmail.body_html }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedEmail.body_html) }}
                     />
                   ) : (
                     <pre style={{

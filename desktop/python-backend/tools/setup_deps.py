@@ -352,45 +352,94 @@ def install_pytorch(cuda_info: dict) -> bool:
         return _pip_install("torch", "torchvision")
 
 def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
-    """下载 LocateAnything-3B 模型"""
+    """下载 LocateAnything-3B 模型，支持断点续传和重试"""
+    import time
+
     print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
 
-    # 先检查是否已下载（多种路径）
+    # 先检查是否已下载
     existing_path = _find_existing_model()
     if existing_path and not force:
         print(f"  ✅ 模型已存在: {existing_path}")
         return True
 
-    # 尝试用 huggingface-cli 下载（更快、支持断点续传）
-    if shutil.which("huggingface-cli"):
-        print("  使用 huggingface-cli 下载（支持断点续传）...")
+    # 统一下载目录
+    local_dir = Path.home() / ".cache" / "huggingface" / "hub" / model_id.replace("/", "--")
+
+    MAX_RETRIES = 3
+
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
-            result = _run(
-                ["huggingface-cli", "download", model_id,
-                 "--local-dir", str(Path.home() / ".cache" / "huggingface" / "hub" / model_id.replace("/", "--"))],
-                check=False
+            print(f"  尝试 {attempt}/{MAX_RETRIES}...")
+
+            # 方法1: huggingface-cli (最快，支持断点续传)
+            if shutil.which("huggingface-cli"):
+                print("  使用 huggingface-cli 下载...")
+                result = _run(
+                    ["huggingface-cli", "download", model_id,
+                     "--local-dir", str(local_dir)],
+                    check=False, timeout=1800  # 30 分钟超时
+                )
+                if result.returncode == 0:
+                    if _verify_model_files(local_dir):
+                        print("  ✅ 模型下载完成")
+                        return True
+                    else:
+                        print("  ⚠️ 文件不完整，继续重试...")
+                        continue
+
+            # 方法2: snapshot_download (Python，支持断点续传)
+            print("  使用 snapshot_download 下载...")
+            from huggingface_hub import snapshot_download
+            snapshot_download(
+                model_id,
+                local_dir=str(local_dir),
+                resume_download=True,
             )
-            if result.returncode == 0:
+
+            # 验证完整性
+            if _verify_model_files(local_dir):
                 print("  ✅ 模型下载完成")
                 return True
-        except Exception:
-            pass
+            else:
+                print("  ⚠️ 文件不完整")
+                if attempt < MAX_RETRIES:
+                    time.sleep(5)
+                    continue
 
-    # 回退到 Python 下载
-    print("  使用 transformers 下载...")
-    try:
-        from transformers import AutoProcessor, AutoModel
-        AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        AutoModel.from_pretrained(
-            model_id, trust_remote_code=True,
-            device_map="auto", torch_dtype="auto"
-        )
-        print("  ✅ 模型下载完成")
-        return True
-    except Exception as e:
-        print(f"  ❌ 模型下载失败: {e}")
-        print(f"  💡 手动下载: huggingface-cli download {model_id}")
+        except Exception as e:
+            print(f"  ❌ 下载失败: {e}")
+            if attempt < MAX_RETRIES:
+                wait_time = attempt * 10
+                print(f"  {wait_time}秒后重试...")
+                time.sleep(wait_time)
+
+    print(f"  ❌ 下载失败 (已重试 {MAX_RETRIES} 次)")
+    print(f"  💡 手动下载: huggingface-cli download {model_id}")
+    return False
+
+
+def _verify_model_files(model_dir) -> bool:
+    """验证模型文件完整性"""
+    from pathlib import Path
+    p = Path(model_dir) if not isinstance(model_dir, Path) else model_dir
+    if not p.exists():
         return False
+
+    # 检查关键文件
+    for pattern in ["*.safetensors", "config.json"]:
+        files = list(p.glob(pattern))
+        if not files:
+            return False
+        for f in files:
+            if f.stat().st_size == 0:
+                return False
+
+    # 检查未完成文件
+    if list(p.glob("*.incomplete")):
+        return False
+
+    return True
 
 
 def _find_existing_model() -> str | None:

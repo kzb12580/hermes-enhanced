@@ -257,6 +257,13 @@ class VisionTool(BaseTool):
             logger.error("Failed to load vision model: %s", e, exc_info=True)
             self._model = None
             self._processor = None
+            # 清理 GPU 内存
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
             return False
 
     def _detect_task(self, question: str) -> str:
@@ -291,7 +298,7 @@ class VisionTool(BaseTool):
         ratio = max_dim / max(w, h)
         new_w = int(w * ratio)
         new_h = int(h * ratio)
-image.resize(new_size, _PIL_Image.Resampling.LANCZOS)
+        resized = image.resize((new_w, new_h), _PIL_Image.Resampling.LANCZOS)
         logger.info("Resized image: %dx%d -> %dx%d (ratio=%.2f)", w, h, new_w, new_h, ratio)
         return resized, ratio
 

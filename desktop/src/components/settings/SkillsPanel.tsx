@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Zap, Search, ChevronRight, Loader2 } from 'lucide-react';
-
-const BACKEND = 'http://127.0.0.1:9876';
+import { getBackendUrl } from '../../lib/utils';
 
 interface Skill {
   name: string;
@@ -21,7 +20,8 @@ export function SkillsPanel() {
 
   const loadSkills = async () => {
     try {
-      const res = await fetch(`${BACKEND}/api/skills`);
+      const res = await fetch(`${getBackendUrl()}/api/skills`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSkills(data.skills || []);
     } catch (err) {
@@ -36,11 +36,12 @@ export function SkillsPanel() {
       return;
     }
     try {
-      const res = await fetch(`${BACKEND}/api/skills/match`, {
+      const res = await fetch(`${getBackendUrl()}/api/skills/match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setMatchedSkills(data.skills || []);
     } catch (err) {

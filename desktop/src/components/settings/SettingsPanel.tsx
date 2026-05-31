@@ -7,6 +7,7 @@ import { VisionModelDownload } from './VisionModelDownload';
 import { SkillsPanel } from './SkillsPanel';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EmailConfig } from '../email/EmailConfig';
+import { getBackendUrl } from '../../lib/utils';
 
 type SettingsTab = 'general' | 'models' | 'skills' | 'network' | 'email' | 'apikeys' | 'diagnostics' | 'about';
 
@@ -501,20 +502,19 @@ function NetworkSettings() {
   const [mirrors, setMirrors] = useState<any>({});
   const [saving, setSaving] = useState(false);
 
-  const BACKEND = 'http://127.0.0.1:9876';
-
   useEffect(() => {
-    fetch(`${BACKEND}/api/setup/network`).then(r => r.json()).then(setConfig).catch(() => {});
-    fetch(`${BACKEND}/api/setup/mirrors`).then(r => r.json()).then(setMirrors).catch(() => {});
+    fetch(`${getBackendUrl()}/api/setup/network`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(setConfig).catch(() => {});
+    fetch(`${getBackendUrl()}/api/setup/mirrors`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(setMirrors).catch(() => {});
   }, []);
 
   const save = async () => {
     setSaving(true);
     try {
-      await fetch(`${BACKEND}/api/setup/network`, {
+      const res = await fetch(`${getBackendUrl()}/api/setup/network`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (e) {}
     setSaving(false);
   };
@@ -522,7 +522,8 @@ function NetworkSettings() {
   const diagnose = async () => {
     setDiagnosing(true);
     try {
-      const res = await fetch(`${BACKEND}/api/setup/diagnose`);
+      const res = await fetch(`${getBackendUrl()}/api/setup/diagnose`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDiagnosis(await res.json());
     } catch (e) { setDiagnosis({ error: '诊断失败' }); }
     setDiagnosing(false);
