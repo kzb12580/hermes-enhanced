@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -50,6 +51,14 @@ class ScreenCaptureTool(BaseTool):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             if not save_path:
                 save_path = os.path.join(tempfile.gettempdir(), f"screenshot_{timestamp}.png")
+            else:
+                # 路径安全：限制只能保存到用户目录或临时目录
+                resolved = str(Path(save_path).resolve())
+                home = str(Path.home())
+                tmp = tempfile.gettempdir()
+                if not (resolved.startswith(home) or resolved.startswith(tmp)):
+                    return json.dumps({"ok": False, "error": "save_path must be under home or temp directory"}, ensure_ascii=False)
+                save_path = resolved
 
             if region == "active_window":
                 # Get active window bounds

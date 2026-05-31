@@ -55,10 +55,10 @@ class ExecuteCodeTool(BaseTool):
 
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=110)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return json.dumps({"ok": False, "error": "Code execution timed out (110s)"}, ensure_ascii=False)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return json.dumps({"ok": False, "error": "Code execution timed out (110s)"}, ensure_ascii=False)
 
             out = stdout.decode("utf-8", errors="replace").strip()
             err = stderr.decode("utf-8", errors="replace").strip()
