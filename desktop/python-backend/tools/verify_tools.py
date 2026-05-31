@@ -35,7 +35,8 @@ class VerifyFileTool(BaseTool):
         
         if expected_content:
             try:
-                content = open(path, 'r', encoding='utf-8', errors='replace').read()
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
                 if expected_content not in content:
                     result["ok"] = False
                     result["error"] = f"Expected content not found in file"

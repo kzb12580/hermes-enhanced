@@ -1,42 +1,34 @@
-"""
-Email API — 收发邮件、配置管理
-"""
+"""Email API — 邮件配置、收发、测试"""
+
+from __future__ import annotations
+
 import logging
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List
 
 logger = logging.getLogger("hermes-backend.email")
 router = APIRouter()
 
 
 class EmailConfig(BaseModel):
-    email: str = ""
-    password: str = ""
-    imap_server: str = ""
-    imap_port: int = 993
-    smtp_server: str = ""
-    smtp_port: int = 465
-    smtp_ssl: bool = True
+    email: Optional[str] = None
+    password: Optional[str] = None
+    imap_server: Optional[str] = None
+    imap_port: Optional[int] = None
+    smtp_server: Optional[str] = None
+    smtp_port: Optional[int] = None
+    use_ssl: Optional[bool] = None
 
 
 class SendRequest(BaseModel):
-    to: str  # 逗号分隔的邮箱列表
-    subject: str
-    body: str
-    cc: str = ""
-    bcc: str = ""
+    to: str = Field(..., min_length=1)
+    subject: str = Field(..., min_length=1)
+    body: str = ""
+    cc: Optional[str] = None
+    bcc: Optional[str] = None
     html: bool = False
-    attachments: list[str] = []
-
-    def model_post_init(self, __context):
-        # 验证收件人格式
-        import re
-        for addr in [self.to] + ([self.cc] if self.cc else []) + ([self.bcc] if self.bcc else []):
-            for a in addr.split(","):
-                a = a.strip()
-                if a and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', a):
-                    raise ValueError(f"无效邮箱地址: {a}")
+    attachments: Optional[List[str]] = None
 
 
 @router.get("/api/email/config")
@@ -45,12 +37,14 @@ async def get_email_config():
     try:
         from email_tools import load_email_config
         config = load_email_config()
-        # 隐藏密码
         if config.get("password"):
             config["password"] = "***"
         return config
     except ImportError:
         return {"error": "email_tools not available"}
+    except Exception as e:
+        logger.error("Failed to get email config: %s", e)
+        return {"error": str(e)}
 
 
 @router.put("/api/email/config")
@@ -59,13 +53,15 @@ async def update_email_config(body: EmailConfig):
     try:
         from email_tools import save_email_config
         data = body.model_dump(exclude_none=True)
-        # 不覆盖密码为 *** 的情况
         if data.get("password") == "***":
             data.pop("password")
         save_email_config(data)
         return {"success": True}
     except ImportError:
         raise HTTPException(status_code=500, detail="email_tools not available")
+    except Exception as e:
+        logger.error("Failed to save email config: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/email/test")
@@ -74,7 +70,6 @@ async def test_email_connection(body: EmailConfig):
     try:
         from email_tools import read_emails, load_email_config
         config = load_email_config()
-        # 使用新配置测试
         result = read_emails(
             limit=1,
             email_addr=body.email or config.get("email", ""),
@@ -85,6 +80,9 @@ async def test_email_connection(body: EmailConfig):
         return {"success": result.get("success", False), "error": result.get("error")}
     except ImportError:
         return {"success": False, "error": "email_tools not available"}
+    except Exception as e:
+        logger.error("Email test failed: %s", e)
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/api/email/inbox")
@@ -96,6 +94,9 @@ async def get_inbox(limit: int = Query(default=20, ge=1, le=100), unread: bool =
         return result
     except ImportError:
         return {"emails": [], "error": "email_tools not available"}
+    except Exception as e:
+        logger.error("Failed to get inbox: %s", e)
+        return {"emails": [], "error": str(e)}
 
 
 @router.get("/api/email/detail/{uid}")
@@ -106,6 +107,9 @@ async def get_email_detail(uid: str, folder: str = "INBOX"):
         return read_email_detail(uid=uid, folder=folder)
     except ImportError:
         return {"error": "email_tools not available"}
+    except Exception as e:
+        logger.error("Failed to get email detail: %s", e)
+        return {"error": str(e)}
 
 
 @router.post("/api/email/send")
@@ -121,3 +125,6 @@ async def send_email_api(body: SendRequest):
         return result
     except ImportError:
         return {"success": False, "error": "email_tools not available"}
+    except Exception as e:
+        logger.error("Failed to send email: %s", e)
+        return {"success": False, "error": str(e)}

@@ -409,7 +409,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
 def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
     """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
-    skills_ctx = skill_manager.get_skills_context(active_skills)
+    skills_ctx = skill_manager.get_skills_context(active_skills=active_skills)
     tools_desc = build_tools_description(openai_tools())
     
     return _build_system_prompt(
@@ -523,7 +523,16 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
     results = []
     for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
         tool_name = tool_call["function"]["name"]
-        tool_args = json.loads(tool_call["function"]["arguments"])
+        try:
+            tool_args = json.loads(tool_call["function"]["arguments"])
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error("Failed to parse tool arguments: %s", e)
+            results.append({
+                "role": "tool",
+                "tool_call_id": tool_call.get("id", ""),
+                "content": f"Error: Invalid tool arguments format: {e}",
+            })
+            continue
 
         logger.info("Executing tool: %s(%s)", tool_name, tool_args)
         result = await execute_tool(tool_name, tool_args)

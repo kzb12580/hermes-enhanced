@@ -38,7 +38,7 @@ class ScreenCaptureTool(BaseTool):
     }
     timeout = 10
 
-    async def execute(self, region: str = "full", save_path: str = "") -> str:
+    async def execute(self, region: str = "full", save_path: str = "", **kwargs) -> str:
         """Take a screenshot."""
         try:
             from PIL import ImageGrab

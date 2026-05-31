@@ -291,7 +291,7 @@ class VisionTool(BaseTool):
         ratio = max_dim / max(w, h)
         new_w = int(w * ratio)
         new_h = int(h * ratio)
-        resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+image.resize(new_size, _PIL_Image.Resampling.LANCZOS)
         logger.info("Resized image: %dx%d -> %dx%d (ratio=%.2f)", w, h, new_w, new_h, ratio)
         return resized, ratio
 
