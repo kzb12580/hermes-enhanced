@@ -12,7 +12,7 @@ import { useAppStore } from './stores/app-store';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSystemStore } from './stores/systemStore';
 
-function App() {
+export default function App() {
   const { sidebarCollapsed, settingsOpen } = useSystemStore();
   const [setupDone, setSetupDone] = useState<boolean | null>(null); // null = loading
 
