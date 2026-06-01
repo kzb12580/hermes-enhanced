@@ -173,6 +173,8 @@ session_manager = SessionManager()
 
 def estimate_tokens(text: str) -> int:
     """Rough token estimate."""
+    if not text:
+        return 0
     chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
     other_chars = len(text) - chinese_chars
     return chinese_chars + (other_chars // 4) + 1
@@ -471,11 +473,11 @@ async def call_llm_streaming(
                         break
                     try:
                         chunk = json.loads(data)
-                        if "choices" in chunk and len(chunk["choices"]) > 0:
-                            delta = chunk["choices"][0].get("delta", {})
+                        if "choices" in chunk and chunk["choices"]:
+                            delta = chunk["choices"][0].get("delta", {}) if chunk["choices"][0] else {}
                             if "content" in delta and delta["content"]:
                                 yield delta["content"]
-                            elif "tool_calls" in delta:
+                            elif "tool_calls" in delta and delta["tool_calls"]:
                                 yield json.dumps({"tool_calls": delta["tool_calls"]})
                     except json.JSONDecodeError:
                         continue
