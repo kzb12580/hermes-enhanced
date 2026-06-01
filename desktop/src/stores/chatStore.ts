@@ -428,7 +428,7 @@ export const useChatStore = create<ChatState>()(
             // Handle tool call/result events — populate ToolCallCard data
             if (token.startsWith('[TOOL_CALL]')) {
               try {
-                const tc = JSON.parse(token.slice(12));
+                const tc = JSON.parse(token.slice(11));
                 const toolCallId = tc.id || tc.tool_call_id || generateId();
                 const newToolCall: ParsedToolCall = {
                   id: toolCallId,

@@ -111,7 +111,7 @@ app.add_middleware(
 async def global_exception_handler(request, exc):
     logger.error("Unhandled exception: %s", exc, exc_info=True)
     from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=500, content={"error": "Internal server error", "success": False})
+    return JSONResponse(status_code=500, content={"error": f"Internal server error: {type(exc).__name__}: {str(exc)[:500]}", "success": False})
 
 
 # ---------------------------------------------------------------------------
