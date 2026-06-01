@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "2.5.16",
+  "version": "2.5.17",
   "description": "Hermes Desktop - AI \u667a\u80fd\u52a9\u624b\u684c\u9762\u5ba2\u6237\u7aef",
   "main": "./out/main/index.js",
   "author": "kzb12580",
