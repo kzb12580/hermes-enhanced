@@ -356,7 +356,17 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
     import time
     import shutil
 
-    print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
+    # 显示当前镜像配置
+    try:
+        from network_manager import get_hf_mirror, HF_MIRRORS
+        mirror = get_hf_mirror()
+        if mirror != HF_MIRRORS["official"]:
+            print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
+            print(f"  🌐 使用镜像: {mirror}")
+        else:
+            print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
+    except ImportError:
+        print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
 
     # 先检查是否已下载
     existing_path = _find_existing_model()
@@ -372,7 +382,6 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
         has_safetensors = any(local_dir.rglob("*.safetensors"))
         if not has_safetensors:
             print("  🗑️ 清理损坏的缓存目录...")
-            import shutil
             shutil.rmtree(local_dir, ignore_errors=True)
 
     MAX_RETRIES = 3
@@ -396,6 +405,8 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
                     else:
                         print("  ⚠️ 文件不完整，继续重试...")
                         continue
+                else:
+                    print(f"  ⚠️ huggingface-cli 失败: {result.stderr[:200]}")
 
             # 方法2: snapshot_download (Python，支持断点续传)
             print("  使用 snapshot_download 下载...")
@@ -417,7 +428,12 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
                     continue
 
         except Exception as e:
-            print(f"  ❌ 下载失败: {e}")
+            error_msg = str(e)
+            print(f"  ❌ 下载失败: {error_msg[:300]}")
+            # 检测网络错误，提示切换镜像
+            if "ConnectionError" in type(e).__name__ or "timeout" in error_msg.lower():
+                print("  💡 网络连接失败，请检查网络或切换镜像源")
+                print("  💡 设置 → 网络 → HuggingFace 镜像 → 选择 hf-mirror")
             if attempt < MAX_RETRIES:
                 wait_time = attempt * 10
                 print(f"  {wait_time}秒后重试...")
@@ -425,6 +441,7 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
 
     print(f"  ❌ 下载失败 (已重试 {MAX_RETRIES} 次)")
     print(f"  💡 手动下载: huggingface-cli download {model_id}")
+    print(f"  💡 或设置镜像: 设置 → 网络 → HuggingFace 镜像")
     return False
 
 
@@ -452,16 +469,36 @@ def _verify_model_files(model_dir) -> bool:
 
 
 def _find_existing_model() -> str | None:
-    """搜索已下载的模型（支持多种路径）"""
+    """搜索已下载的模型（支持多种路径），验证文件完整性"""
     from pathlib import Path
     import os
+
+    def _is_valid_model(p: Path) -> bool:
+        """检查模型目录是否完整（有非空的 .safetensors 文件，无 .incomplete 文件）"""
+        if not p.exists():
+            return False
+        # 检查是否有 .safetensors 文件且非空
+        safetensors = list(p.glob("*.safetensors"))
+        if not safetensors:
+            return False
+        # 检查所有 safetensors 文件是否非空
+        for f in safetensors:
+            if f.stat().st_size == 0:
+                return False
+        # 检查是否有未完成的文件
+        if list(p.glob("*.incomplete")):
+            return False
+        # 检查 config.json 是否存在
+        if not (p / "config.json").exists():
+            return False
+        return True
 
     candidates = [
         Path.home() / ".hermes" / "desktop" / "models" / "LocateAnything-3B",
         Path.home() / ".hermes" / "desktop" / "models" / "nvidia--LocateAnything-3B",
     ]
     for p in candidates:
-        if p.exists() and any(p.glob("*.safetensors")):
+        if _is_valid_model(p):
             return str(p)
 
     # HF cache
@@ -472,9 +509,9 @@ def _find_existing_model() -> str | None:
                 snapshots = d / "snapshots"
                 if snapshots.exists():
                     for s in snapshots.iterdir():
-                        if any(s.glob("*.safetensors")):
+                        if _is_valid_model(s):
                             return str(s)
-                if any(d.glob("*.safetensors")):
+                if _is_valid_model(d):
                     return str(d)
 
     # 环境变量
