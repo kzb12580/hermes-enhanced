@@ -22,14 +22,18 @@ export function ChatView() {
 
   // Helper: scroll to bottom
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
     if (behavior === 'instant') {
-      // For instant scroll, use scrollTop directly (more reliable)
-      const container = scrollContainerRef.current;
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
+      container.scrollTop = container.scrollHeight;
+    } else {
+      // Use scrollTo for smooth scrolling within the container
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+      });
     }
-    messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
   // Track whether user has manually scrolled away from bottom
@@ -170,8 +174,8 @@ export function ChatView() {
         {messages.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
-              <Bot size={32} className="text-accent" />
+            <div className="w-16 h-16 rounded-2xl bg-[var(--bg-tertiary)] flex items-center justify-center mb-4">
+              <Bot size={32} className="text-[var(--hermes-accent)]" />
             </div>
             <h2 className="text-xl font-semibold text-text-primary mb-2">
               Hermes Desktop
@@ -196,7 +200,7 @@ export function ChatView() {
                     if (!store.currentSessionId) store.createSession();
                     store.sendMessage(item.text);
                   }}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-border bg-bg-secondary hover:bg-bg-tertiary transition-colors text-left"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-[var(--hermes-border)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
                 >
                   <span className="text-lg">{item.icon}</span>
                   <span className="text-sm text-text-secondary">{item.text}</span>
@@ -214,13 +218,13 @@ export function ChatView() {
             {/* Generation indicator: show only when generating and no streaming assistant message yet */}
             {isGenerating && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.isStreaming) && (
               <div className="flex gap-3 px-4 py-3 fade-in">
-                <div className="w-8 h-8 rounded-full bg-bg-tertiary flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
                   <Bot size={16} className="text-text-secondary" />
                 </div>
                 <div className="flex items-center gap-1.5 px-4 py-3">
-                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
-                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
-                  <div className="w-2 h-2 rounded-full bg-accent pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--hermes-accent)] pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--hermes-accent)] pulse-dot" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--hermes-accent)] pulse-dot" />
                 </div>
               </div>
             )}
