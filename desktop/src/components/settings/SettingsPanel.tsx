@@ -1,23 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput, Wrench } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
 import { SkillsPanel } from './SkillsPanel';
-import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EmailConfig } from '../email/EmailConfig';
 import { getBackendUrl } from '../../lib/utils';
 
-type SettingsTab = 'general' | 'models' | 'skills' | 'network' | 'email' | 'apikeys' | 'diagnostics' | 'about';
+type SettingsTab = 'general' | 'models' | 'skills' | 'email' | 'apikeys' | 'about';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'general', label: '通用', icon: <Settings2 size={16} /> },
   { id: 'models', label: '模型', icon: <Cpu size={16} /> },
   { id: 'skills', label: '技能', icon: <Zap size={16} /> },
-  { id: 'network', label: '网络', icon: <Wifi size={16} /> },
   { id: 'email', label: '邮件', icon: <Mail size={16} /> },
   { id: 'apikeys', label: 'API 密钥', icon: <Key size={16} /> },
-  { id: 'diagnostics', label: '诊断', icon: <Wrench size={16} /> },
   { id: 'about', label: '关于', icon: <Info size={16} /> },
 ];
 
@@ -210,9 +207,6 @@ export function SettingsPanel() {
                 </div>
               </div>
             )}
-            {activeTab === 'network' && (
-              <NetworkSettings />
-            )}
             {activeTab === 'skills' && (
               <div>
                 <SkillsPanel />
@@ -226,9 +220,6 @@ export function SettingsPanel() {
             )}
             {activeTab === 'apikeys' && (
               <ApiKeysSettings />
-            )}
-            {activeTab === 'diagnostics' && (
-              <DiagnosticsPanel />
             )}
             {activeTab === 'about' && (
               <AboutSection />
@@ -492,119 +483,3 @@ function AboutSection() {
   );
 }
 
-// ── 网络设置组件 ────────────────────────────────────────────────────────
-function NetworkSettings() {
-  const [config, setConfig] = useState<any>({});
-  const [diagnosis, setDiagnosis] = useState<any>(null);
-  const [diagnosing, setDiagnosing] = useState(false);
-  const [mirrors, setMirrors] = useState<any>({});
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetch(`${getBackendUrl()}/api/setup/network`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(setConfig).catch(() => {});
-    fetch(`${getBackendUrl()}/api/setup/mirrors`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(setMirrors).catch(() => {});
-  }, []);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${getBackendUrl()}/api/setup/network`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e) {}
-    setSaving(false);
-  };
-
-  const diagnose = async () => {
-    setDiagnosing(true);
-    try {
-      const res = await fetch(`${getBackendUrl()}/api/setup/diagnose`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setDiagnosis(await res.json());
-    } catch (e) { setDiagnosis({ error: '诊断失败' }); }
-    setDiagnosing(false);
-  };
-
-  const modes = [
-    { key: 'auto', label: '🔍 自动检测' },
-    { key: 'manual', label: '✏️ 手动设置' },
-    { key: 'disabled', label: '🚫 不使用代理' },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-text-primary">网络设置</h3>
-
-      {/* 代理模式 */}
-      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
-        <label className="text-sm font-medium text-text-secondary">代理模式</label>
-        <div className="flex gap-2">
-          {modes.map(m => (
-            <button key={m.key} onClick={() => setConfig((c: any) => ({ ...c, proxy_mode: m.key }))}
-              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                config.proxy_mode === m.key
-                  ? 'bg-[var(--hermes-accent)] text-white'
-                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
-              }`}>{m.label}</button>
-          ))}
-        </div>
-        {config.detected_proxy && config.proxy_mode !== 'disabled' && (
-          <p className="text-xs text-green-400">检测到代理: {config.detected_proxy}</p>
-        )}
-      </div>
-
-      {/* 手动代理 */}
-      {config.proxy_mode === 'manual' && (
-        <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
-          <label className="text-sm font-medium text-text-secondary">代理地址</label>
-          <input value={config.proxy || ''} onChange={e => setConfig((c: any) => ({ ...c, proxy: e.target.value }))}
-            placeholder="http://127.0.0.1:7890"
-            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-text-primary border border-[var(--hermes-border)] text-sm" />
-        </div>
-      )}
-
-      {/* PyPI 镜像 */}
-      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
-        <label className="text-sm font-medium text-text-secondary">PyPI 下载镜像</label>
-        <div className="flex gap-2 flex-wrap">
-          {Object.entries(mirrors.pypi || {}).map(([key]: [string, any]) => (
-            <button key={key} onClick={() => setConfig((c: any) => ({ ...c, pypi_mirror: key }))}
-              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                config.pypi_mirror === key
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
-              }`}>
-              {key === 'official' ? '🌐 官方' : key === 'tuna' ? '🇨🇳 清华' : key === 'aliyun' ? '🇨🇳 阿里云' : key}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="flex gap-3">
-        <button onClick={save} disabled={saving}
-          className="px-4 py-2 rounded-lg bg-[var(--hermes-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-          {saving ? '保存中...' : '💾 保存配置'}
-        </button>
-        <button onClick={diagnose} disabled={diagnosing}
-          className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-text-secondary text-sm font-medium hover:text-text-primary transition-colors disabled:opacity-50">
-          {diagnosing ? '诊断中...' : '🔍 网络诊断'}
-        </button>
-      </div>
-
-      {/* 诊断结果 */}
-      {diagnosis && !diagnosis.error && (
-        <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-2 text-sm">
-          <pre className="text-text-secondary whitespace-pre-wrap">{JSON.stringify(diagnosis, null, 2)}</pre>
-        </div>
-      )}
-      {diagnosis?.error && (
-        <div className="rounded-lg border border-red-500/30 p-4 text-sm text-red-400">
-          {diagnosis.error}
-        </div>
-      )}
-    </div>
-  );
-}

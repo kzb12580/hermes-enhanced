@@ -41,14 +41,6 @@ def _emit(phase: str, progress: int, message: str, error: str = None):
 
 
 # ── Pydantic 模型 ────────────────────────────────────────────────────────
-
-class NetworkConfig(BaseModel):
-    proxy: Optional[str] = None
-    proxy_mode: Optional[str] = None   # auto / manual / disabled
-    hf_mirror: Optional[str] = None    # official / hf-mirror / custom URL
-    pypi_mirror: Optional[str] = None  # official / tuna / aliyun / custom URL
-
-
 class InstallRequest(BaseModel):
     skip_model: bool = False
     skip_tesseract: bool = False
@@ -142,43 +134,6 @@ async def cancel_install():
     _install_state["phase"] = "idle"
     _install_state["message"] = "已取消"
     return {"success": True}
-
-
-@router.get("/api/setup/network")
-async def get_network_config():
-    """获取网络配置"""
-    try:
-        from network_manager import load_network_config, detect_clash, detect_system_proxy, detect_env_proxy
-        config = load_network_config()
-        config["detected_proxy"] = detect_clash() or detect_system_proxy() or detect_env_proxy()
-        return config
-    except ImportError:
-        return {"proxy": None, "proxy_mode": "auto"}
-
-
-@router.put("/api/setup/network")
-async def update_network_config(body: NetworkConfig):
-    """更新网络配置"""
-    try:
-        from network_manager import save_network_config, apply_proxy_to_env, apply_hf_mirror_to_env
-        updates = body.model_dump(exclude_none=True)
-        save_network_config(updates)
-        # 立即生效
-        apply_proxy_to_env()
-        apply_hf_mirror_to_env()
-        return {"success": True}
-    except ImportError:
-        raise HTTPException(status_code=500, detail="network_manager 模块不可用")
-
-
-@router.get("/api/setup/diagnose")
-async def run_diagnosis():
-    """网络诊断"""
-    try:
-        from network_manager import diagnose
-        return diagnose()
-    except ImportError:
-        return {"error": "network_manager 模块不可用"}
 
 
 @router.get("/api/setup/mirrors")

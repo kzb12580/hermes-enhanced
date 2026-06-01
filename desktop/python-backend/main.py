@@ -158,65 +158,6 @@ async def global_exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"error": f"Internal server error: {type(exc).__name__}: {str(exc)[:500]}", "success": False})
 
 
-# ---------------------------------------------------------------------------
-# 诊断 & 热重载 API
-# ---------------------------------------------------------------------------
-
-@app.get("/api/diagnose")
-async def diagnose():
-    """全面诊断后端状态 — 工具、模型、依赖、路径"""
-    import importlib
-    from pathlib import Path
-    results = {
-        "backend": {
-            "uptime_seconds": round(time.time() - _start_time, 1),
-            "host": _host,
-            "port": _port,
-            "python": sys.version,
-        },
-        "tools": [],
-        "vision_model": {},
-        "gpu": {},
-        "skills_count": 0,
-    }
-
-    # 1. 检查已注册的工具
-    try:
-        from tools import all_tools
-        tools = all_tools()
-        for t in tools:
-            tool_info = {"name": t.name, "timeout": getattr(t, "timeout", 60)}
-            # 检查工具是否有 requires_network
-            if hasattr(t, "requires_network"):
-                tool_info["requires_network"] = t.requires_network
-            results["tools"].append(tool_info)
-        results["tools_count"] = len(tools)
-    except Exception as e:
-        results["tools_error"] = str(e)
-
-    # 2. 检查 GPU
-    try:
-        import torch
-        results["gpu"] = {
-            "available": torch.cuda.is_available(),
-            "name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            "vram_gb": round(getattr(torch.cuda.get_device_properties(0), 'total_memory', getattr(torch.cuda.get_device_properties(0), 'total_mem', 0)) / (1024**3), 1) if torch.cuda.is_available() else 0,
-            "cuda_version": torch.version.cuda,
-            "torch_version": torch.__version__,
-        }
-    except ImportError:
-        results["gpu"] = {"available": False, "error": "torch not installed"}
-
-    # 4. 检查技能
-    try:
-        from api.skills_manager import skill_manager
-        results["skills_count"] = len(skill_manager.get_all_skills())
-    except Exception as e:
-        results["skills_error"] = str(e)
-
-    return results
-
-
 @app.post("/api/tools/reload")
 async def reload_tools():
     """热重载工具模块 — 修改代码后调用此接口生效"""
