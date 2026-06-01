@@ -80,6 +80,7 @@ a = Analysis(
         "sentencepiece",
         "google.protobuf",
         "huggingface_hub",
+        "safetensors",
         # OCR
         "pytesseract",
         "cv2",
