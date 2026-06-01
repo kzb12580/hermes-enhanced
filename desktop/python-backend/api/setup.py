@@ -289,6 +289,16 @@ async def _run_model_download(mirror: str):
     # 统一下载目录
     local_dir = Path.home() / ".cache" / "huggingface" / "hub" / MODEL_ID.replace("/", "--")
 
+    # 清理损坏的缓存（只有 refs 没有 blobs 的情况）
+    if local_dir.exists():
+        blobs_dir = local_dir / "blobs"
+        snapshots_dir = local_dir / "snapshots"
+        has_safetensors = any(local_dir.rglob("*.safetensors"))
+        if not has_safetensors:
+            _emit("model", 2, "清理损坏的缓存目录...")
+            import shutil
+            shutil.rmtree(local_dir, ignore_errors=True)
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             _emit("model", 5, f"开始下载 (尝试 {attempt}/{MAX_RETRIES})...")
@@ -296,21 +306,12 @@ async def _run_model_download(mirror: str):
             def do_download():
                 from huggingface_hub import snapshot_download
 
-                # 使用 tqdm callback 追踪进度
-                try:
-                    from huggingface_hub import HfApi
-                    api = HfApi()
-
-                    # snapshot_download 支持断点续传
-                    snapshot_download(
-                        MODEL_ID,
-                        local_dir=str(local_dir),
-                        resume_download=True,  # 断点续传
-                        etag_timeout=30,
-                    )
-                except TypeError:
-                    # 旧版 huggingface_hub 不支持某些参数
-                    snapshot_download(MODEL_ID)
+                snapshot_download(
+                    MODEL_ID,
+                    local_dir=str(local_dir),
+                    resume_download=True,
+                    etag_timeout=60,
+                )
 
             import concurrent.futures
             loop = asyncio.get_event_loop()

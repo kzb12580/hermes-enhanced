@@ -354,6 +354,7 @@ def install_pytorch(cuda_info: dict) -> bool:
 def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
     """下载 LocateAnything-3B 模型，支持断点续传和重试"""
     import time
+    import shutil
 
     print(f"\n📥 [3/4] 下载模型 {model_id} (~{MODEL_SIZE_GB}GB)...")
 
@@ -365,6 +366,14 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
 
     # 统一下载目录
     local_dir = Path.home() / ".cache" / "huggingface" / "hub" / model_id.replace("/", "--")
+
+    # 清理损坏的缓存（只有 refs 没有 blobs 的情况）
+    if local_dir.exists():
+        has_safetensors = any(local_dir.rglob("*.safetensors"))
+        if not has_safetensors:
+            print("  🗑️ 清理损坏的缓存目录...")
+            import shutil
+            shutil.rmtree(local_dir, ignore_errors=True)
 
     MAX_RETRIES = 3
 
