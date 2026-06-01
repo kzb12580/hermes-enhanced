@@ -479,7 +479,7 @@ async def call_llm_streaming(
                                 yield delta["content"]
                             elif "tool_calls" in delta and delta["tool_calls"]:
                                 yield json.dumps({"tool_calls": delta["tool_calls"]})
-                    except json.JSONDecodeError:
+                    except (json.JSONDecodeError, TypeError):
                         continue
 
 

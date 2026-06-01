@@ -40,7 +40,8 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
         return f"Error: Unknown tool '{name}'"
     try:
         timeout = getattr(tool, "timeout", 60)
-        return await asyncio.wait_for(tool.execute(**arguments), timeout=timeout)
+        result = await asyncio.wait_for(tool.execute(**arguments), timeout=timeout)
+        return result if result is not None else f"Error: tool '{name}' returned no result"
     except asyncio.TimeoutError:
         timeout = getattr(tool, "timeout", 60)
         return f"Error: tool '{name}' timed out after {timeout}s"
