@@ -760,21 +760,27 @@ async def gpu_status():
     # 检测 NVIDIA GPU
     try:
         import subprocess
-        out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10
-        )
-        if out.returncode == 0:
-            lines = out.stdout.strip().split("\n")
-            if lines:
-                parts = [p.strip() for p in lines[0].split(",")]
-                if len(parts) >= 3:
-                    result["has_nvidia_gpu"] = True
-                    result["gpu_name"] = parts[0]
-                    result["vram_gb"] = round(float(parts[2]) / 1024, 1)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+        import shutil
+        nvidia_smi = shutil.which("nvidia-smi")
+        if nvidia_smi:
+            out = subprocess.run(
+                [nvidia_smi, "--query-gpu=name,driver_version,memory.total",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=10
+            )
+            if out.returncode == 0:
+                lines = out.stdout.strip().split("\n")
+                if lines:
+                    parts = [p.strip() for p in lines[0].split(",")]
+                    if len(parts) >= 3:
+                        result["has_nvidia_gpu"] = True
+                        result["gpu_name"] = parts[0]
+                        try:
+                            result["vram_gb"] = round(float(parts[2]) / 1024, 1)
+                        except (ValueError, IndexError):
+                            pass
+    except Exception as e:
+        logger.debug(f"GPU detection error: {e}")
     
     # 检测 CUDA (PyTorch)
     try:
@@ -783,12 +789,20 @@ async def gpu_status():
             result["has_cuda"] = True
             result["cuda_version"] = torch.version.cuda
             if not result["gpu_name"]:
-                result["gpu_name"] = torch.cuda.get_device_name(0)
+                try:
+                    result["gpu_name"] = torch.cuda.get_device_name(0)
+                except Exception:
+                    pass
             if result["vram_gb"] == 0:
-                props = torch.cuda.get_device_properties(0)
-                result["vram_gb"] = round(getattr(props, 'total_memory', getattr(props, 'total_mem', 0)) / (1024**3), 1)
+                try:
+                    props = torch.cuda.get_device_properties(0)
+                    result["vram_gb"] = round(getattr(props, 'total_memory', getattr(props, 'total_mem', 0)) / (1024**3), 1)
+                except Exception:
+                    pass
     except ImportError:
         pass
+    except Exception as e:
+        logger.debug(f"CUDA detection error: {e}")
     
     # 决定是否显示视觉模型功能
     # 条件：有 NVIDIA GPU + 有 CUDA + VRAM >= 6GB
