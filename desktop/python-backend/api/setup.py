@@ -202,16 +202,20 @@ def _find_model_path():
     candidates = [
         Path.home() / ".hermes" / "desktop" / "models" / "LocateAnything-3B",
         Path.home() / ".hermes" / "desktop" / "models" / "nvidia--LocateAnything-3B",
-        Path.home() / ".cache" / "huggingface" / "hub",
     ]
-    for p in candidates[:2]:
+    for p in candidates:
         if p.exists() and any(p.glob("*.safetensors")):
             return str(p)
-    # Check HF cache
-    hf_cache = candidates[2]
+    
+    # Check HF cache - 检查根目录和 snapshots 子目录
+    hf_cache = Path.home() / ".cache" / "huggingface" / "hub"
     if hf_cache.exists():
         for d in hf_cache.iterdir():
             if "LocateAnything" in d.name:
+                # 1. 检查根目录（local_dir 下载会保存在这里）
+                if any(d.glob("*.safetensors")):
+                    return str(d)
+                # 2. 检查 snapshots 子目录（默认缓存会保存在这里）
                 snapshots = d / "snapshots"
                 if snapshots.exists():
                     for s in snapshots.iterdir():
