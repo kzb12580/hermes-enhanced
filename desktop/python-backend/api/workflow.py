@@ -8,7 +8,11 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from workflow_engine import WORKFLOWS, build_workflow_prompt
+try:
+    from workflow_engine import WORKFLOWS, build_workflow_prompt
+except ImportError:
+    WORKFLOWS = {}
+    def build_workflow_prompt(name, params): return ""
 
 logger = logging.getLogger("hermes-backend.workflow")
 router = APIRouter()

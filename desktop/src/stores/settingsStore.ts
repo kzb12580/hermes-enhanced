@@ -180,6 +180,7 @@ export const useSettingsStore = create<SettingsState>()(
         temperature: state.temperature,
         maxTokens: state.maxTokens,
         backendUrl: state.backendUrl,
+        apiKey: state.apiKey,
         openLinksInExternalBrowser: state.openLinksInExternalBrowser,
       }),
     }

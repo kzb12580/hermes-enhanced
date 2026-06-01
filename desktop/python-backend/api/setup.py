@@ -335,7 +335,7 @@ async def _run_model_download(mirror: str):
             else:
                 if attempt < MAX_RETRIES:
                     _emit("model", 5, f"文件不完整，{5}秒后重试...")
-                    time.sleep(5)
+                    await asyncio.sleep(5)
                     continue
                 else:
                     _emit("error", _install_state["progress"],
@@ -348,7 +348,7 @@ async def _run_model_download(mirror: str):
             if attempt < MAX_RETRIES:
                 wait_time = attempt * 10  # 指数退避
                 _emit("model", 5, f"下载失败，{wait_time}秒后重试... ({e})")
-                time.sleep(wait_time)
+                await asyncio.sleep(wait_time)
             else:
                 import traceback
                 tb = traceback.format_exc()

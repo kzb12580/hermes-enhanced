@@ -87,10 +87,10 @@ export function DiagnosticsPanel() {
               <span className="text-xs font-medium text-text-primary">后端服务</span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs text-text-muted">
-              <div>运行时间: {Math.round(diag.backend.uptime_seconds / 60)} 分钟</div>
-              <div>端口: {diag.backend.port}</div>
-              <div>Python: {diag.backend.python.split(' ')[0]}</div>
-              <div>技能: {diag.skills_count} 个</div>
+              <div>运行时间: {diag.backend ? Math.round(diag.backend.uptime_seconds / 60) : '?'} 分钟</div>
+              <div>端口: {diag.backend?.port ?? '?'}</div>
+              <div>Python: {diag.backend?.python?.split(' ')[0] ?? '?'}</div>
+              <div>技能: {diag.skills_count ?? '?'} 个</div>
             </div>
           </div>
 
@@ -104,7 +104,7 @@ export function DiagnosticsPanel() {
               )}
               <span className="text-xs font-medium text-text-primary">GPU</span>
             </div>
-            {diag.gpu.available ? (
+            {diag.gpu?.available ? (
               <div className="grid grid-cols-2 gap-2 text-xs text-text-muted">
                 <div>显卡: {diag.gpu.name}</div>
                 <div>显存: {diag.gpu.vram_gb} GB</div>
@@ -113,7 +113,7 @@ export function DiagnosticsPanel() {
               </div>
             ) : (
               <div className="text-xs text-error">
-                {diag.gpu.error || '未检测到 GPU'}
+                {diag.gpu?.error || '未检测到 GPU'}
               </div>
             )}
           </div>
@@ -128,13 +128,13 @@ export function DiagnosticsPanel() {
               )}
               <span className="text-xs font-medium text-text-primary">视觉模型</span>
             </div>
-            {diag.vision_model.found ? (
+            {diag.vision_model?.found ? (
               <div className="text-xs text-text-muted break-all">
                 路径: {diag.vision_model.path}
               </div>
             ) : (
               <div className="text-xs text-warning">
-                未找到模型。请在设置页面下载，或设置环境变量 HERMES_VISION_MODEL_PATH
+                {diag.vision_model?.error || '未找到模型。请在设置页面下载，或设置环境变量 HERMES_VISION_MODEL_PATH'}
               </div>
             )}
           </div>
@@ -148,7 +148,7 @@ export function DiagnosticsPanel() {
               </span>
             </div>
             <div className="flex flex-wrap gap-1">
-              {diag.tools.map(t => (
+              {(diag.tools ?? []).map(t => (
                 <span key={t.name} className="px-2 py-0.5 text-xs bg-bg-primary text-text-secondary rounded">
                   {t.name}
                 </span>

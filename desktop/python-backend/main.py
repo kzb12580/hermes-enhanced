@@ -15,9 +15,14 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+    _HAS_SLOWAPI = True
+except ImportError:
+    _HAS_SLOWAPI = False
 
 from api.chat import router as chat_router
 from api.config import router as config_router
@@ -92,10 +97,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting: 60 requests per minute
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Rate limiting: 60 requests per minute (optional dependency)
+if _HAS_SLOWAPI:
+    limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — allow the Electron renderer (localhost)
 app.add_middleware(

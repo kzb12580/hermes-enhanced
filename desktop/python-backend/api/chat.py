@@ -767,7 +767,7 @@ async def chat(message: ChatMessage):
                 # Context trimming: 每 5 次迭代裁剪一次，防止 context 超限
                 if (iteration + 1) % 5 == 0:
                     context_window, max_response = get_model_context_config(model or "default")
-                    system_tokens = estimate_tokens(session.get("system_prompt", ""))
+                    system_tokens = estimate_tokens(sys_prompt)
                     max_input_tokens = context_window - max_response - system_tokens - 500
                     current_messages = list(trim_messages(current_messages, max_input_tokens))
                 
@@ -790,8 +790,9 @@ async def chat(message: ChatMessage):
                         trimmed_messages.append({**msg, "content": content})
                     elif msg.get("role") == "assistant" and msg.get("tool_calls"):
                         trimmed = {k: v for k, v in msg.items() if k != "tool_calls"}
-                        if trimmed.get("content"):
-                            trimmed_messages.append(trimmed)
+                        if not trimmed.get("content"):
+                            trimmed["content"] = "(used tools)"
+                        trimmed_messages.append(trimmed)
                         continue
                     trimmed_messages.append(msg)
                 logger.info("Trimmed messages: %d → %d for final response", len(current_messages), len(trimmed_messages))

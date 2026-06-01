@@ -40,18 +40,17 @@ def create_word(path: str, title: str = "", content: str = "", template: str = "
                 font_size: int = 12, line_spacing: float = 1.5) -> dict:
     """创建 Word 文档（支持模板、字体、行距）"""
     try:
+        from docx import Document
+        from docx.shared import Pt, Cm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
         if template:
             template = _safe_path(template)
             err = _check_file(template, "template")
             if err: return err
             doc = Document(template)
-            return {"error": "Content too large (>10MB)", "success": False}
-
-        from docx import Document
-        from docx.shared import Pt, Cm
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-        doc = Document(template) if template else Document()
+        else:
+            doc = Document()
 
         # 设置默认字体
         style = doc.styles['Normal']
@@ -266,18 +265,20 @@ def create_ppt(path: str, slides: list[dict], template: str = "",
       - end: 结束页
     """
     try:
-        if template:
-            template = _safe_path(template)
-            err = _check_file(template, "template")
-            if err: return err
-            doc = Document(template)
         from pptx import Presentation
         from pptx.util import Inches, Pt, Emu
         from pptx.dml.color import RGBColor
         from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
         from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 
-        prs = Presentation(template) if template else Presentation()
+        if template:
+            template = _safe_path(template)
+            err = _check_file(template, "template")
+            if err: return err
+            prs = Presentation(template)
+        else:
+            prs = Presentation()
+
         prs.slide_width = Inches(13.333)  # 16:9
         prs.slide_height = Inches(7.5)
 
