@@ -402,7 +402,7 @@ export function InputBar() {
             onClick={() => setShowSkillsPanel(true)}
             className={`flex-shrink-0 p-3 transition-colors ${
               activeSkills.length > 0
-                ? 'text-[var(--hermes-accent)] hover:text-[var(--hermes-accent)]-hover'
+                ? 'text-[var(--hermes-accent)] hover:text-[var(--hermes-accent-hover)]'
                 : 'text-text-muted hover:text-text-primary'
             }`}
             title="技能管理"
@@ -439,7 +439,7 @@ export function InputBar() {
                 className={`
                   p-2 rounded-lg transition-all
                   ${canSend
-                    ? 'bg-[var(--hermes-accent)] text-bg-primary hover:bg-[var(--hermes-accent)]-hover'
+                    ? 'bg-[var(--hermes-accent)] text-white hover:bg-[var(--hermes-accent-hover)]'
                     : 'bg-[var(--bg-tertiary)] text-text-muted cursor-not-allowed'
                   }
                 `}
