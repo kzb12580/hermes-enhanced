@@ -434,6 +434,7 @@ async def call_llm_streaming(
     max_tokens: int,
     temperature: float,
     tools: Optional[list[dict]] = None,
+    proxy_url: Optional[str] = None,
 ):
     """Call LLM API with streaming support."""
     headers = {
@@ -453,7 +454,14 @@ async def call_llm_streaming(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    # Proxy resolution: explicit proxy_url > system env vars
+    client_kwargs: dict = {"timeout": 120}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+    else:
+        client_kwargs["trust_env"] = True
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
         async with client.stream(
             "POST",
             f"{base_url.rstrip('/')}/chat/completions",
@@ -490,6 +498,7 @@ async def call_llm(
     max_tokens: int,
     temperature: float,
     tools: Optional[list[dict]] = None,
+    proxy_url: Optional[str] = None,
 ) -> dict:
     """Call LLM API without streaming (for tool calls)."""
     headers = {
@@ -509,7 +518,14 @@ async def call_llm(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    # Proxy resolution: explicit proxy_url > system env vars
+    client_kwargs: dict = {"timeout": 120}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+    else:
+        client_kwargs["trust_env"] = True
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.post(
             f"{base_url.rstrip('/')}/chat/completions",
             headers=headers,
@@ -699,7 +715,7 @@ async def chat(message: ChatMessage):
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
                 
-                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools):
+                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
                     if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         # Regular content token
                         full_response += chunk
@@ -796,7 +812,7 @@ async def chat(message: ChatMessage):
                     trimmed_messages.append(msg)
                 logger.info("Trimmed messages: %d → %d for final response", len(current_messages), len(trimmed_messages))
                 final_response = ""
-                async for chunk in call_llm_streaming(base_url, api_key, model, trimmed_messages, max_tokens, temperature, tools=None):
+                async for chunk in call_llm_streaming(base_url, api_key, model, trimmed_messages, max_tokens, temperature, tools=None, proxy_url=message.proxy_url):
                     if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         final_response += chunk
                         yield f"event: token\ndata: {chunk}\n\n"
