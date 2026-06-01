@@ -99,7 +99,7 @@ class VisionTool(BaseTool):
         try:
             import torch
             if torch.cuda.is_available():
-                vram_bytes = torch.cuda.get_device_properties(0).total_mem
+                vram_bytes = getattr(torch.cuda.get_device_properties(0), 'total_memory', getattr(torch.cuda.get_device_properties(0), 'total_mem', 0))
                 vram_gb = vram_bytes / (1024 ** 3)
                 gpu_name = torch.cuda.get_device_name(0)
                 cuda_ver = torch.version.cuda

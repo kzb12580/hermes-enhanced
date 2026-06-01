@@ -177,7 +177,7 @@ def detect_cuda() -> dict:
                     for i in range(torch.cuda.device_count()):
                         result["gpus"].append(torch.cuda.get_device_name(i))
                         props = torch.cuda.get_device_properties(i)
-                        result["vram_gb"] = max(result["vram_gb"], props.total_mem / (1024**3))
+                        result["vram_gb"] = max(result["vram_gb"], getattr(props, 'total_memory', getattr(props, 'total_mem', 0)) / (1024**3))
         except Exception:
             pass
 
