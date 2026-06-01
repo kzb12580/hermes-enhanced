@@ -21,7 +21,6 @@ class ScreenCaptureTool(BaseTool):
     name = "screen_capture"
     description = (
         "Take a screenshot of the current screen. Returns the image file path. "
-        "Use this before vision_locate to analyze what's on screen."
     )
     parameters = {
         "type": "object",

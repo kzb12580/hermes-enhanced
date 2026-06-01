@@ -97,7 +97,6 @@ When all tasks complete:
 
 ### Vision & Screen
 - screen_capture — Take screenshots
-- vision_locate — AI-powered screen analysis
 - ocr_extract — OCR text extraction
 
 ### Task Management

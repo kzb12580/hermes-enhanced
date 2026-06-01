@@ -118,19 +118,7 @@ export function DiagnosticsPanel() {
             )}
           </div>
 
-          {/* Vision Model */}
-          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
-            <div className="flex items-center gap-2 mb-2">
-              {diag.vision_model.found ? (
-                <CheckCircle size={14} className="text-success" />
-              ) : (
-                <AlertCircle size={14} className="text-warning" />
-              )}
-              <span className="text-xs font-medium text-text-primary">视觉模型</span>
-            </div>
-            {diag.vision_model?.found ? (
-              <div className="text-xs text-text-muted break-all">
-                路径: {diag.vision_model.path}
+          {
               </div>
             ) : (
               <div className="text-xs text-warning">

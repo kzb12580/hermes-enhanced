@@ -41,7 +41,6 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
     web_search: '网页搜索',
     web_extract: '提取网页',
     screen_capture: '屏幕截图',
-    vision_locate: '视觉识别',
     ocr_extract: 'OCR识别',
     create_word: '创建Word',
     edit_word: '编辑Word',

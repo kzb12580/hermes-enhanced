@@ -1,8 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for Hermes Desktop Python backend.
 
-All small dependencies are bundled. Only the 6GB LocateAnything-3B model
-is left for user download.
+All dependencies are bundled.
 
 Usage:
     pyinstaller build.spec
@@ -74,13 +73,6 @@ a = Analysis(
         "pptx.util",
         "pptx.enum.text",
         "openpyxl",
-        # ML
-        "transformers",
-        "accelerate",
-        "sentencepiece",
-        "google.protobuf",
-        "huggingface_hub",
-        "safetensors",
         # OCR
         "pytesseract",
         "cv2",
@@ -104,9 +96,6 @@ a = Analysis(
         "pandas",
         "scipy",
         "sklearn",
-        "torch",       # 6GB+ — user downloads separately
-        "torchaudio",
-        "torchvision",
     ],
     noarchive=False,
 )

@@ -78,7 +78,6 @@ You have tools. Use them.
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
 | `screen_capture` | Take screenshots | Capture current screen state |
-| `vision_locate` | Analyze screenshots with AI | Find UI elements, understand layout |
 | `ocr_extract` | Extract text from images | Read text from screenshots, documents |
 
 ### Office Documents
@@ -146,7 +145,6 @@ Example: User says "make a PPT about apples"
 ```
 1. bring_to_front("target app") — focus the window
 2. screen_capture — see current state
-3. vision_locate — find button/field coordinates
 4. mouse_click(x, y) — click the target
 5. keyboard_type("text") — type input
 6. keyboard_hotkey("enter") — confirm

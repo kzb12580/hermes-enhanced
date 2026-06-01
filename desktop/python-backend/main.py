@@ -207,19 +207,6 @@ async def diagnose():
     except ImportError:
         results["gpu"] = {"available": False, "error": "torch not installed"}
 
-    # 3. 检查视觉模型
-    try:
-        from tools.vision_tool import VisionTool
-        vt = VisionTool()
-        model_path = vt._find_model_path()
-        results["vision_model"] = {
-            "found": model_path is not None,
-            "path": str(model_path) if model_path else None,
-            "env_var": os.environ.get("HERMES_VISION_MODEL_PATH"),
-        }
-    except Exception as e:
-        results["vision_model"] = {"error": str(e)}
-
     # 4. 检查技能
     try:
         from api.skills_manager import skill_manager
@@ -266,36 +253,7 @@ async def reload_tools():
         return {"success": False, "error": str(e)}
 
 
-class VisionModelPathRequest(BaseModel):
-    path: str
 
-
-@app.post("/api/config/vision-model-path")
-async def set_vision_model_path(req: VisionModelPathRequest):
-    """设置视觉模型路径 — 动态配置，不需要重启"""
-    from pathlib import Path
-    p = Path(req.path).expanduser()
-    if not p.exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {p}")
-    if not any(p.glob("*.safetensors")):
-        raise HTTPException(status_code=400, detail=f"No .safetensors files found in: {p}")
-
-    # 设置环境变量（当前进程生效）
-    os.environ["HERMES_VISION_MODEL_PATH"] = str(p)
-
-    # 尝试重置模型缓存
-    try:
-        from tools.vision_tool import VisionTool
-        # 找到已注册的 vision_locate 工具并重置
-        from tools import get_tool
-        vt = get_tool("vision_locate")
-        if vt:
-            vt._model = None
-            vt._processor = None
-    except Exception:
-        pass
-
-    return {"success": True, "path": str(p), "message": "Model path updated. Next vision_locate call will use this path."}
 
 
 # Register routers

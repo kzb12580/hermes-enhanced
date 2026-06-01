@@ -3,7 +3,6 @@ import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Wifi,
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
-import { VisionModelDownload } from './VisionModelDownload';
 import { SkillsPanel } from './SkillsPanel';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EmailConfig } from '../email/EmailConfig';
@@ -208,7 +207,6 @@ export function SettingsPanel() {
                 <h3 className="text-base font-semibold text-text-primary mb-4">模型配置</h3>
                 <ModelConfig />
                 <div className="mt-6 pt-6 border-t border-[var(--hermes-border)]">
-                  <VisionModelDownload />
                 </div>
               </div>
             )}
@@ -566,24 +564,6 @@ function NetworkSettings() {
             className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-text-primary border border-[var(--hermes-border)] text-sm" />
         </div>
       )}
-
-      {/* HuggingFace 镜像 */}
-      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
-        <label className="text-sm font-medium text-text-secondary">HuggingFace 模型镜像</label>
-        <p className="text-xs text-text-muted">中国大陆用户建议选择 hf-mirror</p>
-        <div className="flex gap-2 flex-wrap">
-          {Object.entries(mirrors.hf || {}).map(([key]: [string, any]) => (
-            <button key={key} onClick={() => setConfig((c: any) => ({ ...c, hf_mirror: key }))}
-              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                config.hf_mirror === key
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
-              }`}>
-              {key === 'official' ? '🌐 官方' : key === 'hf-mirror' ? '🇨🇳 hf-mirror' : key}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* PyPI 镜像 */}
       <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
