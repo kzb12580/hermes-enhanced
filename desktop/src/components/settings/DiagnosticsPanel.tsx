@@ -6,8 +6,7 @@ interface DiagResult {
   backend?: { uptime_seconds: number; host: string; port: number; python: string };
   tools?: { name: string; timeout: number }[];
   tools_count?: number;
-  gpu?: { available: boolean; name?: string; vram_gb?: number; cuda_version?: string; torch_version?: string };
-  vision_model?: { found: boolean; path?: string; env_var?: string };
+  gpu?: { available: boolean; name?: string; vram_gb?: number; cuda_version?: string; torch_version?: string; error?: string };
   skills_count?: number;
 }
 
@@ -114,15 +113,6 @@ export function DiagnosticsPanel() {
             ) : (
               <div className="text-xs text-error">
                 {diag.gpu?.error || '未检测到 GPU'}
-              </div>
-            )}
-          </div>
-
-          {
-              </div>
-            ) : (
-              <div className="text-xs text-warning">
-                {diag.vision_model?.error || '未找到模型。请在设置页面下载，或设置环境变量 HERMES_VISION_MODEL_PATH'}
               </div>
             )}
           </div>
