@@ -210,36 +210,104 @@ class SearchFilesTool(BaseTool):
         except re.error as e:
             return f"Error: Invalid regex: {e}"
 
-        results = []
-        files_to_search = []
+        import time
+        import gc
 
-        if target.is_file():
-            files_to_search = [target]
-        else:
-            for root, dirs, files in os.walk(target):
-                # Skip hidden dirs and common non-useful dirs
-                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {'node_modules', '__pycache__', '.git', 'venv', '.venv'}]
-                for fname in files:
-                    if file_glob:
-                        if not fnmatch.fnmatch(fname, file_glob):
-                            continue
-                    files_to_search.append(Path(root) / fname)
+        results: list[str] = []
+        files_scanned = 0
+        dirs_scanned = 0
+        MAX_FILES = 500
+        MAX_DIRS = 2000
+        MAX_DEPTH = 8
+        TIMEOUT_SEC = 30
+        start_time = time.monotonic()
 
-        for fpath in files_to_search[:200]:  # Limit files scanned
+        _SKIP_DIRS = {'.', '..', 'node_modules', '__pycache__', '.git',
+                      'venv', '.venv', '.tox', '.mypy_cache', '.pytest_cache',
+                      'dist', 'build', '.next', '.nuxt', 'target',
+                      '$Recycle.Bin', 'System Volume Information', 'Recovery',
+                      'Windows', 'ProgramData', 'Program Files', 'Program Files (x86)'}
+
+        def _check_limits() -> str | None:
+            """Return early-exit message if limits exceeded, else None."""
+            if len(results) >= MAX_SEARCH_RESULTS:
+                return "\n".join(results) + f"\n... (stopped at {MAX_SEARCH_RESULTS} results, scanned {files_scanned} files, {dirs_scanned} dirs)"
+            if files_scanned >= MAX_FILES:
+                return "\n".join(results) + f"\n... (reached {MAX_FILES} file limit, {dirs_scanned} dirs scanned)" if results else f"No matches in {MAX_FILES} files scanned ({dirs_scanned} dirs). Try a more specific path."
+            if dirs_scanned >= MAX_DIRS:
+                return "\n".join(results) + f"\n... (reached {MAX_DIRS} dir limit)" if results else f"No matches in {dirs_scanned} directories scanned. Try a more specific path."
+            if time.monotonic() - start_time > TIMEOUT_SEC:
+                return "\n".join(results) + f"\n... (timeout after {TIMEOUT_SEC}s, scanned {files_scanned} files)" if results else f"Timeout after {TIMEOUT_SEC}s ({files_scanned} files, {dirs_scanned} dirs). Try a more specific path."
+            return None
+
+        def _search_file(fpath: Path) -> bool:
+            """Search one file. Returns True if should stop."""
+            nonlocal files_scanned, results
+            files_scanned += 1
             try:
+                if fpath.stat().st_size > 2_000_000:  # skip files > 2MB
+                    return False
                 enc = _detect_encoding(str(fpath))
                 text = fpath.read_text(encoding=enc, errors="replace")
                 for i, line in enumerate(text.splitlines(), 1):
                     if regex.search(line):
                         results.append(f"{fpath}:{i}: {line.strip()}")
                         if len(results) >= MAX_SEARCH_RESULTS:
-                            return "\n".join(results) + f"\n... (stopped at {MAX_SEARCH_RESULTS} results)"
-            except (PermissionError, OSError):
-                continue
+                            return True
+            except (PermissionError, OSError, UnicodeDecodeError):
+                pass
+            return False
+
+        if target.is_file():
+            _search_file(target)
+        else:
+            # Process directories incrementally — one at a time, free memory after each
+            pending_dirs: list[tuple[Path, int]] = [(target, 0)]
+
+            while pending_dirs:
+                current_dir, depth = pending_dirs.pop(0)
+                dirs_scanned += 1
+
+                # Check limits every iteration
+                limit_msg = _check_limits()
+                if limit_msg:
+                    return limit_msg
+
+                if depth >= MAX_DEPTH:
+                    continue
+
+                try:
+                    entries = list(current_dir.iterdir())
+                except (PermissionError, OSError):
+                    continue
+
+                subdirs = []
+                for entry in entries:
+                    name = entry.name
+                    if name in _SKIP_DIRS or name.startswith('.'):
+                        continue
+
+                    if entry.is_dir() and not entry.is_symlink():
+                        subdirs.append((entry, depth + 1))
+                    elif entry.is_file():
+                        if file_glob and not fnmatch.fnmatch(name, file_glob):
+                            continue
+                        if _search_file(entry):
+                            # Early exit — enough results
+                            limit_msg = _check_limits()
+                            return limit_msg if limit_msg else "\n".join(results)
+
+                # Add subdirs to queue (breadth-first)
+                pending_dirs.extend(subdirs)
+
+                # Free memory after processing each directory
+                del entries, subdirs
+                if dirs_scanned % 100 == 0:
+                    gc.collect()
 
         if not results:
-            return "No matches found."
-        return "\n".join(results)
+            return f"No matches found. (scanned {files_scanned} files, {dirs_scanned} dirs)"
+        return "\n".join(results) + f"\n({files_scanned} files, {dirs_scanned} dirs scanned)"
 
 
 class ListFilesTool(BaseTool):
