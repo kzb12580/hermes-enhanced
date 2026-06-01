@@ -7,14 +7,12 @@ import {
   Brain,
   BrainCircuit,
   Zap,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import type { AttachmentInfo } from '../../stores/chatStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import apiClient from '../../lib/api';
-import { SkillsPanel } from '../skills/SkillsPanel';
 import { ContextMenu, createEditMenuItems, useContextMenu } from '../ui/ContextMenu';
 
 // 思考模式配置
@@ -28,7 +26,6 @@ export function InputBar() {
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
-  const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentInfo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -337,28 +334,6 @@ export function InputBar() {
           )}
         </div>
 
-        {/* Active skills bar */}
-        {activeSkills.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            <Sparkles size={12} className="text-[var(--hermes-accent)] flex-shrink-0" />
-            {activeSkills.map((skillId) => (
-              <span
-                key={skillId}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
-                  bg-[var(--hermes-accent)]/15 text-[var(--hermes-accent)] border border-[var(--hermes-accent)]/20"
-              >
-                {skillId}
-                <button
-                  onClick={() => toggleActiveSkill(skillId)}
-                  className="hover:text-error transition-colors"
-                >
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
         {/* Pending attachments bar */}
         {pendingAttachments.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -396,18 +371,6 @@ export function InputBar() {
             title="添加附件"
           >
             <Paperclip size={18} />
-          </button>
-
-          <button
-            onClick={() => setShowSkillsPanel(true)}
-            className={`flex-shrink-0 p-3 transition-colors ${
-              activeSkills.length > 0
-                ? 'text-[var(--hermes-accent)] hover:text-[var(--hermes-accent-hover)]'
-                : 'text-text-muted hover:text-text-primary'
-            }`}
-            title="技能管理"
-          >
-            <Sparkles size={18} />
           </button>
 
           <textarea
@@ -458,14 +421,6 @@ export function InputBar() {
             : 'Ctrl+Enter 发送 · Enter 换行'}
         </p>
       </div>
-
-      {/* Skills Panel Modal */}
-      <SkillsPanel
-        open={showSkillsPanel}
-        onClose={() => setShowSkillsPanel(false)}
-        activeSkills={activeSkills}
-        onToggleActive={toggleActiveSkill}
-      />
 
       {/* Context Menu */}
       {isOpen && (
