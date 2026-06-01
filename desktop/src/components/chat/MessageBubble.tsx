@@ -40,7 +40,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
   if (isSystem) {
     return (
       <div className="flex justify-center my-2 fade-in">
-        <div className="px-3 py-1.5 rounded-full bg-bg-tertiary text-text-muted text-xs">
+        <div className="px-3 py-1.5 rounded-full bg-[var(--bg-tertiary)] text-text-muted text-xs">
           {message.content}
         </div>
       </div>
@@ -50,12 +50,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
   if (isTool) {
     return (
       <div className="flex gap-3 px-4 py-2 my-1 fade-in">
-        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-bg-tertiary flex items-center justify-center mt-0.5">
+        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center mt-0.5">
           <span className="text-xs font-mono text-text-muted">T</span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs text-text-muted mb-1">工具结果</div>
-          <pre className="text-xs font-mono bg-bg-secondary rounded p-2 overflow-x-auto text-text-secondary">
+          <pre className="text-xs font-mono bg-[var(--bg-secondary)] rounded p-2 overflow-x-auto text-text-secondary">
             {message.content}
           </pre>
         </div>
@@ -69,7 +69,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
       <div
         className={`
           flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-          ${isUser ? 'bg-accent text-bg-primary' : 'bg-bg-tertiary text-text-secondary'}
+          ${isUser ? 'bg-[var(--hermes-accent)] text-bg-primary' : 'bg-[var(--bg-tertiary)] text-text-secondary'}
         `}
       >
         {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -90,14 +90,14 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
           <div className="mb-2">
             <button
               onClick={() => setThinkingExpanded(!thinkingExpanded)}
-              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors px-2 py-1 rounded-md hover:bg-bg-secondary"
+              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors px-2 py-1 rounded-md hover:bg-[var(--bg-secondary)]"
             >
               <Brain size={12} />
               <span>思考过程</span>
               {thinkingExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </button>
             {thinkingExpanded && (
-              <div className="mt-1 ml-2 pl-3 border-l-2 border-accent/20 text-xs text-text-muted leading-relaxed max-h-64 overflow-y-auto">
+              <div className="mt-1 ml-2 pl-3 border-l-2 border-[var(--hermes-accent)]/20 text-xs text-text-muted leading-relaxed max-h-64 overflow-y-auto">
                 <pre className="whitespace-pre-wrap font-sans">{message.thinkingContent}</pre>
               </div>
             )}
@@ -150,7 +150,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
 
             {/* Streaming indicator */}
             {message.isStreaming && (
-              <span className="inline-block w-2 h-4 bg-accent ml-0.5 animate-pulse" />
+              <span className="inline-block w-2 h-4 bg-[var(--hermes-accent)] ml-0.5 animate-pulse" />
             )}
           </div>
         )}
@@ -165,7 +165,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message }: Mess
 
         {/* Streaming thinking indicator */}
         {message.isStreaming && message.thinkingContent && !message.content && (
-          <div className="flex items-center gap-2 px-2 py-1 text-xs text-accent">
+          <div className="flex items-center gap-2 px-2 py-1 text-xs text-[var(--hermes-accent)]">
             <Brain size={12} className="animate-pulse" />
             <span>正在思考...</span>
           </div>

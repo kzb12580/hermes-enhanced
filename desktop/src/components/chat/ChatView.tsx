@@ -104,12 +104,12 @@ export function ChatView() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-secondary flex-shrink-0 app-drag">
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--hermes-border)] bg-[var(--bg-secondary)] flex-shrink-0 app-drag">
         <div className="flex items-center gap-2">
           {/* Toggle sidebar */}
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors app-no-drag"
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-[var(--bg-tertiary)] transition-colors app-no-drag"
             title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
           >
             {sidebarCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
@@ -125,7 +125,7 @@ export function ChatView() {
           <div className="flex items-center gap-1.5 text-xs">
             <div
               className={`w-2 h-2 rounded-full ${
-                isBackendOnline ? 'bg-success' : 'bg-error'
+                isBackendOnline ? 'bg-[var(--success)]' : 'bg-[var(--error)]'
               }`}
             />
             <span className="text-text-muted">
@@ -138,14 +138,14 @@ export function ChatView() {
             <div className="flex items-center gap-0.5 ml-2 app-no-drag">
               <button
                 onClick={minimize}
-                className="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary transition-colors"
                 title="最小化"
               >
                 <Minus size={14} />
               </button>
               <button
                 onClick={maximize}
-                className="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary transition-colors"
                 title="最大化"
               >
                 <Square size={12} />

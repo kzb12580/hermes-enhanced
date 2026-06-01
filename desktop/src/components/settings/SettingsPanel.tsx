@@ -161,16 +161,16 @@ export function SettingsPanel() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm fade-in"
       onClick={handleBackdropClick}
     >
-      <div className="w-full max-w-2xl max-h-[85vh] bg-bg-secondary rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col">
+      <div className="w-full max-w-2xl max-h-[85vh] bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--hermes-border)] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--hermes-border)]">
           <h2 className="text-lg font-semibold text-text-primary">设置</h2>
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-[var(--bg-tertiary)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -179,16 +179,16 @@ export function SettingsPanel() {
         {/* Content */}
         <div className="flex flex-1 min-h-0">
           {/* Tabs sidebar */}
-          <nav className="w-40 flex-shrink-0 border-r border-border py-2 px-2 space-y-0.5">
+          <nav className="w-40 flex-shrink-0 border-r border-[var(--hermes-border)] py-2 px-2 space-y-0.5">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors
+                  flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200
                   ${activeTab === tab.id
-                    ? 'bg-bg-tertiary text-text-primary font-medium'
-                    : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary/50'
+                    ? 'bg-[var(--hermes-accent)] text-white font-medium shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-[var(--bg-surface)]'
                   }
                 `}
               >
@@ -207,7 +207,7 @@ export function SettingsPanel() {
               <div>
                 <h3 className="text-base font-semibold text-text-primary mb-4">模型配置</h3>
                 <ModelConfig />
-                <div className="mt-6 pt-6 border-t border-border">
+                <div className="mt-6 pt-6 border-t border-[var(--hermes-border)]">
                   <VisionModelDownload />
                 </div>
               </div>
@@ -268,7 +268,7 @@ function GeneralSettings() {
           type="text"
           value={backendUrl}
           onChange={(e) => updateSettings({ backendUrl: e.target.value })}
-          className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors font-mono"
+          className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
         />
       </div>
 
@@ -286,8 +286,8 @@ function GeneralSettings() {
               className={`
                 px-4 py-2 rounded-lg text-sm border transition-colors
                 ${sendShortcut === option
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-border text-text-muted hover:border-text-muted'
+                  ? 'border-[var(--hermes-accent)] bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)]'
+                  : 'border-[var(--hermes-border)] text-text-muted hover:border-text-muted'
                 }
               `}
             >
@@ -313,8 +313,8 @@ function GeneralSettings() {
               className={`
                 px-4 py-2 rounded-lg text-sm border transition-colors
                 ${language === lang
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-border text-text-muted hover:border-text-muted'
+                  ? 'border-[var(--hermes-accent)] bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)]'
+                  : 'border-[var(--hermes-border)] text-text-muted hover:border-text-muted'
                 }
               `}
             >
@@ -368,7 +368,7 @@ function GeneralSettings() {
           onChange={(e) => updateSettings({ maxTokens: Number(e.target.value) })}
           min={256}
           max={128000}
-          className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors font-mono"
+          className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
         />
       </div>
 
@@ -377,7 +377,7 @@ function GeneralSettings() {
         <label className="flex items-center gap-3 cursor-pointer">
           <div
             className={`relative w-10 h-5 rounded-full transition-colors ${
-              openLinksInExternalBrowser ? 'bg-accent' : 'bg-bg-tertiary'
+              openLinksInExternalBrowser ? 'bg-[var(--hermes-accent)]' : 'bg-[var(--bg-tertiary)]'
             }`}
             onClick={() => updateSettings({ openLinksInExternalBrowser: !openLinksInExternalBrowser })}
           >
@@ -404,7 +404,7 @@ function GeneralSettings() {
           onChange={(e) => updateSettings({ systemPrompt: e.target.value })}
           placeholder="可选：设置 AI 系统提示词..."
           rows={4}
-          className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors resize-none"
+          className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors resize-none"
         />
       </div>
     </div>
@@ -424,7 +424,7 @@ function ApiKeysSettings() {
       {providers.map((provider) => (
         <div key={provider.id} className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
-            <Key size={14} className="text-accent" />
+            <Key size={14} className="text-[var(--hermes-accent)]" />
             {provider.name}
           </label>
           <input
@@ -432,7 +432,7 @@ function ApiKeysSettings() {
             value={provider.apiKey}
             onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
             placeholder={`输入 ${provider.name} API Key...`}
-            className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors font-mono"
+            className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
           />
         </div>
       ))}
@@ -450,9 +450,9 @@ function AboutSection() {
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-text-primary">关于 Hermes Desktop</h3>
 
-      <div className="rounded-lg border border-border p-4 space-y-4">
+      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-[var(--hermes-accent)]/10 flex items-center justify-center">
             <span className="text-2xl">🔮</span>
           </div>
           <div>
@@ -487,7 +487,7 @@ function AboutSection() {
       </div>
 
       <div className="text-center text-xs text-text-muted">
-        <p>由 <a href="https://nousresearch.com" className="text-accent hover:underline" target="_blank" rel="noopener">Nous Research</a> 出品</p>
+        <p>由 <a href="https://nousresearch.com" className="text-[var(--hermes-accent)] hover:underline" target="_blank" rel="noopener">Nous Research</a> 出品</p>
         <p className="mt-1">© 2025 Hermes Desktop. All rights reserved.</p>
       </div>
     </div>
@@ -540,15 +540,15 @@ function NetworkSettings() {
       <h3 className="text-base font-semibold text-text-primary">网络设置</h3>
 
       {/* 代理模式 */}
-      <div className="rounded-lg border border-border p-4 space-y-3">
+      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
         <label className="text-sm font-medium text-text-secondary">代理模式</label>
         <div className="flex gap-2">
           {modes.map(m => (
             <button key={m.key} onClick={() => setConfig((c: any) => ({ ...c, proxy_mode: m.key }))}
               className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
                 config.proxy_mode === m.key
-                  ? 'bg-accent text-white'
-                  : 'bg-bg-tertiary text-text-muted hover:text-text-primary'
+                  ? 'bg-[var(--hermes-accent)] text-white'
+                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
               }`}>{m.label}</button>
           ))}
         </div>
@@ -559,16 +559,16 @@ function NetworkSettings() {
 
       {/* 手动代理 */}
       {config.proxy_mode === 'manual' && (
-        <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
           <label className="text-sm font-medium text-text-secondary">代理地址</label>
           <input value={config.proxy || ''} onChange={e => setConfig((c: any) => ({ ...c, proxy: e.target.value }))}
             placeholder="http://127.0.0.1:7890"
-            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary text-text-primary border border-border text-sm" />
+            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-text-primary border border-[var(--hermes-border)] text-sm" />
         </div>
       )}
 
       {/* HuggingFace 镜像 */}
-      <div className="rounded-lg border border-border p-4 space-y-3">
+      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
         <label className="text-sm font-medium text-text-secondary">HuggingFace 模型镜像</label>
         <p className="text-xs text-text-muted">中国大陆用户建议选择 hf-mirror</p>
         <div className="flex gap-2 flex-wrap">
@@ -577,7 +577,7 @@ function NetworkSettings() {
               className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
                 config.hf_mirror === key
                   ? 'bg-purple-600 text-white'
-                  : 'bg-bg-tertiary text-text-muted hover:text-text-primary'
+                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
               }`}>
               {key === 'official' ? '🌐 官方' : key === 'hf-mirror' ? '🇨🇳 hf-mirror' : key}
             </button>
@@ -586,7 +586,7 @@ function NetworkSettings() {
       </div>
 
       {/* PyPI 镜像 */}
-      <div className="rounded-lg border border-border p-4 space-y-3">
+      <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-3">
         <label className="text-sm font-medium text-text-secondary">PyPI 下载镜像</label>
         <div className="flex gap-2 flex-wrap">
           {Object.entries(mirrors.pypi || {}).map(([key]: [string, any]) => (
@@ -594,7 +594,7 @@ function NetworkSettings() {
               className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
                 config.pypi_mirror === key
                   ? 'bg-purple-600 text-white'
-                  : 'bg-bg-tertiary text-text-muted hover:text-text-primary'
+                  : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
               }`}>
               {key === 'official' ? '🌐 官方' : key === 'tuna' ? '🇨🇳 清华' : key === 'aliyun' ? '🇨🇳 阿里云' : key}
             </button>
@@ -605,18 +605,18 @@ function NetworkSettings() {
       {/* 操作按钮 */}
       <div className="flex gap-3">
         <button onClick={save} disabled={saving}
-          className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+          className="px-4 py-2 rounded-lg bg-[var(--hermes-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
           {saving ? '保存中...' : '💾 保存配置'}
         </button>
         <button onClick={diagnose} disabled={diagnosing}
-          className="px-4 py-2 rounded-lg bg-bg-tertiary text-text-secondary text-sm font-medium hover:text-text-primary transition-colors disabled:opacity-50">
+          className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-text-secondary text-sm font-medium hover:text-text-primary transition-colors disabled:opacity-50">
           {diagnosing ? '诊断中...' : '🔍 网络诊断'}
         </button>
       </div>
 
       {/* 诊断结果 */}
       {diagnosis && !diagnosis.error && (
-        <div className="rounded-lg border border-border p-4 space-y-2 text-sm">
+        <div className="rounded-lg border border-[var(--hermes-border)] p-4 space-y-2 text-sm">
           <pre className="text-text-secondary whitespace-pre-wrap">{JSON.stringify(diagnosis, null, 2)}</pre>
         </div>
       )}

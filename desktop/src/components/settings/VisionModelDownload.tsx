@@ -150,7 +150,7 @@ export function VisionModelDownload() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
-        <HardDrive size={16} className="text-accent" />
+        <HardDrive size={16} className="text-[var(--hermes-accent)]" />
         <h3 className="text-sm font-medium text-text-primary">视觉模型（可选）</h3>
       </div>
 
@@ -170,7 +170,7 @@ export function VisionModelDownload() {
             <button
               onClick={startRepair}
               disabled={repairing}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--hermes-accent)] hover:bg-[var(--hermes-accent)]/10 transition-colors disabled:opacity-50"
             >
               {repairing ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
               检测修复
@@ -196,8 +196,8 @@ export function VisionModelDownload() {
                   disabled={downloading}
                   className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
                     mirror === m.key
-                      ? 'bg-accent text-white'
-                      : 'bg-bg-tertiary text-text-muted hover:text-text-primary'
+                      ? 'bg-[var(--hermes-accent)] text-white'
+                      : 'bg-[var(--bg-tertiary)] text-text-muted hover:text-text-primary'
                   } ${downloading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   {m.label} {m.note && <span className="text-warning">({m.note})</span>}
@@ -209,7 +209,7 @@ export function VisionModelDownload() {
           {/* Progress */}
           {downloading && (
             <div>
-              <div className="h-2 rounded-full bg-bg-tertiary overflow-hidden">
+              <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-accent to-purple-500 transition-all duration-300"
                   style={{ width: `${progress}%` }}
@@ -235,7 +235,7 @@ export function VisionModelDownload() {
             <button
               onClick={startDownload}
               disabled={downloading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[var(--hermes-accent)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {downloading ? (
                 <><Loader2 size={14} className="animate-spin" /> 下载中...</>
@@ -248,7 +248,7 @@ export function VisionModelDownload() {
             <button
               onClick={startRepair}
               disabled={repairing}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[var(--bg-tertiary)] text-text-primary hover:bg-[var(--bg-secondary)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {repairing ? (
                 <><Loader2 size={14} className="animate-spin" /> 检测中...</>
@@ -262,9 +262,9 @@ export function VisionModelDownload() {
 
       {/* Repair Results */}
       {repairDone && (
-        <div className="space-y-2 p-3 rounded-lg bg-bg-tertiary border border-border">
+        <div className="space-y-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
           <div className="flex items-center gap-2 mb-2">
-            <CheckCheck size={14} className="text-accent" />
+            <CheckCheck size={14} className="text-[var(--hermes-accent)]" />
             <span className="text-xs font-medium text-text-primary">检测结果</span>
           </div>
           {repairResults.map((r, i) => (
@@ -287,7 +287,7 @@ export function VisionModelDownload() {
             </div>
           ))}
           {repairSummary && (
-            <div className="text-xs text-text-muted mt-2 pt-2 border-t border-border">
+            <div className="text-xs text-text-muted mt-2 pt-2 border-t border-[var(--hermes-border)]">
               {repairSummary}
             </div>
           )}

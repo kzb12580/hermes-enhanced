@@ -198,7 +198,7 @@ export function InputBar() {
   const canSend = (input.trim().length > 0 || pendingAttachments.length > 0) && !isGenerating && !isUploading;
 
   return (
-    <div className="border-t border-border bg-bg-secondary p-4">
+    <div className="border-t border-[var(--hermes-border)] bg-[var(--bg-secondary)] p-4">
       <div className="max-w-3xl mx-auto relative">
         {/* 模型切换栏 */}
         <div className="flex items-center gap-2 mb-2">
@@ -207,10 +207,10 @@ export function InputBar() {
             <button
               onClick={() => setShowModelPicker(!showModelPicker)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
-                bg-bg-tertiary text-text-secondary
-                hover:bg-bg-surface transition-colors border border-border"
+                bg-[var(--bg-tertiary)] text-text-secondary
+                hover:bg-[var(--bg-surface)] transition-colors border border-[var(--hermes-border)]"
             >
-              <span className="text-accent font-medium">
+              <span className="text-[var(--hermes-accent)] font-medium">
                 {currentProviderName}
               </span>
               <span className="text-text-muted">/</span>
@@ -221,12 +221,12 @@ export function InputBar() {
             {/* 模型下拉菜单 */}
             {showModelPicker && (
               <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto
-                bg-bg-primary border border-border rounded-lg shadow-xl z-50">
+                bg-[var(--bg-primary)] border border-[var(--hermes-border)] rounded-lg shadow-xl z-50">
                 {providers
                   .filter((p) => p.enabled && p.models.length > 0)
                   .map((provider) => (
                     <div key={provider.id}>
-                      <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg-tertiary sticky top-0">
+                      <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-[var(--bg-tertiary)] sticky top-0">
                         {provider.name}
                       </div>
                       {provider.models.map((model) => (
@@ -238,8 +238,8 @@ export function InputBar() {
                           }}
                           className={`w-full text-left px-3 py-1.5 text-xs transition-colors
                             ${model === currentModel && provider.id === currentProvider
-                              ? 'bg-accent/15 text-accent'
-                              : 'text-text-secondary hover:bg-bg-tertiary'
+                              ? 'bg-[var(--hermes-accent)]/15 text-[var(--hermes-accent)]'
+                              : 'text-text-secondary hover:bg-[var(--bg-tertiary)]'
                             }`}
                         >
                           {model}
@@ -264,10 +264,10 @@ export function InputBar() {
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs
                   border transition-colors
                   ${thinkingMode === 'on'
-                    ? 'bg-accent/10 text-accent border-accent/30'
+                    ? 'bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)] border-[var(--hermes-accent)]/30'
                     : thinkingMode === 'auto'
                       ? 'bg-success/10 text-success border-success/30'
-                      : 'bg-bg-tertiary text-text-muted border-border'
+                      : 'bg-[var(--bg-tertiary)] text-text-muted border-[var(--hermes-border)]'
                   }`}
               >
                 <ThinkingIcon size={12} />
@@ -278,8 +278,8 @@ export function InputBar() {
               {/* 思考模式下拉 */}
               {showThinkingPicker && (
                 <div className="absolute bottom-full left-0 mb-1 w-56
-                  bg-bg-primary border border-border rounded-lg shadow-xl z-50">
-                  <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-bg-tertiary">
+                  bg-[var(--bg-primary)] border border-[var(--hermes-border)] rounded-lg shadow-xl z-50">
+                  <div className="px-3 py-1.5 text-xs font-medium text-text-muted bg-[var(--bg-tertiary)]">
                     思考模式
                   </div>
                   {THINKING_MODES.map((mode) => {
@@ -293,8 +293,8 @@ export function InputBar() {
                         }}
                         className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-start gap-2
                           ${mode.value === thinkingMode
-                            ? 'bg-accent/15 text-accent'
-                            : 'text-text-secondary hover:bg-bg-tertiary'
+                            ? 'bg-[var(--hermes-accent)]/15 text-[var(--hermes-accent)]'
+                            : 'text-text-secondary hover:bg-[var(--bg-tertiary)]'
                           }`}
                       >
                         <Icon size={14} className="mt-0.5 flex-shrink-0" />
@@ -310,7 +310,7 @@ export function InputBar() {
 
                   {/* 思考预算 */}
                   {thinkingMode !== 'off' && (
-                    <div className="px-3 py-2 border-t border-border">
+                    <div className="px-3 py-2 border-t border-[var(--hermes-border)]">
                       <label className="text-[10px] text-text-muted block mb-1">
                         思考预算: {thinkingBudget} tokens
                       </label>
@@ -340,12 +340,12 @@ export function InputBar() {
         {/* Active skills bar */}
         {activeSkills.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            <Sparkles size={12} className="text-accent flex-shrink-0" />
+            <Sparkles size={12} className="text-[var(--hermes-accent)] flex-shrink-0" />
             {activeSkills.map((skillId) => (
               <span
                 key={skillId}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
-                  bg-accent/15 text-accent border border-accent/20"
+                  bg-[var(--hermes-accent)]/15 text-[var(--hermes-accent)] border border-[var(--hermes-accent)]/20"
               >
                 {skillId}
                 <button
@@ -366,7 +366,7 @@ export function InputBar() {
               <span
                 key={idx}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs
-                  bg-bg-tertiary text-text-secondary border border-border"
+                  bg-[var(--bg-tertiary)] text-text-secondary border border-[var(--hermes-border)]"
               >
                 📎 {att.filename}
                 <button
@@ -382,7 +382,7 @@ export function InputBar() {
         )}
 
         {/* 输入框 */}
-        <div className="flex items-end gap-2 bg-bg-primary rounded-xl border border-border focus-within:border-accent transition-colors">
+        <div className="flex items-end gap-2 bg-[var(--bg-primary)] rounded-xl border border-[var(--hermes-border)] focus-within:border-[var(--hermes-accent)] transition-colors">
           <input
             type="file"
             ref={fileInputRef}
@@ -402,7 +402,7 @@ export function InputBar() {
             onClick={() => setShowSkillsPanel(true)}
             className={`flex-shrink-0 p-3 transition-colors ${
               activeSkills.length > 0
-                ? 'text-accent hover:text-accent-hover'
+                ? 'text-[var(--hermes-accent)] hover:text-[var(--hermes-accent)]-hover'
                 : 'text-text-muted hover:text-text-primary'
             }`}
             title="技能管理"
@@ -439,8 +439,8 @@ export function InputBar() {
                 className={`
                   p-2 rounded-lg transition-all
                   ${canSend
-                    ? 'bg-accent text-bg-primary hover:bg-accent-hover'
-                    : 'bg-bg-tertiary text-text-muted cursor-not-allowed'
+                    ? 'bg-[var(--hermes-accent)] text-bg-primary hover:bg-[var(--hermes-accent)]-hover'
+                    : 'bg-[var(--bg-tertiary)] text-text-muted cursor-not-allowed'
                   }
                 `}
                 title="发送消息"

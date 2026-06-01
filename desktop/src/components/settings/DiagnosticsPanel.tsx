@@ -55,17 +55,17 @@ export function DiagnosticsPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Settings size={16} className="text-accent" />
+          <Settings size={16} className="text-[var(--hermes-accent)]" />
           <h3 className="text-sm font-medium text-text-primary">后端诊断</h3>
         </div>
         <div className="flex gap-2">
           <button onClick={runDiag} disabled={loading}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50 transition-colors">
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[var(--bg-tertiary)] text-text-primary hover:bg-[var(--bg-secondary)] disabled:opacity-50 transition-colors">
             {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
             刷新
           </button>
           <button onClick={reloadTools} disabled={reloading}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-accent text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[var(--hermes-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
             {reloading ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
             热重载工具
           </button>
@@ -81,7 +81,7 @@ export function DiagnosticsPanel() {
       {diag && (
         <div className="space-y-3">
           {/* Backend */}
-          <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle size={14} className="text-success" />
               <span className="text-xs font-medium text-text-primary">后端服务</span>
@@ -95,7 +95,7 @@ export function DiagnosticsPanel() {
           </div>
 
           {/* GPU */}
-          <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
             <div className="flex items-center gap-2 mb-2">
               {diag.gpu.available ? (
                 <CheckCircle size={14} className="text-success" />
@@ -119,7 +119,7 @@ export function DiagnosticsPanel() {
           </div>
 
           {/* Vision Model */}
-          <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
             <div className="flex items-center gap-2 mb-2">
               {diag.vision_model.found ? (
                 <CheckCircle size={14} className="text-success" />
@@ -140,16 +140,16 @@ export function DiagnosticsPanel() {
           </div>
 
           {/* Tools */}
-          <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
             <div className="flex items-center gap-2 mb-2">
-              <Zap size={14} className="text-accent" />
+              <Zap size={14} className="text-[var(--hermes-accent)]" />
               <span className="text-xs font-medium text-text-primary">
                 工具 ({diag.tools_count} 个)
               </span>
             </div>
             <div className="flex flex-wrap gap-1">
               {(diag.tools ?? []).map(t => (
-                <span key={t.name} className="px-2 py-0.5 text-xs bg-bg-primary text-text-secondary rounded">
+                <span key={t.name} className="px-2 py-0.5 text-xs bg-[var(--bg-primary)] text-text-secondary rounded">
                   {t.name}
                 </span>
               ))}

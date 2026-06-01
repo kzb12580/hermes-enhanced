@@ -210,12 +210,12 @@ export function ModelConfig() {
       {providers.map((provider) => (
         <div
           key={provider.id}
-          className="rounded-lg border border-border overflow-hidden"
+          className="rounded-lg border border-[var(--hermes-border)] overflow-hidden"
         >
           {/* Provider header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-bg-tertiary">
+          <div className="flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)]">
             <div className="flex items-center gap-3">
-              <Server size={16} className="text-accent" />
+              <Server size={16} className="text-[var(--hermes-accent)]" />
               <div>
                 <h4 className="text-sm font-medium text-text-primary">
                   {provider.name}
@@ -269,7 +269,7 @@ export function ModelConfig() {
                 onChange={(e) =>
                   updateProvider(provider.id, { baseUrl: e.target.value })
                 }
-                className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors font-mono"
+                className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
               />
             </div>
 
@@ -286,7 +286,7 @@ export function ModelConfig() {
                   updateProvider(provider.id, { apiKey: e.target.value })
                 }
                 placeholder="sk-..."
-                className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent transition-colors font-mono"
+                className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
               />
             </div>
 
@@ -295,8 +295,8 @@ export function ModelConfig() {
               onClick={() => handleFetchModels(provider.id)}
               disabled={fetchingModels[provider.id] || !provider.baseUrl}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm
-                bg-accent/10 text-accent border border-accent/20
-                hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed
+                bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)] border border-[var(--hermes-accent)]/20
+                hover:bg-[var(--hermes-accent)]/20 disabled:opacity-50 disabled:cursor-not-allowed
                 transition-colors"
             >
               {fetchingModels[provider.id] ? (
@@ -338,8 +338,8 @@ export function ModelConfig() {
                       inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs cursor-pointer transition-colors
                       ${
                         model === currentModel && provider.id === currentProvider
-                          ? 'bg-accent text-bg-primary font-medium'
-                          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-surface'
+                          ? 'bg-[var(--hermes-accent)] text-bg-primary font-medium'
+                          : 'bg-[var(--bg-tertiary)] text-text-secondary hover:bg-[var(--bg-surface)]'
                       }
                     `}
                     onClick={() => setCurrentModel(model, provider.id)}
@@ -374,7 +374,7 @@ export function ModelConfig() {
                     }
                   }}
                   placeholder="手动添加模型..."
-                  className="flex-1 bg-bg-primary text-text-primary text-xs rounded px-2 py-1.5 outline-none border border-border focus:border-accent transition-colors"
+                  className="flex-1 bg-[var(--bg-primary)] text-text-primary text-xs rounded px-2 py-1.5 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors"
                 />
                 <button
                   onClick={() => {
@@ -384,7 +384,7 @@ export function ModelConfig() {
                       setModelInput(provider.id, '');
                     }
                   }}
-                  className="px-2 py-1 rounded text-xs bg-accent text-bg-primary hover:opacity-80 transition-opacity"
+                  className="px-2 py-1 rounded text-xs bg-[var(--hermes-accent)] text-bg-primary hover:opacity-80 transition-opacity"
                 >
                   <Plus size={14} />
                 </button>
@@ -396,7 +396,7 @@ export function ModelConfig() {
 
       {/* Add new provider */}
       {showAddForm ? (
-        <div className="rounded-lg border border-accent/30 p-4 space-y-3 fade-in">
+        <div className="rounded-lg border border-[var(--hermes-accent)]/30 p-4 space-y-3 fade-in">
           <h4 className="text-sm font-medium text-text-primary">
             添加自定义模型提供商
           </h4>
@@ -407,7 +407,7 @@ export function ModelConfig() {
               setNewProvider({ ...newProvider, name: e.target.value })
             }
             placeholder="名称（如 DeepSeek、硅基流动）"
-            className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent"
+            className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)]"
           />
           <input
             type="text"
@@ -416,7 +416,7 @@ export function ModelConfig() {
               setNewProvider({ ...newProvider, baseUrl: e.target.value })
             }
             placeholder="API 地址（如 https://api.deepseek.com）"
-            className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent font-mono"
+            className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] font-mono"
           />
           <input
             type="password"
@@ -425,7 +425,7 @@ export function ModelConfig() {
               setNewProvider({ ...newProvider, apiKey: e.target.value })
             }
             placeholder="API Key"
-            className="w-full bg-bg-primary text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border focus:border-accent font-mono"
+            className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] font-mono"
           />
 
           {/* 获取模型按钮（新增时） */}
@@ -433,8 +433,8 @@ export function ModelConfig() {
             onClick={handleFetchForNewProvider}
             disabled={fetchingModels['__new'] || !newProvider.baseUrl}
             className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm
-              bg-accent/10 text-accent border border-accent/20
-              hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed
+              bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)] border border-[var(--hermes-accent)]/20
+              hover:bg-[var(--hermes-accent)]/20 disabled:opacity-50 disabled:cursor-not-allowed
               transition-colors"
           >
             {fetchingModels['__new'] ? (
@@ -469,7 +469,7 @@ export function ModelConfig() {
               {newProvider.models.map((m) => (
                 <span
                   key={m}
-                  className="px-2 py-0.5 rounded text-xs bg-bg-tertiary text-text-secondary"
+                  className="px-2 py-0.5 rounded text-xs bg-[var(--bg-tertiary)] text-text-secondary"
                 >
                   {m}
                 </span>
@@ -480,7 +480,7 @@ export function ModelConfig() {
           <div className="flex gap-2">
             <button
               onClick={handleAddProvider}
-              className="px-4 py-2 rounded-lg text-sm bg-accent text-bg-primary hover:opacity-80 transition-opacity"
+              className="px-4 py-2 rounded-lg text-sm bg-[var(--hermes-accent)] text-bg-primary hover:opacity-80 transition-opacity"
             >
               添加
             </button>
@@ -495,7 +495,7 @@ export function ModelConfig() {
       ) : (
         <button
           onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-2 w-full px-4 py-3 rounded-lg border border-dashed border-border text-text-muted hover:border-accent hover:text-accent transition-colors text-sm"
+          className="flex items-center gap-2 w-full px-4 py-3 rounded-lg border border-dashed border-[var(--hermes-border)] text-text-muted hover:border-[var(--hermes-accent)] hover:text-[var(--hermes-accent)] transition-colors text-sm"
         >
           <Plus size={16} />
           <span>添加自定义提供商</span>

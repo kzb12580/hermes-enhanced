@@ -104,8 +104,8 @@ export function SessionList() {
             className={`
               group relative rounded-lg px-3 py-2.5 cursor-pointer transition-colors
               ${isActive
-                ? 'bg-bg-tertiary text-text-primary'
-                : 'text-text-secondary hover:bg-bg-tertiary/50'
+                ? 'bg-[var(--bg-tertiary)] text-text-primary'
+                : 'text-text-secondary hover:bg-[var(--bg-tertiary)]/50'
               }
             `}
             onClick={() => !isEditing && switchSession(session.id)}
@@ -121,7 +121,7 @@ export function SessionList() {
                     if (e.key === 'Enter') handleConfirmRename();
                     if (e.key === 'Escape') handleCancelRename();
                   }}
-                  className="flex-1 bg-bg-primary text-text-primary text-sm rounded px-2 py-1 outline-none border border-accent min-w-0"
+                  className="flex-1 bg-[var(--bg-primary)] text-text-primary text-sm rounded px-2 py-1 outline-none border border-[var(--hermes-accent)] min-w-0"
                   autoFocus
                 />
                 <button
@@ -157,7 +157,7 @@ export function SessionList() {
                       e.stopPropagation();
                       handleStartRename(session.id, session.title);
                     }}
-                    className="p-1 rounded hover:bg-bg-surface text-text-muted hover:text-text-primary"
+                    className="p-1 rounded hover:bg-[var(--bg-surface)] text-text-muted hover:text-text-primary"
                     title="重命名"
                   >
                     <Pencil size={13} />
@@ -170,7 +170,7 @@ export function SessionList() {
                     className={`p-1 rounded transition-colors ${
                       isConfirmingDelete
                         ? 'bg-error/20 text-error'
-                        : 'hover:bg-bg-surface text-text-muted hover:text-error'
+                        : 'hover:bg-[var(--bg-surface)] text-text-muted hover:text-error'
                     }`}
                     title={isConfirmingDelete ? '再次点击确认删除' : '删除'}
                   >

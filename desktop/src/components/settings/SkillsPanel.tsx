@@ -61,7 +61,7 @@ export function SkillsPanel() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={24} className="animate-spin text-accent" />
+        <Loader2 size={24} className="animate-spin text-[var(--hermes-accent)]" />
       </div>
     );
   }
@@ -69,9 +69,9 @@ export function SkillsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-4">
-        <Zap size={20} className="text-accent" />
+        <Zap size={20} className="text-[var(--hermes-accent)]" />
         <h3 className="text-lg font-semibold text-text-primary">技能库</h3>
-        <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-0.5 rounded-full">
+        <span className="text-xs text-text-muted bg-[var(--bg-tertiary)] px-2 py-0.5 rounded-full">
           {skills.length} 个技能
         </span>
       </div>
@@ -88,7 +88,7 @@ export function SkillsPanel() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="搜索技能..."
-          className="w-full pl-10 pr-4 py-2 bg-bg-primary text-text-primary text-sm rounded-lg outline-none border border-border focus:border-accent transition-colors"
+          className="w-full pl-10 pr-4 py-2 bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors"
         />
       </div>
 
@@ -97,16 +97,16 @@ export function SkillsPanel() {
         {displaySkills.map((skill) => (
           <div
             key={skill.name}
-            className="p-3 rounded-lg border border-border hover:border-accent/50 transition-colors group"
+            className="p-3 rounded-lg border border-[var(--hermes-border)] hover:border-[var(--hermes-accent)]/50 transition-colors group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Zap size={14} className="text-accent" />
+                <Zap size={14} className="text-[var(--hermes-accent)]" />
                 <span className="text-sm font-medium text-text-primary">
                   {skill.name}
                 </span>
               </div>
-              <ChevronRight size={14} className="text-text-muted group-hover:text-accent transition-colors" />
+              <ChevronRight size={14} className="text-text-muted group-hover:text-[var(--hermes-accent)] transition-colors" />
             </div>
             <p className="text-xs text-text-muted mt-1 ml-6">
               {skill.description}
@@ -115,7 +115,7 @@ export function SkillsPanel() {
               {skill.triggers.slice(0, 5).map((trigger) => (
                 <span
                   key={trigger}
-                  className="px-2 py-0.5 text-xs bg-bg-tertiary text-text-secondary rounded"
+                  className="px-2 py-0.5 text-xs bg-[var(--bg-tertiary)] text-text-secondary rounded"
                 >
                   {trigger}
                 </span>
