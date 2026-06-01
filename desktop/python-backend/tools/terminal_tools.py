@@ -97,7 +97,9 @@ class TerminalTool(BaseTool):
             # Prefer pwsh (PowerShell 7) over Windows PowerShell
             shell = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
             # Force UTF-8 output encoding so CJK characters display correctly
+            # chcp 65001 sets the console code page to UTF-8 for external programs
             utf8_command = (
+                "chcp 65001 >$null; "
                 "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
                 "[Console]::InputEncoding  = [System.Text.Encoding]::UTF8; "
                 "$OutputEncoding = [System.Text.Encoding]::UTF8; "
@@ -132,6 +134,18 @@ class TerminalTool(BaseTool):
 
             out = stdout.decode("utf-8", errors="replace").strip()
             err = stderr.decode("utf-8", errors="replace").strip()
+
+            # GBK fallback: if UTF-8 decoding produced replacement chars, try GBK
+            if "\ufffd" in out and not out.startswith("(no output)"):
+                try:
+                    out = stdout.decode("gbk", errors="strict").strip()
+                except (UnicodeDecodeError, Exception):
+                    pass  # keep UTF-8 with replacements
+            if "\ufffd" in err:
+                try:
+                    err = stderr.decode("gbk", errors="strict").strip()
+                except (UnicodeDecodeError, Exception):
+                    pass
 
             result = ""
             if out:
