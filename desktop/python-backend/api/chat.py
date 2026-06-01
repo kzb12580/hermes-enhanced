@@ -387,13 +387,19 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                 if not name:
                     logger.warning("Dropping tool_call with missing function name: %s", tc)
                     continue
-                # Ensure arguments is a string
+                # Ensure arguments is a string and valid JSON
                 args = func.get("arguments", "{}")
                 if not isinstance(args, str):
                     try:
                         args = json.dumps(args, ensure_ascii=False)
                     except Exception:
                         args = "{}"
+                # Validate JSON — drop tool_calls with broken arguments
+                try:
+                    json.loads(args)
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
+                    continue
                 valid_calls.append({
                     "id": tc.get("id", f"call_{hash(name)}"),
                     "type": "function",
