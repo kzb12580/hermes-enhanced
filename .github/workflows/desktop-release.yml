@@ -59,6 +59,13 @@ jobs:
         working-directory: desktop
         run: npx electron-vite build
 
+      - name: Download VC++ Redistributable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop/buildResources/vcredist
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "desktop/buildResources/vcredist/vc_redist.x64.exe"
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
