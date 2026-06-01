@@ -741,3 +741,61 @@ async def repair_vision_deps():
         "summary": f"检测完成: {sum(1 for r in results if r['status'] in ('ok', 'fixed'))}/{len(results)} 项正常"
                    + (f"，自动修复了 {', '.join(auto_fixed)}" if auto_fixed else ""),
     }
+
+
+@router.get("/api/setup/gpu-status")
+async def gpu_status():
+    """检测 GPU 状态，决定是否显示视觉模型功能"""
+    import platform
+    
+    result = {
+        "has_nvidia_gpu": False,
+        "has_cuda": False,
+        "gpu_name": None,
+        "vram_gb": 0,
+        "cuda_version": None,
+        "show_vision_model": False,  # 前端根据这个决定是否显示
+    }
+    
+    # 检测 NVIDIA GPU
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10
+        )
+        if out.returncode == 0:
+            lines = out.stdout.strip().split("\n")
+            if lines:
+                parts = [p.strip() for p in lines[0].split(",")]
+                if len(parts) >= 3:
+                    result["has_nvidia_gpu"] = True
+                    result["gpu_name"] = parts[0]
+                    result["vram_gb"] = round(float(parts[2]) / 1024, 1)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    
+    # 检测 CUDA (PyTorch)
+    try:
+        import torch
+        if torch.cuda.is_available():
+            result["has_cuda"] = True
+            result["cuda_version"] = torch.version.cuda
+            if not result["gpu_name"]:
+                result["gpu_name"] = torch.cuda.get_device_name(0)
+            if result["vram_gb"] == 0:
+                props = torch.cuda.get_device_properties(0)
+                result["vram_gb"] = round(getattr(props, 'total_memory', getattr(props, 'total_mem', 0)) / (1024**3), 1)
+    except ImportError:
+        pass
+    
+    # 决定是否显示视觉模型功能
+    # 条件：有 NVIDIA GPU + 有 CUDA + VRAM >= 6GB
+    result["show_vision_model"] = (
+        result["has_nvidia_gpu"] and 
+        result["has_cuda"] and 
+        result["vram_gb"] >= 6.0
+    )
+    
+    return result

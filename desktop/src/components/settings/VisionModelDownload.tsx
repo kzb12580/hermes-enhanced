@@ -24,6 +24,8 @@ export function VisionModelDownload() {
   const [error, setError] = useState('');
   const [modelExists, setModelExists] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
+  const [gpuAvailable, setGpuAvailable] = useState<boolean | null>(null);
+  const [gpuInfo, setGpuInfo] = useState<any>(null);
 
   // 检测修复状态
   const [repairing, setRepairing] = useState(false);
@@ -32,11 +34,33 @@ export function VisionModelDownload() {
   const [repairDone, setRepairDone] = useState(false);
 
   useEffect(() => {
-    checkModel();
+    checkGpuAndModel();
   }, []);
 
-  const checkModel = async () => {
+  const checkGpuAndModel = async () => {
     setChecking(true);
+    try {
+      // 先检测 GPU
+      const gpuRes = await fetch(`${getBackendUrl()}/api/setup/gpu-status`);
+      if (gpuRes.ok) {
+        const gpuData = await gpuRes.json();
+        setGpuAvailable(gpuData.show_vision_model);
+        setGpuInfo(gpuData);
+        
+        // 如果有 GPU，再检查模型
+        if (gpuData.show_vision_model) {
+          await checkModel();
+        }
+      } else {
+        setGpuAvailable(false);
+      }
+    } catch {
+      setGpuAvailable(false);
+    }
+    setChecking(false);
+  };
+
+  const checkModel = async () => {
     try {
       const res = await fetch(`${getBackendUrl()}/api/setup/model-status`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -46,7 +70,6 @@ export function VisionModelDownload() {
     } catch {
       setModelExists(false);
     }
-    setChecking(false);
   };
 
   const startDownload = async () => {
@@ -142,7 +165,31 @@ export function VisionModelDownload() {
     return (
       <div className="flex items-center gap-2 text-text-muted text-sm py-4">
         <Loader2 size={14} className="animate-spin" />
-        检查模型状态...
+        检测 GPU 和模型状态...
+      </div>
+    );
+  }
+
+  // 没有 NVIDIA GPU 或 CUDA，不显示视觉模型功能
+  if (gpuAvailable === false) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <HardDrive size={16} className="text-[var(--hermes-accent)]" />
+          <h3 className="text-sm font-medium text-text-primary">视觉模型（可选）</h3>
+        </div>
+        <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--hermes-border)]">
+          <p className="text-xs text-text-muted">
+            视觉模型需要 NVIDIA GPU（≥6GB 显存）和 CUDA 支持。
+          </p>
+          {gpuInfo && (
+            <div className="mt-2 text-xs text-text-muted">
+              <p>GPU: {gpuInfo.has_nvidia_gpu ? gpuInfo.gpu_name : '未检测到'}</p>
+              <p>CUDA: {gpuInfo.has_cuda ? gpuInfo.cuda_version : '未安装'}</p>
+              <p>显存: {gpuInfo.vram_gb > 0 ? `${gpuInfo.vram_gb}GB` : 'N/A'}</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -158,6 +205,11 @@ export function VisionModelDownload() {
         LocateAnything-3B (~6GB) 用于屏幕元素识别和 GUI 自动化。
         如果只需要聊天和办公功能，可以不下载。
       </p>
+      {gpuInfo && (
+        <div className="text-xs text-success">
+          ✓ {gpuInfo.gpu_name} ({gpuInfo.vram_gb}GB) | CUDA {gpuInfo.cuda_version}
+        </div>
+      )}
 
       {/* Model status */}
       {modelExists ? (
