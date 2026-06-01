@@ -311,6 +311,60 @@ def _compress_session_tools(session: dict, keep_recent: int = 6):
         logger.info("Compressed %d old tool results in session", compress_count)
 
 
+# ── ContextCompressorV2 集成 ────────────────────────────────────────────
+from context_compressor_v2 import ContextCompressorV2, CompressedMessages
+
+# 全局压缩器实例（按 context_window 动态创建）
+_compressors: dict[int, ContextCompressorV2] = {}
+
+def _get_compressor(context_window: int) -> ContextCompressorV2:
+    """获取或创建对应 context_window 的压缩器实例"""
+    if context_window not in _compressors:
+        # 平衡模式：75% 压力阈值，保留最近 5 轮工具结果
+        _compressors[context_window] = ContextCompressorV2(
+            model_token_limit=context_window,
+            profile="balanced"
+        )
+    return _compressors[context_window]
+
+
+def _smart_compress_session(session: dict, context_window: int) -> None:
+    """使用 ContextCompressorV2 智能压缩会话。
+    
+    替代原有的简单 _compress_session_tools，增加：
+    - 压力监控：实时追踪上下文占用比例
+    - 三级压缩：micro → reactive → full
+    - 自动选择：根据压力自动选最轻量的级别
+    """
+    messages = session.get("messages", [])
+    if not messages or len(messages) < 4:
+        return
+    
+    compressor = _get_compressor(context_window)
+    
+    # 检查是否需要压缩
+    should, reason = compressor.should_compress(messages)
+    if not should:
+        return
+    
+    # 自动选择压缩级别执行
+    result: CompressedMessages = compressor.compress(messages, level="auto")
+    
+    if result.compressed_tokens < result.original_tokens:
+        # 压缩有效，回写会话
+        session["messages"] = result.messages
+        stats = compressor.get_stats()
+        logger.info(
+            "ContextCompressorV2: %s 压缩，%d → %d tokens (比率 %.1f%%，节省 %d tokens，累计 %d 次压缩)",
+            result.level_used,
+            result.original_tokens,
+            result.compressed_tokens,
+            result.ratio * 100,
+            result.original_tokens - result.compressed_tokens,
+            stats["compressions_count"],
+        )
+
+
 import re as _re
 
 
@@ -823,8 +877,8 @@ async def chat(message: ChatMessage):
             # Save session
             session_manager._save()
 
-            # ── Compress old tool results in session to prevent context bloat ──
-            _compress_session_tools(session)
+            # ── 使用 ContextCompressorV2 智能压缩会话 ──
+            _smart_compress_session(session, locals().get('context_window', 128000))
             
             # Send done event
             yield "event: done\ndata: \n\n"
