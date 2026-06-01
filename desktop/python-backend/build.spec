@@ -22,6 +22,9 @@ a = Analysis(
         (str(_spec_dir / "tools"), "tools"),
     ],
     hiddenimports=[
+        # context compressor
+        "context_compressor_v2",
+        "token_utils",
         # uvicorn
         "uvicorn.logging",
         "uvicorn.loops",
