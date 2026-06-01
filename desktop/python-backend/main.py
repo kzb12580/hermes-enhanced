@@ -37,11 +37,24 @@ from api.workflow import router as workflow_router
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+import os
+from pathlib import Path
+
+# 日志文件路径
+_log_dir = Path.home() / ".hermes" / "logs"
+_log_dir.mkdir(parents=True, exist_ok=True)
+_log_file = _log_dir / "desktop-backend.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    handlers=[
+        logging.FileHandler(_log_file, encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger("hermes-backend")
+logger.info("日志文件: %s", _log_file)
 
 # ---------------------------------------------------------------------------
 # CUDA PATH auto-detection — 启动时自动添加 CUDA 到 PATH
