@@ -43,6 +43,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger("hermes-backend")
 
+# ---------------------------------------------------------------------------
+# CUDA PATH auto-detection — 启动时自动添加 CUDA 到 PATH
+# ---------------------------------------------------------------------------
+def _setup_cuda_path():
+    """自动检测并添加 CUDA bin 目录到 PATH"""
+    import glob
+    import platform
+    
+    if platform.system() != "Windows":
+        return
+    
+    # 检查 PATH 中是否已有 CUDA
+    path_dirs = os.environ.get("PATH", "").split(";")
+    for d in path_dirs:
+        if "NVIDIA GPU Computing Toolkit" in d and "CUDA" in d:
+            # 已经在 PATH 中
+            return
+    
+    # 搜索常见 CUDA 安装路径
+    cuda_patterns = [
+        r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin",
+        r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\lib\x64",
+    ]
+    
+    cuda_bins = []
+    for pattern in cuda_patterns:
+        cuda_bins.extend(glob.glob(pattern))
+    
+    if cuda_bins:
+        # 按版本号排序，取最新版本
+        cuda_bins.sort(reverse=True)
+        new_path = ";".join(cuda_bins) + ";" + os.environ.get("PATH", "")
+        os.environ["PATH"] = new_path
+        logger.info(f"已添加 CUDA 到 PATH: {cuda_bins[0]}")
+
+# 启动时执行
+_setup_cuda_path()
+
 
 # ---------------------------------------------------------------------------
 # CLI argument parsing — only used when run directly
