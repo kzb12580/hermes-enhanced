@@ -408,13 +408,14 @@ def download_model(model_id: str = MODEL_ID, force: bool = False) -> bool:
                 else:
                     print(f"  ⚠️ huggingface-cli 失败: {result.stderr[:200]}")
 
-            # 方法2: snapshot_download (Python，支持断点续传)
+            # 方法2: snapshot_download (Python，强制重新下载)
             print("  使用 snapshot_download 下载...")
             from huggingface_hub import snapshot_download
+            # 使用 force_download=True 强制重新下载，避免缓存问题
             snapshot_download(
                 model_id,
                 local_dir=str(local_dir),
-                resume_download=True,
+                force_download=True,
             )
 
             # 验证完整性

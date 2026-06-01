@@ -289,15 +289,11 @@ async def _run_model_download(mirror: str):
     # 统一下载目录
     local_dir = Path.home() / ".cache" / "huggingface" / "hub" / MODEL_ID.replace("/", "--")
 
-    # 清理损坏的缓存（只有 refs 没有 blobs 的情况）
+    # 清理损坏的缓存（强制清理，避免残留文件导致跳过下载）
     if local_dir.exists():
-        blobs_dir = local_dir / "blobs"
-        snapshots_dir = local_dir / "snapshots"
-        has_safetensors = any(local_dir.rglob("*.safetensors"))
-        if not has_safetensors:
-            _emit("model", 2, "清理损坏的缓存目录...")
-            import shutil
-            shutil.rmtree(local_dir, ignore_errors=True)
+        _emit("model", 2, "清理旧缓存目录...")
+        import shutil
+        shutil.rmtree(local_dir, ignore_errors=True)
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -306,10 +302,12 @@ async def _run_model_download(mirror: str):
             def do_download():
                 from huggingface_hub import snapshot_download
 
+                # 使用 force_download=True 强制重新下载，避免缓存问题
+                # resume_download=True 在某些情况下会跳过下载
                 snapshot_download(
                     MODEL_ID,
                     local_dir=str(local_dir),
-                    resume_download=True,
+                    force_download=True,
                     etag_timeout=60,
                 )
 
