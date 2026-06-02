@@ -373,10 +373,13 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
     
     Common issues:
     - tool_calls with missing function name
-    - tool_calls with empty arguments
+    - tool_calls with empty/invalid JSON arguments
     - assistant messages with tool_calls but no content (need None, not "")
+    - orphaned tool result messages after tool_call removal
     """
     result = []
+    valid_tool_call_ids: set[str] = set()
+    
     for msg in messages:
         if msg.get("role") == "assistant" and msg.get("tool_calls"):
             # Validate each tool_call
@@ -400,11 +403,13 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                 except (json.JSONDecodeError, ValueError) as e:
                     logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
                     continue
+                tc_id = tc.get("id", f"call_{hash(name)}")
                 valid_calls.append({
-                    "id": tc.get("id", f"call_{hash(name)}"),
+                    "id": tc_id,
                     "type": "function",
                     "function": {"name": name, "arguments": args},
                 })
+                valid_tool_call_ids.add(tc_id)
             if valid_calls:
                 clean_msg = {"role": "assistant", "content": msg.get("content") or None, "tool_calls": valid_calls}
             else:
@@ -412,11 +417,12 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                 clean_msg = {"role": "assistant", "content": msg.get("content") or "(tool calls removed)"}
             result.append(clean_msg)
         elif msg.get("role") == "tool":
-            # Ensure tool messages have required fields
-            if msg.get("tool_call_id") and msg.get("content") is not None:
+            # Only keep tool results that match a surviving tool_call
+            tc_id = msg.get("tool_call_id", "")
+            if tc_id and msg.get("content") is not None and tc_id in valid_tool_call_ids:
                 result.append(msg)
             else:
-                logger.warning("Dropping malformed tool message: %s", list(msg.keys()))
+                logger.warning("Dropping orphaned/malformed tool message: id=%s", tc_id[:20] if tc_id else "none")
         else:
             result.append(msg)
     return result
