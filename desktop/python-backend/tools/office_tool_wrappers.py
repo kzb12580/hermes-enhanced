@@ -63,7 +63,7 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="edit_word",
-        description="编辑已有Word文档。支持插入、替换、删除段落等操作。",
+        description="编辑已有Word文档。支持插入、替换、删除段落等操作。⚠️ 批量操作（如插入10+图片）请改用execute_code写Python脚本，避免参数过大截断。",
         fn=None,
         parameters={
             "type": "object",
@@ -146,7 +146,7 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="create_excel",
-        description="创建Excel表格。支持多工作表、表头、数据。",
+        description="创建Excel表格。支持多工作表、表头、数据。⚠️ 大量数据（>100行）请改用execute_code写Python脚本。",
         fn=None,
         parameters={
             "type": "object",
@@ -185,7 +185,7 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="edit_excel",
-        description="编辑已有Excel文件。支持设置单元格、添加公式、图表、格式化等操作。",
+        description="编辑已有Excel文件。支持设置单元格、添加公式、图表、格式化等操作。⚠️ 批量操作（>10个）请改用execute_code写Python脚本。",
         fn=None,
         parameters={
             "type": "object",

@@ -79,6 +79,37 @@ When all tasks complete:
 6. **Handle errors** — If something fails, try 2-3 alternatives before giving up. Don't just report the error.
 7. **Compress when possible** — For long outputs, summarize key findings. Don't dump raw data.
 
+## ⚠️ LARGE DATA HANDLING (CRITICAL)
+
+When working with large files, many items, or complex documents, NEVER put all data in tool call arguments. This causes output truncation and API errors.
+
+### Rules:
+1. **>5 pages/slides** → Use `create_ppt_from_script` (Python script), NOT `create_ppt` (JSON)
+2. **Insert many images** → Use `write_file` to write a Python script, then `execute_command` to run it
+3. **Large data processing** → Use `execute_code` tool to write and run Python scripts
+4. **Batch file operations** → Write a script that loops through files, don't make 100 separate tool calls
+5. **Reading large files** → Read in chunks (offset/limit), don't read entire 100MB files
+
+### Pattern for large operations:
+```
+Step 1: write_file("batch_insert_images.py", script_content)
+Step 2: execute_command("python batch_insert_images.py")
+Step 3: verify_file(output_path)
+```
+
+### What NOT to do:
+❌ create_ppt with 20 slides as JSON (10-20KB arguments → truncation)
+❌ edit_word with 100 insert_image operations in one call
+❌ create_excel with 10,000 rows inline
+❌ read_file on a 50MB file
+
+### What TO do:
+✅ Write a Python script → execute it → verify output
+✅ Use glob patterns to find files, not listing them one by one
+✅ Process in batches (e.g., 10 images per script run)
+✅ Report progress: "Processing images 1-10/100..."
+
+
 ## AVAILABLE TOOLS
 ### File Operations
 - read_file — Read file contents with line numbers
@@ -612,8 +643,22 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
     results = []
     for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
         tool_name = tool_call["function"]["name"]
+        args_str = tool_call["function"]["arguments"]
+        
+        # Check for oversized tool arguments — likely truncated, will cause errors
+        if len(args_str) > 15_000:  # 15KB threshold
+            logger.warning("Tool %s has oversized arguments (%d chars), likely truncated", tool_name, len(args_str))
+            results.append({
+                "role": "tool",
+                "tool_call_id": tool_call.get("id", ""),
+                "content": f"Error: Tool arguments too large ({len(args_str)} chars). "
+                           f"Use a Python script instead: write_file('script.py', code) then execute_command('python script.py'). "
+                           f"Do NOT put large data in tool call arguments.",
+            })
+            continue
+        
         try:
-            tool_args = json.loads(tool_call["function"]["arguments"])
+            tool_args = json.loads(args_str)
         except (json.JSONDecodeError, KeyError) as e:
             logger.error("Failed to parse tool arguments: %s", e)
             results.append({
