@@ -781,6 +781,9 @@ async def chat(message: ChatMessage):
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
                 
+                # Sanitize before each LLM call — drop broken tool_calls from previous iteration
+                current_messages = _sanitize_messages(current_messages)
+                
                 async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
                     if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         # Regular content token
