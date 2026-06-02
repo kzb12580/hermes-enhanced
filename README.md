@@ -195,4 +195,88 @@ MIT License
 
 ---
 
+## 📦 Hermes 增强模块（CLI 版）
+
+桌面版之外，本仓库还包含 **Hermes2 增强模块**，可注入到 Hermes Agent CLI 中，获得更强的 Agent 能力。
+
+### 12 大增强模块
+
+| 模块 | 功能 | 性能 |
+|------|------|------|
+| ToolOrchestrator | 8路并发，文件冲突检测 | 分批 <100μs |
+| ToolResultManager | SHA256去重+智能截断+磁盘缓存 | 去重 ~1μs |
+| ContextCompressorV2 | 三级压缩(微/反应/全量) | 微压缩 <1ms |
+| MemorySystem | TF-IDF四类记忆+持久化 | 搜索 <5ms |
+| HookPipeline ×4 | 记忆提取/用量追踪/提示建议/上下文健康 | — |
+| AutoDream | 后台自省巩固记忆(5次会话触发) | — |
+| SmartRetryManager | 断路器+指数退避+错误分类 | — |
+| PermissionPipeline | 三层权限+危险命令检测(30+模式) | 检查 <50μs |
+| AsyncPipeline | 异步流式管线架构 | — |
+| Coordinator | 多智能体计划-分配-执行-审核 | — |
+| MCPTransport | STDIO/SSE/HTTP/WS四种传输 | — |
+| TokenUtils | 统一token估算和内容提取 | 估算 <1μs |
+
+### 安装（CLI 版）
+
+```bash
+# 前置条件：Hermes Agent 已安装
+pip install hermes-agent
+
+# 克隆仓库
+git clone https://github.com/kzb12580/hermes-enhanced.git
+cd hermes-enhanced
+
+# 复制 hermes2 模块到 Hermes Agent
+cp -r iteration/hermes_upgrades /usr/local/lib/hermes-agent/agent/hermes2/
+
+# 重启 Hermes 网关
+hermes gateway restart
+```
+
+### 集成架构
+
+通过 4 个微创注入点集成到 `run_agent.py`：
+
+```
+注入点 1: AIAgent.__init__ (line ~2500)
+  → 初始化 Hermes2Engine，启动 banner
+
+注入点 2: _execute_tool_calls (line ~10600)
+  → Hermes2 智能编排：分类→分批→去重截断→权限检查
+
+注入点 3: _execute_tool_calls 末尾
+  → 每轮工具执行后自动跑 Post-Turn Hooks
+
+注入点 4: run_conversation 返回前 (line ~15800)
+  → 后台 AutoDream 记忆巩固检查
+```
+
+**回退方式：** 注释掉 `_hermes2_enabled = True` 即可回退到纯原生模式。
+
+### 与 Claude Code 对比
+
+| 维度 | Claude Code | Hermes 增强版 |
+|------|------------|------------|
+| 语言 | TypeScript | Python |
+| Agent循环 | AsyncGenerator流水线 | 同步+异步混合 |
+| 工具系统 | 工厂模式+并发分区 | ToolOrchestrator 8路并发 |
+| 权限 | 7层管线 | PermissionPipeline 3层 |
+| 压缩 | 5层自适应 | ContextCompressorV2 3级 |
+| MCP | 6种传输 | MCPTransport 4种 |
+| 记忆 | 双系统+后台提取 | MemorySystem + AutoDream |
+| 多Agent | Coordinator模式 | Coordinator 计划-分配-执行-审核 |
+
+### 测试状态
+
+| 指标 | 数值 |
+|------|------|
+| 增强模块 | 12 个 |
+| 单元测试 | 980/980 ✅ |
+| 集成测试 | 33/33 ✅ |
+| 外部依赖 | 0（纯 Python stdlib） |
+| BUG 修复 | 67 处 |
+
+---
+
 **Hermes Desktop** — 让 AI 成为你的桌面助手
+**Hermes 增强版** — Claude Code 架构精华移植到 Hermes Agent
