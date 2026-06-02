@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput } from 'lucide-react';
+import { X, Settings2, Cpu, Key, Info, Thermometer, Hash, Globe, Keyboard, Mail, Zap, Copy, Scissors, ClipboardPaste, TextCursorInput, Folder } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ModelConfig } from './ModelConfig';
@@ -243,6 +243,31 @@ function GeneralSettings() {
     openLinksInExternalBrowser, updateSettings,
   } = useSettingsStore();
 
+  // Workspace path — stored in Electron store, not Zustand
+  const [workspacePath, setWorkspacePath] = useState('');
+  useEffect(() => {
+    const api = (window as any).api;
+    if (api?.settings?.get) {
+      api.settings.get('workspacePath').then((v: string) => setWorkspacePath(v || ''));
+    }
+  }, []);
+
+  const handleWorkspaceChange = (value: string) => {
+    setWorkspacePath(value);
+    const api = (window as any).api;
+    if (api?.settings?.set) {
+      api.settings.set('workspacePath', value);
+    }
+  };
+
+  const handleBrowseFolder = async () => {
+    const api = (window as any).api;
+    if (api?.dialog?.selectFolder) {
+      const result = await api.dialog.selectFolder();
+      if (result) handleWorkspaceChange(result);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h3 className="text-base font-semibold text-text-primary">通用设置</h3>
@@ -259,6 +284,30 @@ function GeneralSettings() {
           onChange={(e) => updateSettings({ backendUrl: e.target.value })}
           className="w-full bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
         />
+      </div>
+
+      {/* Workspace Path */}
+      <div>
+        <label className="flex items-center gap-1.5 text-sm font-medium text-text-secondary mb-2">
+          <Folder size={14} />
+          工作区目录
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={workspacePath}
+            onChange={(e) => handleWorkspaceChange(e.target.value)}
+            placeholder="留空则默认使用桌面"
+            className="flex-1 bg-[var(--bg-primary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
+          />
+          <button
+            onClick={handleBrowseFolder}
+            className="px-3 py-2 rounded-lg text-sm border border-[var(--hermes-border)] text-text-secondary hover:border-[var(--hermes-accent)] transition-colors"
+          >
+            浏览
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-1">AI 的文件操作默认在此目录下进行。重启后端后生效。</p>
       </div>
 
       {/* Send shortcut */}

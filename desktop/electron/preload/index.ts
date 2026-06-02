@@ -132,10 +132,11 @@ const api = {
       type?: 'info' | 'warning' | 'error' | 'question'
       title?: string
       message: string
-      detail?: string
       buttons?: string[]
-    }): Promise<{ response: number; checkboxChecked: boolean }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHOW_MESSAGE_BOX, options)
+    }): Promise<{ response: number }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHOW_MESSAGE_BOX, options),
+    selectFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:select-folder'),
   },
 
   // ==================== Shell ====================

@@ -317,6 +317,15 @@ function registerIPCHandlers(): void {
     return dialog.showMessageBox(options)
   })
 
+  // ---------- 文件夹选择 ----------
+  ipcMain.handle('dialog:select-folder', async () => {
+    const win = getMainWindow()
+    const result = win && !win.isDestroyed()
+      ? await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+      : await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
   // ---------- Shell ----------
   ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL_URL, (_event, url: string) => {
     if (!isAllowedUrl(url)) {
