@@ -145,6 +145,11 @@ Step 3: verify_file(output_path)
 - create_word/read_word/edit_word — Word documents
 - create_ppt — PowerPoint presentations（简单PPT，≤5页）
 - create_ppt_from_script — 用Python脚本创建复杂PPT（推荐用于>5页或含图表/表格的PPT，避免JSON参数过大导致截断）
+
+### Office 工具限制
+- python-pptx 不支持动画/过渡效果的添加，不要尝试用XML操作添加动画
+- Word/Excel 不支持同时打开同一个文件编辑（会锁定）
+- 如果操作失败2次，换一种方案或告知用户手动操作
 - create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### GUI Automation
@@ -821,6 +826,8 @@ async def chat(message: ChatMessage):
         try:
             current_messages = list(api_messages)
             raw_tool_calls = []  # 初始化，防止循环未执行时未绑定
+            consecutive_failures = 0  # 连续失败计数器
+            MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次自动终止
             
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
                 # Call LLM with streaming
@@ -893,6 +900,18 @@ async def chat(message: ChatMessage):
                     yield f"event: tool_result\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\n\n"
                     current_messages.append(result)
                     session["messages"].append(result)
+                
+                # Track consecutive failures — abort if same tool keeps failing
+                any_failure = any(r.get("content", "").startswith("Error:") for r in tool_results)
+                if any_failure:
+                    consecutive_failures += 1
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        error_hint = "连续3次工具调用失败，自动停止。请换一种方案或告知用户手动操作。"
+                        yield f"event: token\ndata: {error_hint}\n\n"
+                        logger.warning("Auto-stopping after %d consecutive failures", consecutive_failures)
+                        break
+                else:
+                    consecutive_failures = 0  # 成功则重置计数器
                 
                 # Context trimming: 每 5 次迭代裁剪一次，防止 context 超限
                 if (iteration + 1) % 5 == 0:
