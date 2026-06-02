@@ -112,7 +112,8 @@ When all tasks complete:
 
 ### Office
 - create_word/read_word/edit_word — Word documents
-- create_ppt — PowerPoint presentations
+- create_ppt — PowerPoint presentations（简单PPT，≤5页）
+- create_ppt_from_script — 用Python脚本创建复杂PPT（推荐用于>5页或含图表/表格的PPT，避免JSON参数过大导致截断）
 - create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### GUI Automation
@@ -183,7 +184,7 @@ def get_model_context_config(model: str) -> tuple[int, int]:
     """Get context window and max response tokens for a model."""
     model_lower = model.lower()
     if "mimo" in model_lower:
-        return 1_000_000, 32_000
+        return 1_000_000, 128_000  # max_tokens 拉满，防止大工具调用截断
     if "claude" in model_lower:
         return 200_000, 4096
     if "gpt-4" in model_lower:

@@ -711,11 +711,62 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
 # 工具注册
 # ═══════════════════════════════════════════════════════════════════════════
 
+def create_ppt_from_script(path: str, script: str) -> dict:
+    """
+    用 Python 脚本创建 PPT。脚本中 python-pptx 已预导入，只需构建并保存到 path。
+    
+    脚本中可用的变量:
+      - path: 保存路径（已自动设置）
+      - Presentation, Inches, Pt, Emu, RGBColor, PP_ALIGN, MSO_ANCHOR
+      - XL_CHART_TYPE, XL_LEGEND_POSITION, CategoryChartData
+    
+    示例脚本:
+      prs = Presentation()
+      prs.slide_width = Inches(13.333)
+      prs.slide_height = Inches(7.5)
+      slide = prs.slides.add_slide(prs.slide_layouts[0])
+      slide.shapes.title.text = "Hello"
+      prs.save(path)
+    """
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt, Emu
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+        from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+        from pptx.chart.data import CategoryChartData
+        
+        path = _safe_path(path)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        
+        # Execute script with pptx imports available
+        local_vars = {
+            "path": path,
+            "Presentation": Presentation,
+            "Inches": Inches, "Pt": Pt, "Emu": Emu,
+            "RGBColor": RGBColor,
+            "PP_ALIGN": PP_ALIGN, "MSO_ANCHOR": MSO_ANCHOR,
+            "XL_CHART_TYPE": XL_CHART_TYPE, "XL_LEGEND_POSITION": XL_LEGEND_POSITION,
+            "CategoryChartData": CategoryChartData,
+            "os": os,
+        }
+        exec(script, {"__builtins__": __builtins__}, local_vars)
+        
+        if not os.path.exists(path):
+            return {"error": "Script did not save file to expected path", "success": False}
+        
+        return {"path": path, "success": True}
+    except Exception as e:
+        _log.error("create_ppt_from_script failed: %s", e, exc_info=True)
+        return {"error": str(e), "success": False}
+
+
 OFFICE_TOOLS = {
     "create_word": {"fn": create_word, "concurrency": "write_serial", "description": "创建Word文档（支持模板/字体/行距）"},
     "edit_word": {"fn": edit_word, "concurrency": "write_serial", "description": "编辑Word文档"},
     "read_word": {"fn": read_word, "concurrency": "read_parallel", "description": "读取Word文档内容"},
     "create_ppt": {"fn": create_ppt, "concurrency": "write_serial", "description": "创建PPT（支持图表/主题/模板）"},
+    "create_ppt_from_script": {"fn": create_ppt_from_script, "concurrency": "write_serial", "description": "用Python脚本创建PPT（适合复杂/多页PPT）"},
     "create_excel": {"fn": create_excel, "concurrency": "write_serial", "description": "创建Excel表格"},
     "read_excel": {"fn": read_excel, "concurrency": "read_parallel", "description": "读取Excel文件"},
     "edit_excel": {"fn": edit_excel, "concurrency": "write_serial", "description": "编辑Excel（图表/公式/格式）"},

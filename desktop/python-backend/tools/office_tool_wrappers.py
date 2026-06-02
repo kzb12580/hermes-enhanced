@@ -132,6 +132,19 @@ OFFICE_TOOL_DEFINITIONS = [
         },
     ),
     OfficeToolWrapper(
+        name="create_ppt_from_script",
+        description="用Python脚本创建PPT。适合复杂/多页PPT（避免JSON参数过大导致截断）。脚本中python-pptx已预导入，可直接使用Presentation/Pt/Inches/RGBColor等。必须调用prs.save(path)保存。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "保存路径，如 /tmp/slides.pptx"},
+                "script": {"type": "string", "description": "Python脚本，使用python-pptx构建PPT。可用变量: path, Presentation, Inches, Pt, Emu, RGBColor, PP_ALIGN, MSO_ANCHOR, XL_CHART_TYPE, XL_LEGEND_POSITION, CategoryChartData, os"},
+            },
+            "required": ["path", "script"],
+        },
+    ),
+    OfficeToolWrapper(
         name="create_excel",
         description="创建Excel表格。支持多工作表、表头、数据。",
         fn=None,
