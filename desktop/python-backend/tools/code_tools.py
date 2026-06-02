@@ -37,10 +37,15 @@ class ExecuteCodeTool(BaseTool):
             script_path = f.name
 
         try:
-            is_windows = __import__("platform").system() == "Windows"
+            is_windows = os.name == 'nt'
             python = "python" if is_windows else "python3"
 
+            # Priority: explicit workdir > HERMES_WORKSPACE env > None
             cwd = workdir if workdir and os.path.isdir(workdir) else None
+            if not cwd:
+                ws = os.environ.get("HERMES_WORKSPACE", "").strip()
+                if ws and os.path.isdir(ws):
+                    cwd = ws
 
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"

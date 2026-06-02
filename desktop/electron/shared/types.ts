@@ -110,6 +110,9 @@ export interface AppSettings {
   closeToTray: boolean
   autoStart: boolean
 
+  // 工作区
+  workspacePath: string  // 默认工作区目录，所有工具的默认 workdir
+
   // Python 后端设置
   pythonPort: number
   pythonAutoStart: boolean
@@ -129,6 +132,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startMinimized: false,
   closeToTray: true,
   autoStart: false,
+  workspacePath: '',  // 空=用户桌面
   pythonPort: 9876,
   pythonAutoStart: true,
   pythonMaxRestarts: 3,

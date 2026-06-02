@@ -110,6 +110,10 @@ class TerminalTool(BaseTool):
             shell_cmd = ["bash", "-c", command]
 
         cwd = workdir if workdir and os.path.isdir(workdir) else None
+        if not cwd:
+            ws = os.environ.get("HERMES_WORKSPACE", "").strip()
+            if ws and os.path.isdir(ws):
+                cwd = ws
 
         # Windows subprocess flags
         kwargs_subprocess: dict = {}

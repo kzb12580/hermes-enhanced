@@ -62,6 +62,10 @@ class SettingsStore {
         openLinksInExternalBrowser: {
           type: 'boolean',
           default: true
+        },
+        workspacePath: {
+          type: 'string',
+          default: ''
         }
       }
     })

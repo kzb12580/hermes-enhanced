@@ -515,17 +515,29 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
     return calls
 
 
-def build_system_prompt(custom_prompt: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
+def build_system_prompt(custom_prompt=None, active_skills=None):
     """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
     skills_ctx = skill_manager.get_skills_context(active_skills=active_skills)
     tools_desc = build_tools_description(openai_tools())
+    
+    # Workspace context
+    workspace = os.environ.get("HERMES_WORKSPACE", "").strip()
+    workspace_ctx = ""
+    if workspace and os.path.isdir(workspace):
+        workspace_ctx = f"\n## 工作区\n当前工作区目录: {workspace}\n所有文件操作默认在此目录下进行。用户说\"桌面\"时指此目录。\n"
+    else:
+        # Default to user's Desktop
+        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+        if os.path.isdir(desktop):
+            workspace_ctx = f"\n## 工作区\n当前工作区目录: {desktop}\n所有文件操作默认在此目录下进行。\n"
     
     return _build_system_prompt(
         custom_prompt=custom_prompt,
         memory_context=memory_ctx,
         skills_context=skills_ctx,
         tools_description=tools_desc,
+        extra_context=workspace_ctx,
     )
 
 

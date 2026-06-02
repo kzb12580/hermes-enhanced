@@ -10,6 +10,7 @@ def build_system_prompt(
     memory_context: str = "",
     skills_context: str = "",
     tools_description: str = "",
+    extra_context: str = "",
 ) -> str:
     """Build a comprehensive system prompt with all context."""
     
@@ -246,6 +247,10 @@ Use this context to provide better, more relevant responses."""
     # Add custom prompt if provided
     if custom_prompt:
         base_prompt += f"\n\n## USER CUSTOM INSTRUCTIONS\n{custom_prompt}"
+
+    # Add extra context if provided (e.g., workspace info)
+    if extra_context:
+        base_prompt += f"\n{extra_context}"
 
     return base_prompt
 

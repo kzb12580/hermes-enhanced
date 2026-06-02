@@ -485,6 +485,7 @@ export class PythonManager {
         HERMES_PORT: String(this.options.port),
         HERMES_HOST: this.options.host,
         HERMES_LOG_LEVEL: settingsStore.get('logLevel'),
+        HERMES_WORKSPACE: settingsStore.get('workspacePath') || '',
         PYTHONUNBUFFERED: '1'
       }),
       windowsHide: true,
