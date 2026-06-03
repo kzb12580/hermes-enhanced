@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SessionList } from './SessionList';
 import { useChatStore } from '../../stores/chatStore';
 import { useSystemStore } from '../../stores/systemStore';
@@ -6,11 +6,78 @@ import {
   Plus,
   Settings,
   MessageSquare,
+  Clock,
+  Compass,
+  Building,
+  Layers,
+  KeyRound,
+  Brain,
+  Wrench,
+  Timer,
+  Kanban,
+  Signal,
+  Mail,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
-export function Sidebar() {
+type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'settings';
+
+interface NavItem {
+  view: View;
+  icon: React.ElementType;
+  label: string;
+  group: 'main' | 'data' | 'system';
+}
+
+const NAV_ITEMS: NavItem[] = [
+  // 主要功能
+  { view: 'chat', icon: MessageSquare, label: '对话', group: 'main' },
+  { view: 'sessions', icon: Clock, label: '历史会话', group: 'main' },
+  { view: 'discover', icon: Compass, label: '发现', group: 'main' },
+  { view: 'office', icon: Building, label: '办公', group: 'main' },
+  { view: 'kanban', icon: Kanban, label: '看板', group: 'main' },
+  { view: 'email', icon: Mail, label: '邮件', group: 'main' },
+  // 数据管理
+  { view: 'models', icon: Layers, label: '模型', group: 'data' },
+  { view: 'providers', icon: KeyRound, label: '提供商', group: 'data' },
+  { view: 'memory', icon: Brain, label: '记忆', group: 'data' },
+  { view: 'tools', icon: Wrench, label: '工具', group: 'data' },
+  // 系统功能
+  { view: 'schedules', icon: Timer, label: '定时任务', group: 'system' },
+  { view: 'gateway', icon: Signal, label: '网关', group: 'system' },
+  { view: 'settings', icon: Settings, label: '设置', group: 'system' },
+];
+
+interface SidebarProps {
+  currentView: View;
+  onViewChange: (view: View) => void;
+}
+
+export function Sidebar({ currentView, onViewChange }: SidebarProps) {
   const { createSession, sessions } = useChatStore();
-  const { toggleSettings, sidebarCollapsed } = useSystemStore();
+  const { sidebarCollapsed } = useSystemStore();
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    main: true,
+    data: true,
+    system: true,
+  });
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
+  const groupedItems = NAV_ITEMS.reduce((acc, item) => {
+    if (!acc[item.group]) acc[item.group] = [];
+    acc[item.group].push(item);
+    return acc;
+  }, {} as Record<string, NavItem[]>);
+
+  const groupLabels: Record<string, string> = {
+    main: '主要功能',
+    data: '数据管理',
+    system: '系统功能',
+  };
 
   return (
     <div className={`flex flex-col h-full bg-[var(--bg-secondary)] border-r border-[var(--hermes-border)] ${sidebarCollapsed ? 'w-16' : 'w-full'}`}>
@@ -19,14 +86,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2">
           <MessageSquare size={18} className="text-[var(--hermes-accent)]" />
           {!sidebarCollapsed && (
-            <>
-              <h2 className="text-sm font-semibold text-text-primary">对话</h2>
-              {sessions.length > 0 && (
-                <span className="text-xs text-text-muted bg-[var(--bg-surface)] px-1.5 py-0.5 rounded-full">
-                  {sessions.length}
-                </span>
-              )}
-            </>
+            <h2 className="text-sm font-semibold text-text-primary">Hermes Desktop</h2>
           )}
         </div>
       </div>
@@ -44,21 +104,63 @@ export function Sidebar() {
             </button>
           </div>
 
-          {/* Session list */}
-          <SessionList />
+          {/* Navigation groups */}
+          <div className="flex-1 overflow-y-auto px-2 py-2">
+            {Object.entries(groupedItems).map(([group, items]) => (
+              <div key={group} className="mb-2">
+                <button
+                  onClick={() => toggleGroup(group)}
+                  className="flex items-center gap-1 w-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
+                >
+                  {expandedGroups[group] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  {groupLabels[group]}
+                </button>
+                {expandedGroups[group] && (
+                  <div className="ml-1 space-y-0.5">
+                    {items.map(({ view, icon: Icon, label }) => (
+                      <button
+                        key={view}
+                        onClick={() => onViewChange(view)}
+                        className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all ${
+                          currentView === view
+                            ? 'bg-[var(--hermes-accent)] text-white shadow-sm'
+                            : 'text-text-secondary hover:bg-[var(--bg-surface)] hover:text-text-primary'
+                        }`}
+                      >
+                        <Icon size={16} />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Session list (only show when on chat view) */}
+          {currentView === 'chat' && <SessionList />}
         </>
       )}
 
-      {/* Footer */}
-      <div className="border-t border-[var(--hermes-border)] p-3 mt-auto">
-        <button
-          onClick={toggleSettings}
-          className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-[var(--bg-surface)] transition-colors text-sm ${sidebarCollapsed ? 'justify-center' : ''}`}
-        >
-          <Settings size={16} />
-          {!sidebarCollapsed && <span>设置</span>}
-        </button>
-      </div>
+      {/* Collapsed mode - icon only */}
+      {sidebarCollapsed && (
+        <div className="flex-1 overflow-y-auto py-2">
+          {NAV_ITEMS.map(({ view, icon: Icon, label }) => (
+            <button
+              key={view}
+              onClick={() => onViewChange(view)}
+              className={`flex items-center justify-center w-full py-3 transition-colors ${
+                currentView === view
+                  ? 'text-[var(--hermes-accent)] bg-[var(--hermes-accent-subtle)]'
+                  : 'text-text-muted hover:text-text-primary'
+              }`}
+              title={label}
+            >
+              <Icon size={18} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
