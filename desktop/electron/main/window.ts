@@ -64,6 +64,27 @@ export function createMainWindow(): BrowserWindow {
 
   // Right-click context menu handled by React ContextMenu component
   // (see src/components/ui/ContextMenu.tsx)
+  // Also add native fallback for input fields not covered by React context menu
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const { Menu, MenuItem } = require('electron')
+    const menu = new Menu()
+
+    if (params.isEditable) {
+      if (params.selectionText) {
+        menu.append(new MenuItem({ label: '剪切', accelerator: 'CmdOrCtrl+X', role: 'cut' }))
+        menu.append(new MenuItem({ label: '复制', accelerator: 'CmdOrCtrl+C', role: 'copy' }))
+      }
+      menu.append(new MenuItem({ label: '粘贴', accelerator: 'CmdOrCtrl+V', role: 'paste' }))
+      menu.append(new MenuItem({ type: 'separator' }))
+      menu.append(new MenuItem({ label: '全选', accelerator: 'CmdOrCtrl+A', role: 'selectAll' }))
+    } else if (params.selectionText) {
+      menu.append(new MenuItem({ label: '复制', accelerator: 'CmdOrCtrl+C', role: 'copy' }))
+    }
+
+    if (menu.items.length > 0) {
+      menu.popup({ window: mainWindow })
+    }
+  })
 
   // 处理新窗口打开请求（在默认浏览器中打开）
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
