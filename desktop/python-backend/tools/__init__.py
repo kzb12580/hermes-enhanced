@@ -109,7 +109,6 @@ def _auto_register():
         "edit_word": office_tools.edit_word,
         "read_word": office_tools.read_word,
         "create_ppt": office_tools.create_ppt,
-        "create_ppt_from_script": office_tools.create_ppt_from_script,
         "create_excel": office_tools.create_excel,
         "read_excel": office_tools.read_excel,
         "edit_excel": office_tools.edit_excel,
