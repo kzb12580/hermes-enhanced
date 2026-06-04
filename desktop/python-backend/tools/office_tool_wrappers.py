@@ -109,6 +109,7 @@ OFFICE_TOOL_DEFINITIONS = [
                 "layout": {"type": "string", "description": "幻灯片布局: 16x9 / 16x10 / 4x3 / wide", "default": "16x9"},
                 "title": {"type": "string", "description": "演示文稿标题（可选）"},
                 "author": {"type": "string", "description": "作者（可选）"},
+                "slides_file": {"type": "string", "description": "slides JSON文件路径（推荐>5页PPT使用，避免截断）。先write_file保存JSON，再传此参数"},
                 "slides": {
                     "type": "array",
                     "description": "幻灯片列表",

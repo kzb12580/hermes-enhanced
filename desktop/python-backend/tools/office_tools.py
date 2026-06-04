@@ -222,28 +222,33 @@ def read_word(path: str) -> dict:
 
 
 def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16x9",
-               title: str = "", author: str = "") -> dict:
+               title: str = "", author: str = "", slides_file: str = "") -> dict:
     """
     创建 PPT 演示文稿（基于 PptxGenJS，支持动画/过渡/阴影/透明度）
 
     参数:
       - path: 输出文件路径
-      - slides: 幻灯片数组
+      - slides: 幻灯片数组（简单PPT直接传，复杂PPT用slides_file）
+      - slides_file: 幻灯片JSON文件路径（避免大JSON截断，推荐>5页时使用）
       - layout: 布局 (16x9 / 16x10 / 4x3 / wide)
       - title: 演示文稿标题
       - author: 作者
 
+    ⚠️ 重要：>5页PPT请用 slides_file 方式避免截断！
+    步骤：1) write_file("slides.json", JSON数组) → 2) create_ppt(path, slides_file="slides.json")
+
     每个 slide 的结构:
       {
-        "background": {"color": "1E2761"},           # 可选
-        "transition": {"type": "fade", "duration": 1},  # 可选
+        "background": {"color": "1E2761"},
+        "transition": {"type": "fade", "duration": 1},
         "elements": [
-          {"type": "text", "text": "标题", "x": 1, "y": 1, "w": 8, "h": 2,
-           "fontSize": 36, "bold": true, "color": "FFFFFF", "align": "center"},
-          {"type": "shape", "shape": "rect", "x": 0, "y": 0, "w": 1, "h": 7.5,
-           "fill": {"color": "0D9488"}},
+          {"type": "text", "text": "标题", "x": 1, "y": 2, "w": 8, "h": 2,
+           "fontSize": 44, "bold": true, "color": "FFFFFF", "align": "center"},
+          {"type": "shape", "shape": "rect", "x": 0, "y": 6.5, "w": 13.333, "h": 1,
+           "fill": {"color": "065A82"}},
           {"type": "image", "path": "https://...", "x": 1, "y": 3, "w": 5, "h": 3},
-          {"type": "chart", "chartType": "bar", "data": [{...}],
+          {"type": "chart", "chartType": "bar",
+           "data": [{"name": "销量", "labels": ["Q1","Q2"], "values": [450,550]}],
            "x": 0.5, "y": 1, "w": 9, "h": 4},
           {"type": "table", "rows": [["H1","H2"],["c1","c2"]], "x": 1, "y": 1, "w": 8, "h": 2}
         ]
@@ -256,8 +261,19 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
     支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
     """
     try:
+        # slides_file 优先：从JSON文件读取slides（避免大JSON截断）
+        if slides_file:
+            sf = _safe_path(slides_file)
+            if not os.path.isfile(sf):
+                return {"error": f"slides_file 不存在: {sf}", "success": False}
+            try:
+                with open(sf, "r", encoding="utf-8-sig") as f:  # utf-8-sig 自动strip BOM
+                    slides = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                return {"error": f"slides_file 读取失败: {e}", "success": False}
+
         if not slides or not isinstance(slides, list):
-            return {"error": "slides 参数缺失或为空。请提供 slides 数组，每个元素包含 elements 数组定义页面内容。", "success": False}
+            return {"error": "slides 参数缺失或为空。请提供 slides 数组或 slides_file 路径。", "success": False}
 
         path = _safe_path(path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

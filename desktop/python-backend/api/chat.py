@@ -84,7 +84,9 @@ When all tasks complete:
 When working with large files, many items, or complex documents, NEVER put all data in tool call arguments. This causes output truncation and API errors.
 
 ### Rules:
-1. **>5 pages/slides** → Use `create_ppt` (PptxGenJS handles all sizes, just pass slides array)
+1. **创建PPT** → 用 `create_ppt`（PptxGenJS，支持动画/图表/表格）
+   - ≤5页：直接传 `slides` 参数
+   - >5页：先 `write_file("slides.json", JSON)` → 再 `create_ppt(path, slides_file="slides.json")`
 2. **Insert many images** → Use `write_file` to write a Python script, then `execute_command` to run it
 3. **Large data processing** → Use `execute_code` tool to write and run Python scripts
 4. **Batch file operations** → Write a script that loops through files, don't make 100 separate tool calls
@@ -98,13 +100,14 @@ Step 3: verify_file(output_path)
 ```
 
 ### What NOT to do:
-❌ create_ppt with 20 slides as JSON (10-20KB arguments → truncation)
+❌ 用 python-pptx 或 execute_code 自己写PPT脚本（用 create_ppt 工具！）
 ❌ edit_word with 100 insert_image operations in one call
 ❌ create_excel with 10,000 rows inline
 ❌ read_file on a 50MB file
 
 ### What TO do:
-✅ Write a Python script → execute it → verify output
+✅ 创建PPT用 create_ppt 工具，不要自己写 python-pptx 脚本
+✅ >5页PPT: write_file("slides.json", [...]) → create_ppt(path, slides_file="slides.json")
 ✅ Use glob patterns to find files, not listing them one by one
 ✅ Process in batches (e.g., 10 images per script run)
 ✅ Report progress: "Processing images 1-10/100..."
