@@ -14,6 +14,34 @@ from . import register
 DEFAULT_TIMEOUT = 180
 MAX_OUTPUT = 50_000  # 50KB
 
+# Known harmless PowerShell stderr patterns that should be filtered out
+_HARMLESS_PS_PATTERNS = [
+    "out-file",           # Device file interpretation error (e.g. "comtypes" → com1:)
+    "FileStream",         # Related to out-file error
+    "com1:",              # COM device file reference
+    "lpt1:",              # LPT device file reference
+    "CreateFile",         # Related to device file error
+]
+
+
+def _filter_harmless_ps_warnings(stderr: str) -> str:
+    """Filter out harmless PowerShell warnings from stderr.
+    
+    Known issues:
+    - 'out-file : FileStream' errors triggered by package names like 'comtypes'
+      being interpreted as COM device files. This is a benign PowerShell quirk.
+    """
+    if not stderr:
+        return stderr
+    lines = stderr.split("\n")
+    filtered = []
+    for line in lines:
+        line_lower = line.lower()
+        if any(pat.lower() in line_lower for pat in _HARMLESS_PS_PATTERNS):
+            continue
+        filtered.append(line)
+    return "\n".join(filtered).strip()
+
 # Blocked commands (Windows-aware)
 BLOCKED_PATTERNS = [
     "rm -rf /", "format c:", "format d:", "format e:", "del /f /s /q C:", "rmdir /s /q C:",
@@ -200,6 +228,10 @@ class TerminalTool(BaseTool):
             result = ""
             if out:
                 result += out
+            if err:
+                # Filter out harmless PowerShell warnings (e.g. out-file com1: device error
+                # triggered by package names like "comtypes" being interpreted as device files)
+                err = _filter_harmless_ps_warnings(err)
             if err:
                 result += f"\n[stderr]\n{err}" if result else err
             if not result:

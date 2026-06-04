@@ -137,7 +137,24 @@ Step 3: verify_file(output_path)
 - f-strings: `f'text {var}'` — ensure all `{` have matching `}`
 - Triple quotes: ensure they are properly closed (match opening and closing)
 - Always test small code first before writing complex scripts
-- For PPT animations: python-pptx does NOT support adding animations via API. Do NOT attempt to add animations. Create clean PPT with content only.
+- For PPT animations/transitions: python-pptx 完全不支持动画！禁止尝试 XML 操作或 python-pptx 方式。
+  正确方案：用 execute_code 写 Python 脚本调用 COM 自动化（comtypes）操作 PowerPoint 本身。
+  模板：```python
+  import comtypes.client
+  ppt = comtypes.client.CreateObject("PowerPoint.Application")
+  ppt.Visible = 1
+  pres = ppt.Presentations.Open(文件路径)
+  for slide in pres.Slides:
+      for shape in slide.Shapes:
+          if shape.HasTextFrame:
+              for i, para in enumerate(shape.TextFrame.TextRange.Paragraphs()):
+                  effect = slide.TimeLine.MainSequence.AddEffect(shape, 1, 0, 0)  # msoAnimEffectFade=1
+                  effect.Timing.TriggerType = 3  # msoAnimTriggerOnPageClick
+                  effect.Timing.TriggerDelayTime = i * 0.5
+  pres.Save()
+  ppt.Quit()
+  ```
+  先 pip install comtypes，再用上述模板。不要尝试 python-pptx XML 操作——浪费时间且必定失败。
 
 ### Web
 - web_search — Search the internet
@@ -164,11 +181,13 @@ Step 3: verify_file(output_path)
 - create_ppt_from_script — 用Python脚本创建复杂PPT（推荐用于>5页或含图表/表格的PPT，避免JSON参数过大导致截断）
 
 ### Office 工具限制
-- python-pptx 不支持动画/过渡效果的添加，不要尝试用XML操作添加动画
+- python-pptx 不支持动画/过渡效果，禁止尝试 XML 操作。动画必须用 COM 自动化（comtypes + PowerPoint）
+- PPT 动画正确流程：1) python-pptx 创建基础PPT → 2) comtypes COM 打开PPT添加动画 → 3) 保存
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>5页PPT、>100行Excel）必须用 execute_code 写脚本，不要用 JSON 参数
 - Python 字符串格式化用 `%s` 不是 `%%s`，f-string 确保 `{}` 配对
+- Windows 环境：pip install 时如遇 PowerShell 编码警告可忽略，不影响安装结果
 - create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### GUI Automation

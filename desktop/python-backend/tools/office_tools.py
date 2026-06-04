@@ -740,7 +740,12 @@ def create_ppt_from_script(path: str, script: str) -> dict:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         
         # Execute script with pptx imports available
-        local_vars = {
+        # IMPORTANT: Everything must be in globals (not locals) because
+        # functions defined inside exec'd code can only see globals.
+        # Putting Pt/Inches/etc in locals causes NameError when called
+        # from within user-defined functions like set_font().
+        exec_globals = {
+            "__builtins__": __builtins__,
             "path": path,
             "Presentation": Presentation,
             "Inches": Inches, "Pt": Pt, "Emu": Emu,
@@ -750,7 +755,7 @@ def create_ppt_from_script(path: str, script: str) -> dict:
             "CategoryChartData": CategoryChartData,
             "os": os,
         }
-        exec(script, {"__builtins__": __builtins__}, local_vars)
+        exec(script, exec_globals)
         
         if not os.path.exists(path):
             return {"error": "Script did not save file to expected path", "success": False}
@@ -766,7 +771,7 @@ OFFICE_TOOLS = {
     "edit_word": {"fn": edit_word, "concurrency": "write_serial", "description": "编辑Word文档"},
     "read_word": {"fn": read_word, "concurrency": "read_parallel", "description": "读取Word文档内容"},
     "create_ppt": {"fn": create_ppt, "concurrency": "write_serial", "description": "创建PPT（支持图表/主题/模板）"},
-    "create_ppt_from_script": {"fn": create_ppt_from_script, "concurrency": "write_serial", "description": "用Python脚本创建PPT（适合复杂/多页PPT）"},
+    "create_ppt_from_script": {"fn": create_ppt_from_script, "concurrency": "write_serial", "description": "用Python脚本创建PPT（推荐>5页）。脚本中已预导入: Presentation, Inches, Pt, Emu, RGBColor, PP_ALIGN, MSO_ANCHOR, XL_CHART_TYPE, CategoryChartData。注意：python-pptx不支持动画，动画请用execute_code+comtypes COM自动化"},
     "create_excel": {"fn": create_excel, "concurrency": "write_serial", "description": "创建Excel表格"},
     "read_excel": {"fn": read_excel, "concurrency": "read_parallel", "description": "读取Excel文件"},
     "edit_excel": {"fn": edit_excel, "concurrency": "write_serial", "description": "编辑Excel（图表/公式/格式）"},
