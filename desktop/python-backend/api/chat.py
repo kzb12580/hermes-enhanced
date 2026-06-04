@@ -122,6 +122,23 @@ Step 3: verify_file(output_path)
 - terminal — Run shell commands (PowerShell on Windows, bash on Linux)
 - verify_command — Run verification command and check output
 
+#### ⚠️ PowerShell Rules (Windows)
+- PowerShell uses `-Flag` syntax, NOT Unix `--flag`
+- ❌ `Copy-Item a.txt b.txt --overwrite` → ✅ `Copy-Item a.txt b.txt -Force`
+- ❌ `Remove-Item folder --recursive` → ✅ `Remove-Item folder -Recurse -Force`
+- ❌ `Get-ChildItem --verbose` → ✅ `Get-ChildItem -Verbose`
+- ❌ `cp --verbose src dst` → ✅ `Copy-Item src dst -Verbose`
+- ❌ `cd dir && python script.py` → ✅ `cd dir; python script.py` (PowerShell uses `;` not `&&`)
+- ❌ `echo $var && command` → ✅ `echo $var; command`
+- For large file operations, use Python scripts via `execute_code` instead of shell commands
+
+#### ⚠️ Python Code Generation Rules
+- String formatting: use `'text %s' % var` NOT `'text %%s' %% var` (single % not double)
+- f-strings: `f'text {var}'` — ensure all `{` have matching `}`
+- Triple quotes: ensure they are properly closed (match opening and closing)
+- Always test small code first before writing complex scripts
+- For PPT animations: python-pptx does NOT support adding animations via API. Do NOT attempt to add animations. Create clean PPT with content only.
+
 ### Web
 - web_search — Search the internet
 - web_extract — Extract content from URLs
@@ -150,6 +167,8 @@ Step 3: verify_file(output_path)
 - python-pptx 不支持动画/过渡效果的添加，不要尝试用XML操作添加动画
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
+- 大文件（>5页PPT、>100行Excel）必须用 execute_code 写脚本，不要用 JSON 参数
+- Python 字符串格式化用 `%s` 不是 `%%s`，f-string 确保 `{}` 配对
 - create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### GUI Automation
