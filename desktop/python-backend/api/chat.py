@@ -635,7 +635,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
     return calls
 
 
-def build_system_prompt(custom_prompt=None, active_skills=None):
+def build_system_prompt(custom_prompt=None, active_skills=None, model_name=None):
     """Build system prompt with memory and skills context."""
     memory_ctx = get_memory_context()
     skills_ctx = skill_manager.get_skills_context(active_skills=active_skills)
@@ -658,6 +658,7 @@ def build_system_prompt(custom_prompt=None, active_skills=None):
         skills_context=skills_ctx,
         tools_description=tools_desc,
         extra_context=workspace_ctx,
+        model_name=model_name,
     )
 
 
@@ -1025,7 +1026,7 @@ async def chat(message: ChatMessage):
 
     # Build API messages — use message-specific skills if provided
     skills_override = message.skills if message.skills else None
-    sys_prompt = build_system_prompt(message.system_prompt, active_skills=skills_override)
+    sys_prompt = build_system_prompt(message.system_prompt, active_skills=skills_override, model_name=message.model)
     context_window, max_response = get_model_context_config(message.model or "default")
     system_tokens = estimate_tokens(sys_prompt)
     max_input_tokens = context_window - max_response - system_tokens - 500

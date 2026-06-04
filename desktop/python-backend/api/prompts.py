@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from tools.model_profiles import get_model_profile
+
 
 def build_system_prompt(
     custom_prompt: Optional[str] = None,
@@ -11,8 +13,18 @@ def build_system_prompt(
     skills_context: str = "",
     tools_description: str = "",
     extra_context: str = "",
+    model_name: Optional[str] = None,
 ) -> str:
-    """Build a comprehensive system prompt with all context."""
+    """Build a comprehensive system prompt with all context.
+    
+    Args:
+        custom_prompt: User-defined custom instructions.
+        memory_context: Persistent memory context.
+        skills_context: Active skills context.
+        tools_description: Detailed tool descriptions.
+        extra_context: Additional context (e.g., workspace info).
+        model_name: The model name for profile injection (e.g. "mimo-v2.5-pro").
+    """
     
     base_prompt = """You are Hermes, an AI desktop assistant with FULL tool access. You are powerful, capable, and proactive.
 
@@ -44,7 +56,7 @@ If user says "make a PPT about X", make it directly with reasonable defaults.
 
 ### 4. NEVER Say You Can't Do Something
 You have tools. Use them.
-- If user asks for a PPT → create it with python-pptx
+- If user asks for a PPT → create it with create_ppt tool (PptxGenJS)
 - If user asks to search → use web_search
 - If user asks to run code → use terminal
 - If user asks to analyze data → write Python script and execute
@@ -176,15 +188,12 @@ Example: User says "make a PPT about apples"
 ## TOOL USAGE EXAMPLES
 
 ### Example 1: Creating a PPT
-```python
+```
 # User: "Create a presentation about AI trends"
 # You should:
-from pptx import Presentation
-prs = Presentation()
-slide = prs.slides.add_slide(prs.slide_layouts[1])
-slide.shapes.title.text = "AI Trends 2024"
-# ... add more slides
-prs.save("ai_trends.pptx")
+# 1. Call create_ppt(path="ai_trends.pptx", slides=[...], layout="wide")
+# 2. For >5 pages: write_file("slides.json", [...]) → create_ppt(path, slides_file="slides.json")
+# 3. verify_file("ai_trends.pptx")
 ```
 
 ### Example 2: Web Research
@@ -254,6 +263,11 @@ Use this context to provide better, more relevant responses."""
     # Add extra context if provided (e.g., workspace info)
     if extra_context:
         base_prompt += f"\n{extra_context}"
+
+    # ── Inject model-specific profile (last, so it overrides generic guidance) ──
+    model_profile = get_model_profile(model_name)
+    if model_profile:
+        base_prompt += f"\n\n{model_profile}"
 
     return base_prompt
 
