@@ -40,16 +40,16 @@ _FAMILY_PATTERNS: list[tuple[str, list[str]]] = [
     ("deepseek", ["deepseek", "deep-seek"]),
     # Anthropic Claude
     ("claude", ["claude", "anthropic"]),
-    # OpenAI GPT
-    ("gpt", ["gpt-4", "gpt4", "gpt-3", "gpt3", "o1-", "o3-", "o4"]),
-    # Google Gemini
+    # OpenAI GPT (including open-source GPT-OSS)
+    ("gpt", ["gpt-4", "gpt4", "gpt-3", "gpt3", "gpt-oss", "o1-", "o1-preview", "o1-mini", "o3-", "o3-mini", "o4"]),
+    # Google Gemini / Gemma
     ("gemini", ["gemini", "gemma", "bard"]),
     # Alibaba Qwen
     ("qwen", ["qwen", "tongyi"]),
-    # Meta Llama
-    ("llama", ["llama", "meta-llama"]),
-    # Mistral
-    ("mistral", ["mistral", "mixtral"]),
+    # Meta Llama + NVIDIA Nemotron (Llama-based)
+    ("llama", ["llama", "meta-llama", "nemotron", "nvidia"]),
+    # Mistral / Mixtral
+    ("mistral", ["mistral", "mixtral", "ministral"]),
     # Yi (01.AI)
     ("yi", ["yi-", "01-ai"]),
     # GLM (Zhipu)
@@ -60,6 +60,14 @@ _FAMILY_PATTERNS: list[tuple[str, list[str]]] = [
     ("internlm", ["internlm", "intern"]),
     # Grok (xAI)
     ("grok", ["grok", "x-ai"]),
+    # MiniMax
+    ("minimax", ["minimax"]),
+    # Step (StepFun)
+    ("step", ["step-", "stepfun"]),
+    # Microsoft Phi
+    ("phi", ["phi-"]),
+    # Upstage Solar
+    ("solar", ["solar"]),
 ]
 
 
@@ -348,6 +356,86 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 📐 工具调用规范
 - 参数简洁
+- slides_file 用于 >5 页的 PPT
+
+### ⚠️ 注意事项
+- 直接调用工具，少分析
+- 复杂任务用 todo_create 分步
+
+### 🎨 文档创建
+- PPT: 用 create_ppt 工具
+- Word/Excel: 用专用工具
+""",
+
+# ─── MiniMax ───────────────────────────────────────────────────────────
+"minimax": """## 🎯 MiniMax 模型专属优化策略
+
+你运行在 **MiniMax** 模型上。以下是关键优化规则：
+
+### 📐 工具调用规范
+- MiniMax 支持 OpenAI 兼容的 function calling
+- 参数简洁，单次不超过 5KB
+- slides_file 用于 >5 页的 PPT
+
+### ⚠️ 注意事项
+- 直接调用工具，少分析
+- 复杂任务用 todo_create 分步
+- 工具失败 2 次后换方案
+
+### 🎨 文档创建
+- PPT: 用 create_ppt 工具
+- Word/Excel: 用专用工具
+""",
+
+# ─── Step (StepFun) ────────────────────────────────────────────────────
+"step": """## 🎯 Step 模型专属优化策略
+
+你运行在 **Step (StepFun)** 模型上。以下是关键优化规则：
+
+### 📐 工具调用规范
+- 参数简洁，单次不超过 5KB
+- slides_file 用于 >5 页的 PPT
+
+### ⚠️ 注意事项
+- 直接调用工具，少分析
+- 复杂任务用 todo_create 分步
+
+### 🎨 文档创建
+- PPT: 用 create_ppt 工具
+- Word/Excel: 用专用工具
+""",
+
+# ─── Phi (Microsoft) ──────────────────────────────────────────────────
+"phi": """## 🎯 Phi 模型专属优化策略
+
+你运行在 **Phi (Microsoft)** 模型上。以下是关键优化规则：
+
+### ⚡ Phi 核心特性
+- 轻量高效模型，适合快速任务
+- 工具调用能力因版本差异
+
+### 📐 工具调用规范
+- 参数必须极简 — Phi 对长参数敏感
+- slides_file 用于 >3 页的 PPT（必须用文件方式）
+- 不要在 tool_call 的 arguments 里写大段 JSON
+
+### ⚠️ 注意事项
+- JSON 截断风险较高 — 参数越短越好
+- 不要一次处理太多任务 — 用 todo_create 分步
+- 工具失败 2 次后必须换方案
+
+### 🎨 文档创建
+- PPT: 用 create_ppt 工具，必须用 slides_file
+- Word/Excel: 用专用工具
+""",
+
+# ─── Solar (Upstage) ──────────────────────────────────────────────────
+"solar": """## 🎯 Solar 模型专属优化策略
+
+你运行在 **Solar (Upstage)** 模型上。以下是关键优化规则：
+
+### 📐 工具调用规范
+- 参数简洁，单次不超过 5KB
 - slides_file 用于 >5 页的 PPT
 
 ### ⚠️ 注意事项
