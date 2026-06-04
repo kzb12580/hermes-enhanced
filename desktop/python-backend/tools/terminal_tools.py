@@ -60,7 +60,15 @@ def _check_blocked(command: str) -> str:
 
 class TerminalTool(BaseTool):
     name = "terminal"
-    description = "Execute a shell command and return stdout/stderr. On Windows uses PowerShell, on Linux/macOS uses bash."
+    description = (
+        "Execute a shell command and return stdout/stderr. On Windows uses PowerShell, on Linux/macOS uses bash. "
+        "⚠️ PowerShell does NOT use Unix-style flags (--flag). Use PowerShell syntax: "
+        "-Flag (e.g., -Force, -Recurse, -Path). "
+        "Common mistakes: 'cp --overwrite' → use 'Copy-Item -Force'; "
+        "'mv --verbose' → use 'Move-Item -Verbose'; "
+        "'rm -rf' → use 'Remove-Item -Recurse -Force'; "
+        "'cd dir && cmd' → use 'cd dir; cmd' (PowerShell uses ; not &&)."
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -87,6 +95,44 @@ class TerminalTool(BaseTool):
             blocked_dirs = ['/etc', '/boot', '/sys', '/proc', '/dev']
             if any(str(wp).startswith(d) for d in blocked_dirs):
                 return f"Error: Working directory not allowed: {workdir}"
+
+        # PowerShell 参数纠错 — 拦截 Unix 风格的 --flag 参数
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            import re
+            unix_flags = re.findall(r'--(\w[\w-]*)', command)
+            if unix_flags:
+                # 常见 Unix → PowerShell 映射
+                corrections = {
+                    "overwrite": "use 'Copy-Item -Force' instead",
+                    "recursive": "use '-Recurse' instead",
+                    "verbose": "use '-Verbose' instead",
+                    "force": "use '-Force' instead",
+                    "quiet": "use '-ErrorAction SilentlyContinue' instead",
+                    "help": "use 'Get-Help' instead of --help",
+                    "version": "use '$PSVersionTable' instead of --version",
+                }
+                suggestions = []
+                for flag in unix_flags:
+                    if flag in corrections:
+                        suggestions.append(f"--{flag} → {corrections[flag]}")
+                    else:
+                        suggestions.append(f"--{flag} → use '-{flag}' (PowerShell syntax)")
+                return (
+                    "Error: PowerShell does not support Unix-style --flags.\n"
+                    "Suggested fixes:\n" + "\n".join(f"  • {s}" for s in suggestions) +
+                    "\n\nPlease rewrite using PowerShell syntax (-Flag, not --flag)."
+                )
+            # 拦截 && 语法（PowerShell 不支持）
+            if '&&' in command:
+                fixed = command.replace('&&', ';')
+                return (
+                    "Error: PowerShell does not support '&&' as command separator.\n"
+                    f"Suggested fix: replace '&&' with ';'\n"
+                    f"  • {command}\n"
+                    f"  → {fixed}\n\n"
+                    "Please rewrite using ';' to chain commands."
+                )
 
         if timeout < 1 or timeout > 600:
             timeout = DEFAULT_TIMEOUT

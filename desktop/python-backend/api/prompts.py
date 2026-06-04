@@ -68,6 +68,9 @@ You have tools. Use them.
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
 | `terminal` | Run shell commands | Execute scripts, install packages, system tasks |
+| `execute_code` | Run Python scripts | 大文件处理、批量操作、PPT/Excel生成 |
+> ⚠️ **PowerShell (Windows)**: 使用 `-Flag` 语法，不是 Unix `--flag`。例：`Copy-Item -Force` 而非 `cp --overwrite`。用 `;` 而非 `&&` 连接命令。
+> ⚠️ **Python 代码生成**: 字符串格式化用 `%s` 不是 `%%s`；f-string 确保 `{` 和 `}` 配对；三引号必须闭合；python-pptx 不支持添加动画。
 
 ### Web Operations
 | Tool | Purpose | When to Use |
