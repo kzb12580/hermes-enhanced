@@ -9,7 +9,6 @@ import { SettingsPanel } from './components/settings/SettingsPanel';
 import { MemoryPanel } from './components/memory/MemoryPanel';
 import { ToolsPanel } from './components/tools/ToolsPanel';
 import { ModelsPanel } from './components/models/ModelsPanel';
-import { ProvidersPanel } from './components/providers/ProvidersPanel';
 import { SchedulesPanel } from './components/schedules/SchedulesPanel';
 import { GatewayPanel } from './components/gateway/GatewayPanel';
 import { KanbanPanel } from './components/kanban/KanbanPanel';
@@ -21,12 +20,14 @@ import { SkillsPanel } from './components/skills/SkillsPanel';
 import { useAppStore } from './stores/app-store';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSystemStore } from './stores/systemStore';
+import { useChatStore } from './stores/chatStore';
 
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'skills' | 'settings';
+type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'skills' | 'settings';
 
 export default function App() {
   const { sidebarCollapsed } = useSystemStore();
   const [currentView, setCurrentView] = useState<View>('chat');
+  const { activeSkills, toggleActiveSkill } = useChatStore();
 
   // Initialize IPC listeners, API client, and health polling on mount
   useEffect(() => {
@@ -59,8 +60,6 @@ export default function App() {
         return <KanbanPanel />;
       case 'models':
         return <ModelsPanel />;
-      case 'providers':
-        return <ProvidersPanel />;
       case 'memory':
         return <MemoryPanel />;
       case 'tools':
@@ -72,7 +71,7 @@ export default function App() {
       case 'email':
         return <EmailPanel />;
       case 'skills':
-        return <SkillsPanel />;
+        return <SkillsPanel open={true} onClose={() => setCurrentView('chat')} activeSkills={activeSkills} onToggleActive={toggleActiveSkill} />;
       case 'settings':
         return <SettingsPanel />;
       default:

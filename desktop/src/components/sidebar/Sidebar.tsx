@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'email' | 'skills' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'settings';
+type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'email' | 'skills' | 'models' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'settings';
 
 interface NavItem {
   view: View;
@@ -42,7 +42,6 @@ const NAV_ITEMS: NavItem[] = [
   { view: 'skills', icon: Zap, label: '技能', group: 'main' },
   // 数据管理
   { view: 'models', icon: Layers, label: '模型', group: 'data' },
-  { view: 'providers', icon: KeyRound, label: '提供商', group: 'data' },
   { view: 'memory', icon: Brain, label: '记忆', group: 'data' },
   { view: 'tools', icon: Wrench, label: '工具', group: 'data' },
   // 系统功能
