@@ -1,7 +1,7 @@
 /**
  * Hermes Desktop - 主窗口管理
  */
-import { BrowserWindow, shell, app } from 'electron'
+import { BrowserWindow, shell, app, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { settingsStore } from './store'
@@ -66,7 +66,6 @@ export function createMainWindow(): BrowserWindow {
   // (see src/components/ui/ContextMenu.tsx)
   // Also add native fallback for input fields not covered by React context menu
   mainWindow.webContents.on('context-menu', (_event, params) => {
-    const { Menu, MenuItem } = require('electron')
     const menu = new Menu()
 
     if (params.isEditable) {
