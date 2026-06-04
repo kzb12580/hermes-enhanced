@@ -405,6 +405,94 @@ def _smart_compress_session(session: dict, context_window: int) -> None:
 import re as _re
 
 
+def _try_repair_json(raw: str) -> str | None:
+    """Attempt to repair truncated/malformed JSON from LLM output.
+    
+    Common truncation patterns:
+    - Unterminated string: {"key": "value with no closing quote
+    - Missing closing braces: {"key": "value", "list": [1, 2
+    - Truncated after colon: {"script":
+    """
+    if not raw or not raw.strip():
+        return None
+    
+    raw = raw.strip()
+    
+    # Strategy 1: Try adding missing closing quotes + braces
+    # Count open/close braces and brackets
+    open_braces = raw.count('{') - raw.count('}')
+    open_brackets = raw.count('[') - raw.count(']')
+    
+    # Check if we're inside an unterminated string
+    in_string = False
+    escape_next = False
+    for ch in raw:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\':
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+    
+    repair = raw
+    
+    # If unterminated string, close it
+    if in_string:
+        repair += '"'
+    
+    # Close any unclosed arrays
+    for _ in range(max(0, open_brackets)):
+        repair += ']'
+    
+    # Close any unclosed objects
+    for _ in range(max(0, open_braces)):
+        repair += '}'
+    
+    try:
+        json.loads(repair)
+        return repair
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    # Strategy 2: Find last valid JSON by truncating at last complete key-value
+    # This handles cases where the truncation is mid-value
+    for end in range(len(raw) - 1, max(0, len(raw) - 200), -1):
+        candidate = raw[:end]
+        # Try to close it
+        extra_braces = candidate.count('{') - candidate.count('}')
+        extra_brackets = candidate.count('[') - candidate.count(']')
+        
+        # Check string state
+        in_str = False
+        esc = False
+        for ch in candidate:
+            if esc:
+                esc = False
+                continue
+            if ch == '\\':
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+        
+        if in_str:
+            candidate += '"'
+        for _ in range(max(0, extra_brackets)):
+            candidate += ']'
+        for _ in range(max(0, extra_braces)):
+            candidate += '}'
+        
+        try:
+            json.loads(candidate)
+            return candidate
+        except (json.JSONDecodeError, ValueError):
+            continue
+    
+    return None
+
+
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
     """Fix malformed tool_calls in session messages before sending to API.
     
@@ -434,12 +522,18 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                         args = json.dumps(args, ensure_ascii=False)
                     except Exception:
                         args = "{}"
-                # Validate JSON — drop tool_calls with broken arguments
+                # Validate JSON — try to repair truncated JSON instead of dropping
                 try:
                     json.loads(args)
                 except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
-                    continue
+                    repaired = _try_repair_json(args)
+                    if repaired is not None:
+                        args = repaired
+                        tc["function"]["arguments"] = args
+                        logger.info("Repaired truncated JSON for tool_call: %s", name)
+                    else:
+                        logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
+                        continue
                 tc_id = tc.get("id", f"call_{hash(name)}")
                 valid_calls.append({
                     "id": tc_id,
@@ -656,21 +750,24 @@ async def call_llm(
 
 
 async def execute_tools(tool_calls: list[dict]) -> list[dict]:
-    """Execute multiple tool calls and return results."""
+    """Execute multiple tool calls with retry and error recovery."""
     results = []
     for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
         tool_name = tool_call["function"]["name"]
         args_str = tool_call["function"]["arguments"]
         
-        # Check for oversized tool arguments — likely truncated, will cause errors
+        # Check for oversized tool arguments — try to extract key field to file
         if len(args_str) > 15_000:  # 15KB threshold
-            logger.warning("Tool %s has oversized arguments (%d chars), likely truncated", tool_name, len(args_str))
+            logger.warning("Tool %s has oversized arguments (%d chars), attempting recovery", tool_name, len(args_str))
+            recovered = await _handle_oversized_args(tool_name, args_str, tool_call)
+            if recovered:
+                results.append(recovered)
+                continue
             results.append({
                 "role": "tool",
                 "tool_call_id": tool_call.get("id", ""),
                 "content": f"Error: Tool arguments too large ({len(args_str)} chars). "
-                           f"Use a Python script instead: write_file('script.py', code) then execute_command('python script.py'). "
-                           f"Do NOT put large data in tool call arguments.",
+                           f"Write the content to a file first using write_file, then reference the file path.",
             })
             continue
         
@@ -685,8 +782,8 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
             })
             continue
 
-        logger.info("Executing tool: %s(%s)", tool_name, tool_args)
-        result = await execute_tool(tool_name, tool_args)
+        # Execute with retry for transient errors
+        result = await _execute_with_retry(tool_name, tool_args)
         result = truncate_tool_result(result)
         logger.info("Tool result: %s...", result[:200])
 
@@ -696,6 +793,99 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
             "content": result,
         })
     return results
+
+
+# Retryable error patterns (transient failures that may succeed on retry)
+_RETRYABLE_PATTERNS = [
+    "timeout", "timed out", "connection", "ECONNRESET", "ECONNREFUSED",
+    "rate limit", "429", "503", "502", "500", "network", "socket",
+]
+
+
+async def _execute_with_retry(tool_name: str, tool_args: dict, max_retries: int = 2) -> str:
+    """Execute a tool with retry for transient errors."""
+    last_result = ""
+    for attempt in range(max_retries + 1):
+        result = await execute_tool(tool_name, tool_args)
+        
+        # Check if result is a retryable error
+        if result.startswith("Error:") and attempt < max_retries:
+            result_lower = result.lower()
+            if any(pat.lower() in result_lower for pat in _RETRYABLE_PATTERNS):
+                delay = 1.5 ** attempt  # exponential backoff: 1s, 1.5s
+                logger.info("Retryable error for %s (attempt %d/%d), retrying in %.1fs: %s",
+                           tool_name, attempt + 1, max_retries, delay, result[:100])
+                import asyncio
+                await asyncio.sleep(delay)
+                last_result = result
+                continue
+        
+        return result
+    
+    return last_result
+
+
+async def _handle_oversized_args(tool_name: str, args_str: str, tool_call: dict) -> dict | None:
+    """Handle oversized tool arguments by writing content to a temp file.
+    
+    For tools like create_ppt_from_script that receive large script content,
+    write the content to a temp file and modify the tool call to use file_path.
+    """
+    try:
+        # Try to parse the (possibly truncated) JSON
+        args = None
+        try:
+            args = json.loads(args_str)
+        except (json.JSONDecodeError, ValueError):
+            repaired = _try_repair_json(args_str)
+            if repaired:
+                args = json.loads(repaired)
+        
+        if not args:
+            return None
+        
+        # Find the largest string field (likely the script/content)
+        largest_key = None
+        largest_size = 0
+        for key, val in args.items():
+            if isinstance(val, str) and len(val) > largest_size:
+                largest_key = key
+                largest_size = len(val)
+        
+        if not largest_key or largest_size < 5000:
+            return None
+        
+        # Write the large content to a temp file
+        import tempfile
+        content = args[largest_key]
+        ext = ".txt"
+        if tool_name in ("create_ppt_from_script",):
+            ext = ".ppt_script.py"
+        elif "code" in largest_key.lower():
+            ext = ".py"
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix=ext, delete=False, encoding='utf-8') as f:
+            f.write(content)
+            temp_path = f.name
+        
+        # Replace the large field with a file reference
+        args[largest_key] = f"[Content written to {temp_path} ({len(content)} chars). Read this file to get the content.]"
+        args[f"{largest_key}_file"] = temp_path
+        
+        logger.info("Oversized %s arg '%s' (%d chars) written to %s", tool_name, largest_key, len(content), temp_path)
+        
+        # Re-execute with the modified args
+        result = await execute_tool(tool_name, args)
+        result = truncate_tool_result(result)
+        
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call.get("id", ""),
+            "content": result,
+        }
+    except Exception as e:
+        logger.error("Failed to handle oversized args for %s: %s", tool_name, e)
+        return None
 
 
 # ─── API Routes ────────────────────────────────────────────────────────────
@@ -839,6 +1029,7 @@ async def chat(message: ChatMessage):
             current_messages = list(api_messages)
             raw_tool_calls = []  # 初始化，防止循环未执行时未绑定
             consecutive_failures = 0  # 连续失败计数器
+            last_fail_tool = ""  # 上次失败的工具名
             MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次自动终止
             
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
@@ -913,17 +1104,25 @@ async def chat(message: ChatMessage):
                     current_messages.append(result)
                     session["messages"].append(result)
                 
-                # Track consecutive failures — abort if same tool keeps failing
-                any_failure = any(r.get("content", "").startswith("Error:") for r in tool_results)
-                if any_failure:
-                    consecutive_failures += 1
+                # Track consecutive failures — per-tool tracking
+                # Only count if the SAME tool keeps failing (different tools failing is OK)
+                failed_tools = [r.get("content", "") for r in tool_results if r.get("content", "").startswith("Error:")]
+                if failed_tools:
+                    # Check if the failing tool is the same as last time
+                    current_fail_tool = complete_tool_calls[0]["function"]["name"] if complete_tool_calls else "unknown"
+                    if current_fail_tool == last_fail_tool:
+                        consecutive_failures += 1
+                    else:
+                        consecutive_failures = 1
+                        last_fail_tool = current_fail_tool
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                        error_hint = "连续3次工具调用失败，自动停止。请换一种方案或告知用户手动操作。"
-                        yield f"event: token\ndata: {error_hint}\n\n"
-                        logger.warning("Auto-stopping after %d consecutive failures", consecutive_failures)
+                        error_hint = f"工具 {current_fail_tool} 连续失败{consecutive_failures}次，自动停止。请换一种方案或告知用户手动操作。"
+                        yield f"event: token\\ndata: {error_hint}\\n\\n"
+                        logger.warning("Auto-stopping: tool %s failed %d times consecutively", current_fail_tool, consecutive_failures)
                         break
                 else:
-                    consecutive_failures = 0  # 成功则重置计数器
+                    consecutive_failures = 0
+                    last_fail_tool = ""
                 
                 # Context trimming: 每 5 次迭代裁剪一次，防止 context 超限
                 if (iteration + 1) % 5 == 0:
