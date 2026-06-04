@@ -17,11 +17,12 @@ import { DiscoverPanel } from './components/discover/DiscoverPanel';
 import { OfficePanel } from './components/office/OfficePanel';
 import { SessionsPanel } from './components/sessions/SessionsPanel';
 import { EmailPanel } from './components/email/EmailPanel';
+import { SkillsPanel } from './components/skills/SkillsPanel';
 import { useAppStore } from './stores/app-store';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSystemStore } from './stores/systemStore';
 
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'settings';
+type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'skills' | 'settings';
 
 export default function App() {
   const { sidebarCollapsed } = useSystemStore();
@@ -70,6 +71,8 @@ export default function App() {
         return <GatewayPanel />;
       case 'email':
         return <EmailPanel />;
+      case 'skills':
+        return <SkillsPanel />;
       case 'settings':
         return <SettingsPanel />;
       default:

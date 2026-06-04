@@ -17,11 +17,12 @@ import {
   Kanban,
   Signal,
   Mail,
+  Zap,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
 
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'settings';
+type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'email' | 'skills' | 'models' | 'providers' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'settings';
 
 interface NavItem {
   view: View;
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { view: 'office', icon: Building, label: '办公', group: 'main' },
   { view: 'kanban', icon: Kanban, label: '看板', group: 'main' },
   { view: 'email', icon: Mail, label: '邮件', group: 'main' },
+  { view: 'skills', icon: Zap, label: '技能', group: 'main' },
   // 数据管理
   { view: 'models', icon: Layers, label: '模型', group: 'data' },
   { view: 'providers', icon: KeyRound, label: '提供商', group: 'data' },
