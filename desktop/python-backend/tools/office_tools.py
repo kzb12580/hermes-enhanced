@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import shutil
+import subprocess
 from typing import Optional
 from pathlib import Path
 
@@ -216,286 +217,88 @@ def read_word(path: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PPT 工具 — 增强版：图表、主题、母版
+# PPT 工具 — 基于 PptxGenJS (Node.js)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# 内置主题色方案
-PPT_THEMES = {
-    "business": {"primary": "1F4E79", "secondary": "2E75B6", "accent": "FFC000", "bg": "FFFFFF", "text": "333333"},
-    "tech": {"primary": "0D1117", "secondary": "21262D", "accent": "58A6FF", "bg": "0D1117", "text": "C9D1D9"},
-    "modern": {"primary": "6C63FF", "secondary": "FF6584", "accent": "00D9A6", "bg": "FAFAFA", "text": "2D3436"},
-    "minimal": {"primary": "333333", "secondary": "666666", "accent": "E74C3C", "bg": "FFFFFF", "text": "333333"},
-    "nature": {"primary": "27AE60", "secondary": "2ECC71", "accent": "F39C12", "bg": "F8F9FA", "text": "2C3E50"},
-}
 
-
-def _get_layout(prs, preferred: int, fallback_name: str = ""):
-    """安全获取幻灯片布局，避免索引越界"""
-    if preferred < len(prs.slide_layouts):
-        return prs.slide_layouts[preferred]
-    return prs.slide_layouts[len(prs.slide_layouts) - 1]
-
-
-def _apply_theme(slide, theme: dict, prs):
-    """给幻灯片应用主题色"""
-    from pptx.util import Inches, Pt
-    from pptx.dml.color import RGBColor
-    # 背景色
-    background = slide.background
-    fill = background.fill
-    fill.solid()
-    fill.fore_color.rgb = RGBColor.from_string(theme["bg"])
-
-
-def create_ppt(path: str, slides: list[dict], template: str = "",
-               theme: str = "business", title_style: str = "default") -> dict:
+def create_ppt(path: str, slides: list[dict], layout: str = "16x9",
+               title: str = "", author: str = "") -> dict:
     """
-    创建 PPT 演示文稿
+    创建 PPT 演示文稿（基于 PptxGenJS，支持动画/过渡/阴影/透明度）
 
-    theme: business / tech / modern / minimal / nature / 或模板文件路径
-    slides 支持的类型:
-      - title: 封面页
-      - content: 标题+内容
-      - two_column: 左右分栏
-      - image: 图片页
-      - chart: 图表页 (bar/line/pie)
-      - table: 表格页
-      - section: 章节分隔页
-      - bullet: 要点列表页
-      - end: 结束页
+    参数:
+      - path: 输出文件路径
+      - slides: 幻灯片数组
+      - layout: 布局 (16x9 / 16x10 / 4x3 / wide)
+      - title: 演示文稿标题
+      - author: 作者
+
+    每个 slide 的结构:
+      {
+        "background": {"color": "1E2761"},           # 可选
+        "transition": {"type": "fade", "duration": 1},  # 可选
+        "elements": [
+          {"type": "text", "text": "标题", "x": 1, "y": 1, "w": 8, "h": 2,
+           "fontSize": 36, "bold": true, "color": "FFFFFF", "align": "center"},
+          {"type": "shape", "shape": "rect", "x": 0, "y": 0, "w": 1, "h": 7.5,
+           "fill": {"color": "0D9488"}},
+          {"type": "image", "path": "https://...", "x": 1, "y": 3, "w": 5, "h": 3},
+          {"type": "chart", "chartType": "bar", "data": [{...}],
+           "x": 0.5, "y": 1, "w": 9, "h": 4},
+          {"type": "table", "rows": [["H1","H2"],["c1","c2"]], "x": 1, "y": 1, "w": 8, "h": 2}
+        ]
+      }
+
+    text 元素支持富文本数组: "text": [{"text": "粗体", "bold": true}, "普通"]
+
+    支持的 chartType: bar, line, pie, doughnut, scatter, radar
+    支持的 shape: rect, oval, line, rounded_rect
+    支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
     """
     try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt, Emu
-        from pptx.dml.color import RGBColor
-        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-        from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
-
-        if template:
-            template = _safe_path(template)
-            err = _check_file(template, "template")
-            if err: return err
-            prs = Presentation(template)
-        else:
-            prs = Presentation()
-
-        prs.slide_width = Inches(13.333)  # 16:9
-        prs.slide_height = Inches(7.5)
-
-        theme_colors = PPT_THEMES.get(theme, PPT_THEMES["business"])
-
-        if not isinstance(slides, list):
-            return {"error": "slides must be a list", "success": False}
-
-        for sd in slides:
-            layout_type = sd.get("layout", "content")
-            title_text = sd.get("title", "")
-            subtitle_text = sd.get("subtitle", "")
-
-            # ── 封面页 ──
-            if layout_type == "title":
-                layout = prs.slide_layouts[0] if prs.slide_layouts else prs.slide_layouts[0]
-                slide = prs.slides.add_slide(layout)
-                if title_text and slide.shapes.title:
-                    slide.shapes.title.text = title_text
-                    for para in slide.shapes.title.text_frame.paragraphs:
-                        para.alignment = PP_ALIGN.CENTER
-                        for run in para.runs:
-                            run.font.size = Pt(44)
-                            run.font.bold = True
-                            run.font.color.rgb = RGBColor.from_string(theme_colors["primary"])
-                if subtitle_text and len(slide.placeholders) > 1:
-                    slide.placeholders[1].text = subtitle_text
-                    for para in slide.placeholders[1].text_frame.paragraphs:
-                        para.alignment = PP_ALIGN.CENTER
-                        for run in para.runs:
-                            run.font.size = Pt(20)
-                            run.font.color.rgb = RGBColor.from_string(theme_colors["secondary"])
-
-            # ── 内容页 ──
-            elif layout_type == "content":
-                slide = prs.slides.add_slide(prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0])
-                if title_text and slide.shapes.title:
-                    slide.shapes.title.text = title_text
-                if len(slide.placeholders) > 1:
-                    body = slide.placeholders[1]
-                    tf = body.text_frame
-                    tf.clear()
-                    content = sd.get("content", "")
-                    for i, line in enumerate(content.split("\n")):
-                        if line.strip():
-                            if i == 0:
-                                tf.text = line.strip()
-                            else:
-                                p = tf.add_paragraph()
-                                p.text = line.strip()
-                                p.font.size = Pt(16)
-
-            # ── 要点列表页 ──
-            elif layout_type == "bullet":
-                slide = prs.slides.add_slide(prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0])
-                if title_text and slide.shapes.title:
-                    slide.shapes.title.text = title_text
-                bullets = sd.get("bullets", [])
-                if len(slide.placeholders) > 1:
-                    body = slide.placeholders[1]
-                    tf = body.text_frame
-                    tf.clear()
-                    for i, bullet in enumerate(bullets):
-                        if isinstance(bullet, dict):
-                            text = bullet.get("text", "")
-                            level = bullet.get("level", 0)
-                        else:
-                            text = str(bullet)
-                            level = 0
-                        if i == 0:
-                            tf.text = text
-                            tf.paragraphs[0].level = level
-                        else:
-                            p = tf.add_paragraph()
-                            p.text = text
-                            p.level = level
-                            p.font.size = Pt(16 if level == 0 else 14)
-
-            # ── 左右分栏 ──
-            elif layout_type == "two_column":
-                slide = prs.slides.add_slide(prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0])
-                if title_text and slide.shapes.title:
-                    slide.shapes.title.text = title_text
-                # 左栏
-                left_box = slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(5.5), Inches(5))
-                tf = left_box.text_frame
-                tf.word_wrap = True
-                for i, line in enumerate(sd.get("left", "").split("\n")):
-                    if line.strip():
-                        if i == 0:
-                            tf.text = line.strip()
-                        else:
-                            tf.add_paragraph().text = line.strip()
-                # 右栏
-                right_box = slide.shapes.add_textbox(Inches(6.5), Inches(1.5), Inches(5.5), Inches(5))
-                tf = right_box.text_frame
-                tf.word_wrap = True
-                for i, line in enumerate(sd.get("right", "").split("\n")):
-                    if line.strip():
-                        if i == 0:
-                            tf.text = line.strip()
-                        else:
-                            tf.add_paragraph().text = line.strip()
-
-            # ── 图表页 ──
-            elif layout_type == "chart":
-                slide = prs.slides.add_slide(prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0])
-                if title_text:
-                    txBox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(12), Inches(0.8))
-                    txBox.text_frame.text = title_text
-                    for para in txBox.text_frame.paragraphs:
-                        for run in para.runs:
-                            run.font.size = Pt(28)
-                            run.font.bold = True
-
-                chart_type = sd.get("chart_type", "bar")
-                chart_data = sd.get("data", {})
-                categories = chart_data.get("categories", [])
-                series_list = chart_data.get("series", [])
-
-                if categories and series_list:
-                    from pptx.chart.data import CategoryChartData
-                    chart_data_obj = CategoryChartData()
-                    chart_data_obj.categories = categories
-                    for s in series_list:
-                        chart_data_obj.add_series(s.get("name", ""), s.get("values", []))
-
-                    type_map = {
-                        "bar": XL_CHART_TYPE.BAR_CLUSTERED,
-                        "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
-                        "line": XL_CHART_TYPE.LINE,
-                        "pie": XL_CHART_TYPE.PIE,
-                        "area": XL_CHART_TYPE.AREA,
-                    }
-                    xl_type = type_map.get(chart_type)
-                    if xl_type is None:
-                        return {"error": f"不支持的图表类型: {chart_type}，可选: {list(type_map.keys())}", "success": False}
-                    chart_frame = slide.shapes.add_chart(
-                        xl_type, Inches(1), Inches(1.5), Inches(11), Inches(5.5), chart_data_obj
-                    )
-                    chart = chart_frame.chart
-                    chart.has_legend = len(series_list) > 1
-                    if chart.has_legend:
-                        chart.legend.position = XL_LEGEND_POSITION.BOTTOM
-
-            # ── 表格页 ──
-            elif layout_type == "table":
-                slide = prs.slides.add_slide(prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0])
-                if title_text:
-                    txBox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(12), Inches(0.8))
-                    txBox.text_frame.text = title_text
-                    for para in txBox.text_frame.paragraphs:
-                        for run in para.runs:
-                            run.font.size = Pt(28)
-                            run.font.bold = True
-
-                rows_data = sd.get("rows", [])
-                headers = sd.get("headers", [])
-                if headers:
-                    rows_data = [headers] + rows_data
-                if rows_data:
-                    n_rows = len(rows_data)
-                    n_cols = max(len(r) for r in rows_data)
-                    table = slide.shapes.add_table(
-                        n_rows, n_cols, Inches(0.5), Inches(1.5), Inches(12), Inches(5)
-                    ).table
-                    for r, row_data in enumerate(rows_data):
-                        for c, val in enumerate(row_data):
-                            cell = table.cell(r, c)
-                            cell.text = str(val)
-                            for para in cell.text_frame.paragraphs:
-                                para.font.size = Pt(12)
-                            if r == 0 and headers:
-                                cell.fill.solid()
-                                cell.fill.fore_color.rgb = RGBColor.from_string(theme_colors["primary"])
-                                for para in cell.text_frame.paragraphs:
-                                    for run in para.runs:
-                                        run.font.color.rgb = RGBColor(255, 255, 255)
-                                        run.font.bold = True
-
-            # ── 章节分隔页 ──
-            elif layout_type == "section":
-                slide = prs.slides.add_slide(prs.slide_layouts[2] if len(prs.slide_layouts) > 2 else prs.slide_layouts[0])
-                if title_text and slide.shapes.title:
-                    slide.shapes.title.text = title_text
-                    for para in slide.shapes.title.text_frame.paragraphs:
-                        para.alignment = PP_ALIGN.CENTER
-                        for run in para.runs:
-                            run.font.size = Pt(36)
-                            run.font.color.rgb = RGBColor.from_string(theme_colors["accent"])
-
-            # ── 结束页 ──
-            elif layout_type == "end":
-                slide = prs.slides.add_slide(prs.slide_layouts[0] if prs.slide_layouts else prs.slide_layouts[0])
-                txBox = slide.shapes.add_textbox(Inches(2), Inches(2.5), Inches(9), Inches(2))
-                tf = txBox.text_frame
-                tf.text = title_text or "谢谢"
-                for para in tf.paragraphs:
-                    para.alignment = PP_ALIGN.CENTER
-                    for run in para.runs:
-                        run.font.size = Pt(48)
-                        run.font.bold = True
-                        run.font.color.rgb = RGBColor.from_string(theme_colors["primary"])
-                if subtitle_text:
-                    sub_box = slide.shapes.add_textbox(Inches(2), Inches(4.5), Inches(9), Inches(1))
-                    sub_tf = sub_box.text_frame
-                    sub_tf.text = subtitle_text
-                    for para in sub_tf.paragraphs:
-                        para.alignment = PP_ALIGN.CENTER
-                        for run in para.runs:
-                            run.font.size = Pt(20)
-                            run.font.color.rgb = RGBColor.from_string(theme_colors["secondary"])
+        if not isinstance(slides, list) or not slides:
+            return {"error": "slides must be a non-empty list", "success": False}
 
         path = _safe_path(path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        prs.save(path)
-        return {"path": path, "slides": len(slides), "success": True}
+
+        config = {
+            "path": os.path.abspath(path),
+            "layout": layout,
+            "slides": slides,
+        }
+        if title:
+            config["title"] = title
+        if author:
+            config["author"] = author
+
+        # Write config to temp file, call Node.js worker
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False)
+            config_path = f.name
+
+        try:
+            worker_script = os.path.join(os.path.dirname(__file__), "pptxgenjs_worker.js")
+            result = subprocess.run(
+                ["node", worker_script],
+                input=json.dumps(config, ensure_ascii=False),
+                capture_output=True, text=True, timeout=120, encoding="utf-8",
+            )
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                return {"error": f"PptxGenJS error: {error_msg}", "success": False}
+
+            output = json.loads(result.stdout)
+            return output
+        finally:
+            os.unlink(config_path)
+
+    except json.JSONDecodeError as e:
+        _log.error("create_ppt JSON parse error: %s", e)
+        return {"error": f"Failed to parse PptxGenJS output: {e}", "success": False}
+    except subprocess.TimeoutExpired:
+        return {"error": "PPT generation timed out (120s)", "success": False}
     except Exception as e:
         _log.error("create_ppt failed: %s", e, exc_info=True)
         return {"error": str(e), "success": False}
@@ -711,67 +514,11 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
 # 工具注册
 # ═══════════════════════════════════════════════════════════════════════════
 
-def create_ppt_from_script(path: str, script: str) -> dict:
-    """
-    用 Python 脚本创建 PPT。脚本中 python-pptx 已预导入，只需构建并保存到 path。
-    
-    脚本中可用的变量:
-      - path: 保存路径（已自动设置）
-      - Presentation, Inches, Pt, Emu, RGBColor, PP_ALIGN, MSO_ANCHOR
-      - XL_CHART_TYPE, XL_LEGEND_POSITION, CategoryChartData
-    
-    示例脚本:
-      prs = Presentation()
-      prs.slide_width = Inches(13.333)
-      prs.slide_height = Inches(7.5)
-      slide = prs.slides.add_slide(prs.slide_layouts[0])
-      slide.shapes.title.text = "Hello"
-      prs.save(path)
-    """
-    try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt, Emu
-        from pptx.dml.color import RGBColor
-        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-        from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
-        from pptx.chart.data import CategoryChartData
-        
-        path = _safe_path(path)
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        
-        # Execute script with pptx imports available
-        # IMPORTANT: Everything must be in globals (not locals) because
-        # functions defined inside exec'd code can only see globals.
-        # Putting Pt/Inches/etc in locals causes NameError when called
-        # from within user-defined functions like set_font().
-        exec_globals = {
-            "__builtins__": __builtins__,
-            "path": path,
-            "Presentation": Presentation,
-            "Inches": Inches, "Pt": Pt, "Emu": Emu,
-            "RGBColor": RGBColor,
-            "PP_ALIGN": PP_ALIGN, "MSO_ANCHOR": MSO_ANCHOR,
-            "XL_CHART_TYPE": XL_CHART_TYPE, "XL_LEGEND_POSITION": XL_LEGEND_POSITION,
-            "CategoryChartData": CategoryChartData,
-            "os": os,
-        }
-        exec(script, exec_globals)
-        
-        if not os.path.exists(path):
-            return {"error": "Script did not save file to expected path", "success": False}
-        
-        return {"path": path, "success": True}
-    except Exception as e:
-        _log.error("create_ppt_from_script failed: %s", e, exc_info=True)
-        return {"error": str(e), "success": False}
-
-
 OFFICE_TOOLS = {
     "create_word": {"fn": create_word, "concurrency": "write_serial", "description": "创建Word文档（支持模板/字体/行距）"},
     "edit_word": {"fn": edit_word, "concurrency": "write_serial", "description": "编辑Word文档"},
     "read_word": {"fn": read_word, "concurrency": "read_parallel", "description": "读取Word文档内容"},
-    "create_ppt": {"fn": create_ppt, "concurrency": "write_serial", "description": "创建PPT（支持图表/主题/模板）"},
-    "create_ppt_from_script": {"fn": create_ppt_from_script, "concurrency": "write_serial", "description": "用Python脚本创建PPT（推荐>5页）。脚本中已预导入: Presentation, Inches, Pt, Emu, RGBColor, PP_ALIGN, MSO_ANCHOR, XL_CHART_TYPE, CategoryChartData。注意：python-pptx不支持动画，动画请用execute_code+comtypes COM自动化"},
+    "create_ppt": {"fn": create_ppt, "concurrency": "write_serial", "description": "创建PPT（基于PptxGenJS，支持过渡动画/阴影/透明度/图表/表格）。slides数组每个元素用elements定义文本/形状/图片/图表/表格"},
     "create_excel": {"fn": create_excel, "concurrency": "write_serial", "description": "创建Excel表格"},
     "read_excel": {"fn": read_excel, "concurrency": "read_parallel", "description": "读取Excel文件"},
     "edit_excel": {"fn": edit_excel, "concurrency": "write_serial", "description": "编辑Excel（图表/公式/格式）"},

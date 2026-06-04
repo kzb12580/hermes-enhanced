@@ -44,3 +44,4 @@ __pycache__/
 *.ps1
 *.psm1
 Microsoft.PowerShell_profile.ps1
+node_modules/

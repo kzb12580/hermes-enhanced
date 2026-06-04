@@ -84,7 +84,7 @@ When all tasks complete:
 When working with large files, many items, or complex documents, NEVER put all data in tool call arguments. This causes output truncation and API errors.
 
 ### Rules:
-1. **>5 pages/slides** → Use `create_ppt_from_script` (Python script), NOT `create_ppt` (JSON)
+1. **>5 pages/slides** → Use `create_ppt` (PptxGenJS handles all sizes, just pass slides array)
 2. **Insert many images** → Use `write_file` to write a Python script, then `execute_command` to run it
 3. **Large data processing** → Use `execute_code` tool to write and run Python scripts
 4. **Batch file operations** → Write a script that loops through files, don't make 100 separate tool calls
@@ -137,24 +137,9 @@ Step 3: verify_file(output_path)
 - f-strings: `f'text {var}'` — ensure all `{` have matching `}`
 - Triple quotes: ensure they are properly closed (match opening and closing)
 - Always test small code first before writing complex scripts
-- For PPT animations/transitions: python-pptx 完全不支持动画！禁止尝试 XML 操作或 python-pptx 方式。
-  正确方案：用 execute_code 写 Python 脚本调用 COM 自动化（comtypes）操作 PowerPoint 本身。
-  模板：```python
-  import comtypes.client
-  ppt = comtypes.client.CreateObject("PowerPoint.Application")
-  ppt.Visible = 1
-  pres = ppt.Presentations.Open(文件路径)
-  for slide in pres.Slides:
-      for shape in slide.Shapes:
-          if shape.HasTextFrame:
-              for i, para in enumerate(shape.TextFrame.TextRange.Paragraphs()):
-                  effect = slide.TimeLine.MainSequence.AddEffect(shape, 1, 0, 0)  # msoAnimEffectFade=1
-                  effect.Timing.TriggerType = 3  # msoAnimTriggerOnPageClick
-                  effect.Timing.TriggerDelayTime = i * 0.5
-  pres.Save()
-  ppt.Quit()
-  ```
-  先 pip install comtypes，再用上述模板。不要尝试 python-pptx XML 操作——浪费时间且必定失败。
+- PPT 过渡动画：create_ppt 已基于 PptxGenJS，原生支持过渡动画。
+  在 slide 定义中添加 `"transition": {"type": "fade", "duration": 1}` 即可。
+  支持的 type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
 
 ### Web
 - web_search — Search the internet
@@ -177,18 +162,16 @@ Step 3: verify_file(output_path)
 
 ### Office
 - create_word/read_word/edit_word — Word documents
-- create_ppt — PowerPoint presentations（简单PPT，≤5页）
-- create_ppt_from_script — 用Python脚本创建复杂PPT（推荐用于>5页或含图表/表格的PPT，避免JSON参数过大导致截断）
+- create_ppt — 创建PPT（基于PptxGenJS，支持过渡动画/阴影/透明度/图表/表格）
+- create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### Office 工具限制
-- python-pptx 不支持动画/过渡效果，禁止尝试 XML 操作。动画必须用 COM 自动化（comtypes + PowerPoint）
-- PPT 动画正确流程：1) python-pptx 创建基础PPT → 2) comtypes COM 打开PPT添加动画 → 3) 保存
+- create_ppt 用 PptxGenJS（Node.js），原生支持过渡动画，无需 COM 自动化
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
-- 大文件（>5页PPT、>100行Excel）必须用 execute_code 写脚本，不要用 JSON 参数
+- 大文件（>100行Excel）必须用 execute_code 写脚本
 - Python 字符串格式化用 `%s` 不是 `%%s`，f-string 确保 `{}` 配对
 - Windows 环境：pip install 时如遇 PowerShell 编码警告可忽略，不影响安装结果
-- create_excel/read_excel/edit_excel — Excel spreadsheets
 
 ### GUI Automation
 - mouse_move/click/drag/scroll — Mouse control
@@ -866,8 +849,7 @@ async def _execute_with_retry(tool_name: str, tool_args: dict, max_retries: int 
 async def _handle_oversized_args(tool_name: str, args_str: str, tool_call: dict) -> dict | None:
     """Handle oversized tool arguments by writing content to a temp file.
     
-    For tools like create_ppt_from_script that receive large script content,
-    write the content to a temp file and modify the tool call to use file_path.
+    For tools that receive large content, write to a temp file and modify the tool call.
     """
     try:
         # Try to parse the (possibly truncated) JSON
@@ -897,9 +879,7 @@ async def _handle_oversized_args(tool_name: str, args_str: str, tool_call: dict)
         import tempfile
         content = args[largest_key]
         ext = ".txt"
-        if tool_name in ("create_ppt_from_script",):
-            ext = ".ppt_script.py"
-        elif "code" in largest_key.lower():
+        if "code" in largest_key.lower():
             ext = ".py"
         
         with tempfile.NamedTemporaryFile(mode='w', suffix=ext, delete=False, encoding='utf-8') as f:
