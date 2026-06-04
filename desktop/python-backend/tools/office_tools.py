@@ -221,7 +221,7 @@ def read_word(path: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def create_ppt(path: str, slides: list[dict], layout: str = "16x9",
+def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16x9",
                title: str = "", author: str = "") -> dict:
     """
     创建 PPT 演示文稿（基于 PptxGenJS，支持动画/过渡/阴影/透明度）
@@ -256,8 +256,8 @@ def create_ppt(path: str, slides: list[dict], layout: str = "16x9",
     支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
     """
     try:
-        if not isinstance(slides, list) or not slides:
-            return {"error": "slides must be a non-empty list", "success": False}
+        if not slides or not isinstance(slides, list):
+            return {"error": "slides 参数缺失或为空。请提供 slides 数组，每个元素包含 elements 数组定义页面内容。", "success": False}
 
         path = _safe_path(path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -271,6 +271,18 @@ def create_ppt(path: str, slides: list[dict], layout: str = "16x9",
             config["title"] = title
         if author:
             config["author"] = author
+
+        # Ensure pptxgenjs is installed (auto-install on first use)
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        node_modules = os.path.join(tools_dir, "node_modules", "pptxgenjs")
+        if not os.path.isdir(node_modules):
+            _log.info("pptxgenjs not found, installing...")
+            install_result = subprocess.run(
+                ["npm", "install", "--production"],
+                cwd=tools_dir, capture_output=True, text=True, timeout=120, encoding="utf-8",
+            )
+            if install_result.returncode != 0:
+                return {"error": f"Failed to install pptxgenjs: {install_result.stderr.strip()}", "success": False}
 
         # Write config to temp file, call Node.js worker
         import tempfile

@@ -48,6 +48,10 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { inputData += chunk; });
 process.stdin.on("end", async () => {
   try {
+    // Strip BOM (﻿ = U+FEFF) — some editors/files prepend this
+    if (inputData.charCodeAt(0) === 0xFEFF) {
+      inputData = inputData.slice(1);
+    }
     const config = JSON.parse(inputData);
     const result = await generatePptx(config);
     process.stdout.write(JSON.stringify(result));
