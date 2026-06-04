@@ -539,15 +539,5 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 工具注册
+# 工具注册 — 通过 office_tool_wrappers.py 的 OFFICE_TOOL_DEFINITIONS 注册
 # ═══════════════════════════════════════════════════════════════════════════
-
-OFFICE_TOOLS = {
-    "create_word": {"fn": create_word, "concurrency": "write_serial", "description": "创建Word文档（支持模板/字体/行距）"},
-    "edit_word": {"fn": edit_word, "concurrency": "write_serial", "description": "编辑Word文档"},
-    "read_word": {"fn": read_word, "concurrency": "read_parallel", "description": "读取Word文档内容"},
-    "create_ppt": {"fn": create_ppt, "concurrency": "write_serial", "description": "创建PPT（基于PptxGenJS，支持过渡动画/阴影/透明度/图表/表格）。slides数组每个元素用elements定义文本/形状/图片/图表/表格"},
-    "create_excel": {"fn": create_excel, "concurrency": "write_serial", "description": "创建Excel表格"},
-    "read_excel": {"fn": read_excel, "concurrency": "read_parallel", "description": "读取Excel文件"},
-    "edit_excel": {"fn": edit_excel, "concurrency": "write_serial", "description": "编辑Excel（图表/公式/格式）"},
-}

@@ -100,7 +100,7 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="create_ppt",
-        description="创建PPT演示文稿（基于PptxGenJS）。支持过渡动画、阴影、透明度、图表、表格。slides中每个元素用elements数组定义。",
+        description="创建PPT（PptxGenJS引擎，支持过渡动画/阴影/透明度/图表/表格）。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
         fn=None,
         parameters={
             "type": "object",
@@ -156,7 +156,7 @@ OFFICE_TOOL_DEFINITIONS = [
                     },
                 },
             },
-            "required": ["path", "slides"],
+            "required": ["path"],
         },
     ),
     OfficeToolWrapper(
@@ -214,7 +214,7 @@ OFFICE_TOOL_DEFINITIONS = [
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["set_cell", "set_range", "add_sheet", "delete_sheet", "add_chart", "add_formula", "format_cells", "auto_filter"],
+                                "enum": ["set_cell", "set_range", "add_sheet", "delete_sheet", "add_chart", "add_formula", "format_cells", "auto_filter", "merge_cells"],
                                 "description": "操作类型",
                             },
                             "row": {"type": "integer", "description": "行号"},

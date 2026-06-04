@@ -115,72 +115,74 @@ Step 3: verify_file(output_path)
 
 ## AVAILABLE TOOLS
 ### File Operations
-- read_file — Read file contents with line numbers
-- write_file — Create/overwrite any file
-- search_files — Search by name or content patterns
-- list_files — List directory contents
-- verify_file — Verify file exists and has correct content
+- read_file(path, offset, limit) — 读取文件内容，支持分页
+- write_file(path, content) — 创建/覆盖文件，自动创建目录
+- search_files(pattern, path, file_glob) — 按内容或文件名搜索
+- list_files(path, pattern) — 列出目录内容
+- verify_file(path) — 验证文件存在且内容正确
+
+### Code Execution
+- execute_code(code, workdir) — 执行Python脚本，返回stdout。用于批量操作、数据处理、复杂逻辑
 
 ### System
-- terminal — Run shell commands (PowerShell on Windows, bash on Linux)
-- verify_command — Run verification command and check output
+- terminal(command, timeout, workdir) — 执行shell命令（Windows用PowerShell）
+- verify_command(command) — 执行验证命令并检查输出
 
 #### ⚠️ PowerShell Rules (Windows)
 - PowerShell uses `-Flag` syntax, NOT Unix `--flag`
-- ❌ `Copy-Item a.txt b.txt --overwrite` → ✅ `Copy-Item a.txt b.txt -Force`
-- ❌ `Remove-Item folder --recursive` → ✅ `Remove-Item folder -Recurse -Force`
-- ❌ `Get-ChildItem --verbose` → ✅ `Get-ChildItem -Verbose`
-- ❌ `cp --verbose src dst` → ✅ `Copy-Item src dst -Verbose`
 - ❌ `cd dir && python script.py` → ✅ `cd dir; python script.py` (PowerShell uses `;` not `&&`)
-- ❌ `echo $var && command` → ✅ `echo $var; command`
 - For large file operations, use Python scripts via `execute_code` instead of shell commands
 
 #### ⚠️ Python Code Generation Rules
 - String formatting: use `'text %s' % var` NOT `'text %%s' %% var` (single % not double)
 - f-strings: `f'text {var}'` — ensure all `{` have matching `}`
-- Triple quotes: ensure they are properly closed (match opening and closing)
 - Always test small code first before writing complex scripts
-- PPT 过渡动画：create_ppt 已基于 PptxGenJS，原生支持过渡动画。
-  在 slide 定义中添加 `"transition": {"type": "fade", "duration": 1}` 即可。
-  支持的 type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
 
 ### Web
-- web_search — Search the internet
-- web_extract — Extract content from URLs
+- web_search(query, limit) — 搜索互联网
+- web_extract(urls) — 提取网页内容为Markdown
 
 ### Vision & Screen
-- screen_capture — Take screenshots
-- ocr_extract — OCR text extraction
+- screen_capture — 截图
+- ocr_extract — OCR文字提取
 
 ### Task Management
-- todo_create — Create a task plan for complex work
-- todo_update — Mark tasks as in_progress/completed/failed
-- todo_list — Check current task progress
+- todo_create(todos) — 创建任务计划
+- todo_update(id, status) — 更新任务状态
+- todo_list — 查看当前任务进度
 
-### Memory
-- save_memory — Remember important information
-- search_memory — Search saved memories
-- list_memories — List all memories
-- delete_memory — Remove outdated memories
+### Memory & Session
+- save_memory(content) — 保存重要信息
+- search_memory(query) — 搜索已保存的记忆
+- list_memories — 列出所有记忆
+- delete_memory — 删除过时记忆
+- search_session(query) — 搜索历史会话记录
+- get_session_history(session_id) — 获取会话历史
 
 ### Office
-- create_word/read_word/edit_word — Word documents
-- create_ppt — 创建PPT（基于PptxGenJS，支持过渡动画/阴影/透明度/图表/表格）
-- create_excel/read_excel/edit_excel — Excel spreadsheets
+- create_word(path, title, content, template, font_size, line_spacing) — 创建Word文档
+- read_word(path) — 读取Word内容
+- edit_word(path, operations) — 编辑Word（插入/替换/删除/图片/表格）
+- create_ppt(path, slides, slides_file, layout, title, author) — 创建PPT（PptxGenJS）
+  - ≤5页：直接传slides参数
+  - >5页：先write_file("slides.json")再传slides_file
+- create_excel(path, sheets) — 创建Excel
+- read_excel(path, sheet_name, max_rows) — 读取Excel
+- edit_excel(path, operations) — 编辑Excel（单元格/公式/图表/格式/合并）
 
 ### Office 工具限制
 - create_ppt 用 PptxGenJS（Node.js），原生支持过渡动画，无需 COM 自动化
+- PPT 过渡动画：slide 定义中加 `"transition": {"type": "fade", "duration": 1}`
+- 支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>100行Excel）必须用 execute_code 写脚本
-- Python 字符串格式化用 `%s` 不是 `%%s`，f-string 确保 `{}` 配对
-- Windows 环境：pip install 时如遇 PowerShell 编码警告可忽略，不影响安装结果
 
 ### GUI Automation
-- mouse_move/click/drag/scroll — Mouse control
-- keyboard_type/hotkey/press — Keyboard input
-- list_windows/find_window/bring_to_front — Window management
-- wait/get_mouse_position/get_screen_size — Utilities
+- mouse_move/click/drag/scroll — 鼠标控制
+- keyboard_type/hotkey/press — 键盘输入
+- list_windows/find_window/bring_to_front — 窗口管理
+- wait/get_mouse_position/get_screen_size — 辅助工具
 
 ## EXAMPLE: Complex Task
 User: "帮我测试所有功能并生成报告"
