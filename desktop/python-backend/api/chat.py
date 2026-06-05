@@ -692,6 +692,9 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
             else:
                 # All tool_calls were invalid — keep as text-only assistant message
                 clean_msg = {"role": "assistant", "content": msg.get("content") or "(tool calls removed)"}
+            # Preserve reasoning_content for MIMO multi-turn compatibility
+            if msg.get("reasoning_content"):
+                clean_msg["reasoning_content"] = msg["reasoning_content"]
             result.append(clean_msg)
         elif msg.get("role") == "tool":
             # Only keep tool results that match a surviving tool_call
@@ -860,7 +863,18 @@ async def call_llm_streaming(
                     try:
                         chunk = json.loads(data)
                         if "choices" in chunk and chunk["choices"]:
-                            delta = chunk["choices"][0].get("delta", {}) if chunk["choices"][0] else {}
+                            choice = chunk["choices"][0]
+                            delta = choice.get("delta", {}) if choice else {}
+                            # Log finish_reason for truncation detection
+                            fr = choice.get("finish_reason")
+                            if fr and fr != "stop":
+                                logger.warning("LLM finish_reason=%s (may indicate truncation)", fr)
+                            # Handle reasoning_content (MIMO requirement)
+                            if "reasoning_content" in delta and delta["reasoning_content"]:
+                                rlen = len(delta["reasoning_content"])
+                                if rlen > 0:
+                                    # Yield as special marker for parent to capture
+                                    yield json.dumps({"reasoning_content": delta["reasoning_content"]})
                             if "content" in delta and delta["content"]:
                                 yield delta["content"]
                             elif "tool_calls" in delta and delta["tool_calls"]:
@@ -1222,12 +1236,20 @@ async def chat(message: ChatMessage):
                 # Call LLM with streaming
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
+                reasoning_text = ""  # Accumulate reasoning_content for MIMO
                 
                 # Sanitize before each LLM call — drop broken tool_calls from previous iteration
                 current_messages = _sanitize_messages(current_messages)
                 
                 async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
-                    if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
+                    if isinstance(chunk, str) and chunk.startswith('{"reasoning_content"'):
+                        # MIMO reasoning_content — capture but don't send to frontend
+                        try:
+                            rc_data = json.loads(chunk)
+                            reasoning_text += rc_data.get("reasoning_content", "")
+                        except json.JSONDecodeError:
+                            pass
+                    elif isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         # Regular content token
                         full_response += chunk
                         yield f"event: token\ndata: {chunk}\n\n"
@@ -1272,12 +1294,25 @@ async def chat(message: ChatMessage):
                 
                 complete_tool_calls = list(accumulated.values())
                 
+                # Log tool call details for debugging truncation
+                for tc in complete_tool_calls:
+                    fn = tc.get("function", {})
+                    args_len = len(fn.get("arguments", ""))
+                    logger.info(
+                        "Tool call: %s — args_len=%d chars, args_preview=%s...",
+                        fn.get("name", "?"), args_len, fn.get("arguments", "")[:100],
+                    )
+                
                 # Send tool call events to frontend
                 for tc in complete_tool_calls:
                     yield f"event: tool_call\ndata: {json.dumps({'id': tc['id'], 'name': tc['function']['name'], 'arguments': tc['function']['arguments']})}\n\n"
                 
                 # Add assistant message with tool_calls to history
+                # Include reasoning_content for MIMO multi-turn compatibility
                 assistant_msg = {"role": "assistant", "content": full_response or None, "tool_calls": complete_tool_calls}
+                if reasoning_text:
+                    assistant_msg["reasoning_content"] = reasoning_text
+                    logger.info("Captured reasoning_content: %d chars", len(reasoning_text))
                 current_messages.append(assistant_msg)
                 session["messages"].append(assistant_msg)
                 
@@ -1343,13 +1378,23 @@ async def chat(message: ChatMessage):
                     trimmed_messages.append(msg)
                 logger.info("Trimmed messages: %d → %d for final response", len(current_messages), len(trimmed_messages))
                 final_response = ""
+                final_reasoning = ""
                 async for chunk in call_llm_streaming(base_url, api_key, model, trimmed_messages, max_tokens, temperature, tools=None, proxy_url=message.proxy_url):
-                    if isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
+                    if isinstance(chunk, str) and chunk.startswith('{"reasoning_content"'):
+                        try:
+                            rc_data = json.loads(chunk)
+                            final_reasoning += rc_data.get("reasoning_content", "")
+                        except json.JSONDecodeError:
+                            pass
+                    elif isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
                         final_response += chunk
                         yield f"event: token\ndata: {chunk}\n\n"
                 if final_response:
-                    current_messages.append({"role": "assistant", "content": final_response})
-                    session["messages"].append({"role": "assistant", "content": final_response})
+                    final_msg = {"role": "assistant", "content": final_response}
+                    if final_reasoning:
+                        final_msg["reasoning_content"] = final_reasoning
+                    current_messages.append(final_msg)
+                    session["messages"].append(final_msg)
             
             # Save session
             session_manager._save()
