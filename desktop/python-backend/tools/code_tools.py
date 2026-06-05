@@ -12,7 +12,7 @@ from . import register
 
 class ExecuteCodeTool(BaseTool):
     name = "execute_code"
-    description = "Execute a Python script and return stdout. Use for batch operations, data processing, complex calculations, or when you need multiple tool calls with logic between them. The script runs in a temporary file."
+    description = "Execute a Python script and return stdout. For large scripts (>20 lines), use chunk_index/total_chunks to split, or write_file first then execute_command."
     timeout = 120
     parameters = {
         "type": "object",
@@ -26,15 +26,51 @@ class ExecuteCodeTool(BaseTool):
                 "description": "Working directory (optional)",
                 "default": "",
             },
+            "chunk_index": {"type": "integer", "description": "当前块号(从1开始)，大脚本分块时使用", "default": 0},
+            "total_chunks": {"type": "integer", "description": "总块数，大脚本分块时使用", "default": 0},
         },
         "required": ["code"],
     }
 
-    async def execute(self, code: str, workdir: str = "", **kwargs) -> str:
+    async def execute(self, code: str, workdir: str = "", chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
+        import json as _json
+
+        # Chunked mode — store chunks, execute when complete
+        if chunk_index > 0 and total_chunks > 0:
+            from api.chunk_manager import store_chunk
+            # Use a virtual path for the code chunks
+            result = store_chunk("__execute_code__.py", chunk_index, total_chunks, code, workspace=workdir or None)
+            if result.get("status") == "merged":
+                # All chunks received — execute the merged code
+                merged_path = result.get("path", "")
+                if merged_path and os.path.isfile(merged_path):
+                    # Run the merged script
+                    return await self._run_script(merged_path, workdir)
+            return _json.dumps(result, ensure_ascii=False)
+
+        # Normal mode — check size and guide to chunking
+        from api.model_limits import get_max_tool_arg_chars
+        model = kwargs.get("_model", "")
+        limit = get_max_tool_arg_chars(model)
+        if len(code) > limit and limit < 50000:
+            total = (len(code) + limit - 2) // (limit - 200)
+            return _json.dumps({
+                "ok": False,
+                "error": "code_too_large",
+                "char_count": len(code),
+                "model_limit": limit,
+                "instruction": f"代码过大({len(code)}字符)，请分块发送。总块数: {total}。第1块: execute_code(chunk_code, chunk_index=1, total_chunks={total})",
+                "total_chunks": total,
+            }, ensure_ascii=False)
+
         # Write code to a temp file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
             f.write(code)
             script_path = f.name
+
+        return await self._run_script(script_path, workdir)
+
+    async def _run_script(self, script_path: str, workdir: str = "") -> str:
 
         try:
             is_windows = os.name == 'nt'

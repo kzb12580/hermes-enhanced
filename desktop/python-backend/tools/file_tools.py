@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import glob as globmod
+import json
 import os
 import re
 import sys
@@ -156,17 +157,40 @@ class ReadFileTool(BaseTool):
 
 class WriteFileTool(BaseTool):
     name = "write_file"
-    description = "Write content to a file. Creates parent directories. Overwrites existing content."
+    description = "Write content to a file. Creates parent directories. Overwrites existing content. For large content, use chunk_index/total_chunks to split."
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "文件路径"},
             "content": {"type": "string", "description": "Content to write"},
+            "chunk_index": {"type": "integer", "description": "当前块号(从1开始)，大文件分块写入时使用", "default": 0},
+            "total_chunks": {"type": "integer", "description": "总块数，大文件分块写入时使用", "default": 0},
         },
         "required": ["path", "content"],
     }
 
-    async def execute(self, path: str, content: str, **kwargs) -> str:
+    async def execute(self, path: str, content: str, chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
+        # Chunked write mode
+        if chunk_index > 0 and total_chunks > 0:
+            from api.chunk_manager import store_chunk
+            result = store_chunk(path, chunk_index, total_chunks, content)
+            return json.dumps(result, ensure_ascii=False)
+
+        # Normal write — check size and guide to chunking if too large
+        from api.model_limits import get_max_tool_arg_chars
+        model = kwargs.get("_model", "")
+        limit = get_max_tool_arg_chars(model)
+        if len(content) > limit and limit < MAX_WRITE_SIZE:
+            total = (len(content) + limit - 2) // (limit - 200)  # ceil with margin
+            return json.dumps({
+                "ok": False,
+                "error": "content_too_large",
+                "char_count": len(content),
+                "model_limit": limit,
+                "instruction": f"内容过大({len(content)}字符)，请分块写入。总块数: {total}。第1块请调用: write_file(path, chunk_content, chunk_index=1, total_chunks={total})",
+                "total_chunks": total,
+            }, ensure_ascii=False)
+
         if len(content) > MAX_WRITE_SIZE:
             return f"Error: Content too large ({len(content)} chars)"
 

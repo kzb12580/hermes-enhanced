@@ -105,6 +105,16 @@ Step 3: verify_file(output_path)
 ❌ 用 python-pptx 或 execute_code 自己写PPT脚本（用 create_ppt 工具！）
 ❌ edit_word with 100 insert_image operations in one call
 ❌ create_excel with 10,000 rows inline
+
+### 分块写入协议（当收到 content_too_large / code_too_large 错误时）：
+当后端返回"内容过大，请分块写入"时，**必须按指示分块发送**：
+1. 后端会告诉你总块数 N
+2. 第1块：write_file(path, chunk1_content, chunk_index=1, total_chunks=N)
+3. 第2块：write_file(path, chunk2_content, chunk_index=2, total_chunks=N)
+4. ...直到第N块
+5. 后端自动合并所有块并写入目标文件
+
+⚠️ **不要试图绕过分块！** 如果后端说内容太大，就必须分块。不要重复发送完整内容。
 ❌ read_file on a 50MB file
 
 ### What TO do:
@@ -909,7 +919,7 @@ async def call_llm(
         return response.json()
 
 
-async def execute_tools(tool_calls: list[dict]) -> list[dict]:
+async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
     """Execute multiple tool calls with retry and error recovery."""
     results = []
     for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
@@ -956,6 +966,10 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
                     "content": f"Error: Invalid tool arguments format: {e}",
                 })
                 continue
+
+        # Inject model name for tools that need it (chunk size limits)
+        if model:
+            tool_args["_model"] = model
 
         # Execute with retry for transient errors
         result = await _execute_with_retry(tool_name, tool_args)
@@ -1268,7 +1282,7 @@ async def chat(message: ChatMessage):
                 session["messages"].append(assistant_msg)
                 
                 # Execute tools
-                tool_results = await execute_tools(complete_tool_calls)
+                tool_results = await execute_tools(complete_tool_calls, model=model)
                 
                 # Send tool results and add to messages
                 for result in tool_results:
