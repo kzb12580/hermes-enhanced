@@ -529,6 +529,39 @@ def _try_repair_json(raw: str) -> str | None:
     return None
 
 
+def _salvage_truncated_write_file(raw_args: str) -> str | None:
+    """Salvage a truncated write_file tool call by extracting path and partial content."""
+    import re
+    
+    path_match = re.search(r'"path"\s*:\s*"([^"]*)"', raw_args)
+    if not path_match:
+        return None
+    path = path_match.group(1)
+    
+    content_match = re.search(r'"content"\s*:\s*"', raw_args)
+    if not content_match:
+        return json.dumps({"path": path, "content": ""}, ensure_ascii=False)
+    
+    content_start = content_match.end()
+    raw_content = raw_args[content_start:]
+    
+    # Unescape JSON string escapes in the partial content
+    raw_content = raw_content.replace('\\"', '"')
+    raw_content = raw_content.replace('\\n', chr(10))
+    raw_content = raw_content.replace('\\t', chr(9))
+    raw_content = raw_content.replace('\\\\', '\\')
+    
+    if raw_content.endswith('\\'):
+        raw_content = raw_content[:-1]
+    
+    if not raw_content:
+        return None
+    
+    try:
+        return json.dumps({"path": path, "content": raw_content}, ensure_ascii=False)
+    except Exception:
+        return None
+
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
     """Fix malformed tool_calls in session messages before sending to API.
     
@@ -568,8 +601,20 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                         tc["function"]["arguments"] = args
                         logger.info("Repaired truncated JSON for tool_call: %s", name)
                     else:
-                        logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
-                        continue
+                        # Special handling: write_file with truncated content
+                        # Extract path and partial content instead of dropping entirely
+                        if name == "write_file":
+                            salvaged = _salvage_truncated_write_file(args)
+                            if salvaged:
+                                args = salvaged
+                                tc["function"]["arguments"] = args
+                                logger.warning("Salvaged truncated write_file: wrote partial content")
+                            else:
+                                logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
+                                continue
+                        else:
+                            logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
+                            continue
                 tc_id = tc.get("id", f"call_{hash(name)}")
                 valid_calls.append({
                     "id": tc_id,
