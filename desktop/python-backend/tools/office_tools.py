@@ -8,6 +8,7 @@ import json
 import logging
 import shutil
 import subprocess
+import sys
 from typing import Optional
 from pathlib import Path
 
@@ -293,9 +294,12 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
         node_modules = os.path.join(tools_dir, "node_modules", "pptxgenjs")
         if not os.path.isdir(node_modules):
             _log.info("pptxgenjs not found, installing...")
+            # Windows: use shell=True so npm.cmd/node.cmd resolve via PATH
+            _is_win = sys.platform == "win32"
             install_result = subprocess.run(
                 ["npm", "install", "--production"],
                 cwd=tools_dir, capture_output=True, text=True, timeout=120, encoding="utf-8",
+                shell=_is_win,
             )
             if install_result.returncode != 0:
                 return {"error": f"Failed to install pptxgenjs: {install_result.stderr.strip()}", "success": False}
@@ -312,6 +316,7 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
                 ["node", worker_script],
                 input=json.dumps(config, ensure_ascii=False),
                 capture_output=True, text=True, timeout=120, encoding="utf-8",
+                shell=(sys.platform == "win32"),
             )
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
