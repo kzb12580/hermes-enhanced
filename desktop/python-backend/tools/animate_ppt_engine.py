@@ -565,7 +565,22 @@ def add_animations(
         base, ext = os.path.splitext(pptx_path)
         output = f"{base}_animated{ext}"
 
-    # Copy input to output
+    # ── Dual engine: COM first on Windows, XML fallback ──
+    import sys
+    if sys.platform == "win32":
+        try:
+            from .animate_ppt_com import add_animations_com, is_com_available
+            if is_com_available():
+                _log.info("Using COM backend (PowerPoint automation)")
+                result = add_animations_com(pptx_path, animations, output=output, transitions=transitions)
+                if result.get("success"):
+                    return result
+                _log.warning("COM backend failed (%s), falling back to XML", result.get("error"))
+        except Exception as e:
+            _log.warning("COM backend unavailable (%s), using XML", e)
+
+    # ── XML injection backend ──
+    _log.info("Using XML injection backend")
     shutil.copy2(pptx_path, output)
 
     # Build transition index: {slide_num: transition_element}
