@@ -18,6 +18,7 @@ from api.session_manager import SessionManager
 from api.memory import get_memory_context
 from api.prompts import build_system_prompt as _build_system_prompt, build_tools_description
 from api.skills_manager import skill_manager
+from api.model_limits import get_max_tool_arg_chars, get_reasoning_type, is_reasoning_model
 from tools import all_tools, openai_tools, execute_tool
 
 logger = logging.getLogger("hermes-backend.chat")
@@ -939,6 +940,8 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
     for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
         tool_name = tool_call["function"]["name"]
         args_str = tool_call["function"]["arguments"]
+        tc_start = time.time()
+        logger.info("─── Tool call: %s | args_len=%d chars ───", tool_name, len(args_str))
         
         # Check for oversized tool arguments — try to extract key field to file
         if len(args_str) > 15_000:  # 15KB threshold
@@ -981,14 +984,19 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
                 })
                 continue
 
-        # Inject model name for tools that need it (chunk size limits)
-        if model:
+        # Inject model name only for tools that use chunk size limits
+        if model and tool_name in ("write_file", "execute_code"):
             tool_args["_model"] = model
 
         # Execute with retry for transient errors
         result = await _execute_with_retry(tool_name, tool_args)
         result = truncate_tool_result(result)
-        logger.info("Tool result: %s...", result[:200])
+        tc_elapsed = time.time() - tc_start
+        is_error = result.startswith("Error") or '"error"' in result[:100]
+        logger.info("Tool %s result: %.1fs | %s | %s...",
+                     tool_name, tc_elapsed,
+                     "ERROR" if is_error else "OK",
+                     result[:200])
 
         results.append({
             "role": "tool",
@@ -1222,6 +1230,12 @@ async def chat(message: ChatMessage):
     max_tokens = message.max_tokens or max_response
     temperature = message.temperature if message.temperature is not None else 0.7
     tools = openai_tools()
+    
+    # Log model configuration for debugging
+    reasoning_type = get_reasoning_type(model)
+    tool_arg_limit = get_max_tool_arg_chars(model)
+    logger.info("═══ Model: %s | reasoning=%s | max_tool_arg=%d chars | max_tokens=%d ═══",
+                model, reasoning_type or "none", tool_arg_limit, max_tokens)
 
     async def generate_stream():
         """Generate SSE stream for chat response with tool execution loop."""
@@ -1233,6 +1247,7 @@ async def chat(message: ChatMessage):
             MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次自动终止
             
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
+                iter_start = time.time()
                 # Call LLM with streaming
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
@@ -1353,7 +1368,14 @@ async def chat(message: ChatMessage):
                     current_messages = list(trim_messages(current_messages, max_input_tokens))
                 
                 # Continue loop for follow-up LLM call
-                logger.info("Tool iteration %d done, calling LLM again", iteration + 1)
+                iter_elapsed = time.time() - iter_start
+                logger.info(
+                    "Tool iteration %d done (%.1fs) | tools=%d | reasoning=%d chars | response=%d chars | msgs=%d",
+                    iteration + 1, iter_elapsed,
+                    len(complete_tool_calls) if 'complete_tool_calls' in dir() else 0,
+                    len(reasoning_text) if reasoning_text else 0,
+                    len(full_response), len(current_messages),
+                )
             
             # If loop exhausted (all iterations had tool calls), call LLM one final time
             # WITHOUT tools so it must generate a text response
