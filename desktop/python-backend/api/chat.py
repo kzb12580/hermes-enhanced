@@ -88,9 +88,11 @@ When working with large files, many items, or complex documents, NEVER put all d
    - ≤5页：直接传 `slides` 参数
    - >5页：先 `write_file("slides.json", JSON)` → 再 `create_ppt(path, slides_file="slides.json")`
 2. **Insert many images** → Use `write_file` to write a Python script, then `execute_command` to run it
-3. **Large data processing** → Use `execute_code` tool to write and run Python scripts
+3. **Large data processing** → 先 `write_file("script.py", code)` → 再 `execute_command("python script.py")`
 4. **Batch file operations** → Write a script that loops through files, don't make 100 separate tool calls
 5. **Reading large files** → Read in chunks (offset/limit), don't read entire 100MB files
+
+⚠️ **execute_code 只用于短脚本（<20行）！长脚本必须先 write_file 再 execute_command，否则会截断。**
 
 ### Pattern for large operations:
 ```
@@ -561,6 +563,48 @@ def _salvage_truncated_write_file(raw_args: str) -> str | None:
         return json.dumps({"path": path, "content": raw_content}, ensure_ascii=False)
     except Exception:
         return None
+def _salvage_truncated_execute_code(raw_args: str) -> str | None:
+    """Salvage a truncated execute_code tool call by extracting partial code.
+    
+    Converts to a write_file call that saves the partial code to a temp file.
+    The model can then use execute_command("python temp_script.py") to run it.
+    Returns write_file JSON string or None if extraction fails.
+    """
+    import re
+    import tempfile
+    
+    # Try to extract "code" field
+    code_match = re.search(r'"code"\s*:\s*"', raw_args)
+    if not code_match:
+        return None
+    
+    code_start = code_match.end()
+    raw_code = raw_args[code_start:]
+    
+    # Unescape JSON string escapes
+    bs = chr(92)
+    raw_code = raw_code.replace(bs + '"', '"')
+    raw_code = raw_code.replace(bs + 'n', chr(10))
+    raw_code = raw_code.replace(bs + 't', chr(9))
+    raw_code = raw_code.replace(bs + bs, bs)
+    
+    if raw_code.endswith(bs):
+        raw_code = raw_code[:-1]
+    
+    if not raw_code:
+        return None
+    
+    # Write partial code to temp file
+    try:
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8')
+        tmp.write(raw_code)
+        tmp.close()
+        return json.dumps({"path": tmp.name, "content": raw_code}, ensure_ascii=False)
+    except Exception:
+        return None
+
+
+
 
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
     """Fix malformed tool_calls in session messages before sending to API.
@@ -601,14 +645,25 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                         tc["function"]["arguments"] = args
                         logger.info("Repaired truncated JSON for tool_call: %s", name)
                     else:
-                        # Special handling: write_file with truncated content
-                        # Extract path and partial content instead of dropping entirely
+                        # Special handling: write_file/execute_code with truncated content
+                        # Extract path/code and partial content instead of dropping entirely
                         if name == "write_file":
                             salvaged = _salvage_truncated_write_file(args)
                             if salvaged:
                                 args = salvaged
                                 tc["function"]["arguments"] = args
                                 logger.warning("Salvaged truncated write_file: wrote partial content")
+                            else:
+                                logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
+                                continue
+                        elif name == "execute_code":
+                            salvaged = _salvage_truncated_execute_code(args)
+                            if salvaged:
+                                # Convert to write_file — save partial code to temp file
+                                tc["function"]["name"] = "write_file"
+                                args = salvaged
+                                tc["function"]["arguments"] = args
+                                logger.warning("Salvaged truncated execute_code: converted to write_file")
                             else:
                                 logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
                                 continue
