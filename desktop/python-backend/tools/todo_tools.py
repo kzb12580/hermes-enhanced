@@ -43,6 +43,12 @@ class TodoCreateTool(BaseTool):
         global _todos
         # Accept both 'tasks' and 'todos' as parameter name (LLM sometimes uses 'todos')
         task_list = tasks or kwargs.get("todos", [])
+        # LLM may pass tasks as a JSON string instead of a list
+        if isinstance(task_list, str):
+            try:
+                task_list = json.loads(task_list)
+            except (json.JSONDecodeError, ValueError):
+                return json.dumps({"ok": False, "error": "tasks must be a list of objects, got invalid JSON string"}, ensure_ascii=False)
         if not task_list:
             return json.dumps({"ok": False, "error": "No tasks provided"}, ensure_ascii=False)
         _todos = task_list

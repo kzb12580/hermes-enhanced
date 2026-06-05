@@ -609,17 +609,26 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
     for match in _re.finditer(r'<function=(\w+)>(.*?)</function>', text, _re.DOTALL):
         name = match.group(1)
         args_raw = match.group(2).strip()
+        args = {}
         try:
             args = json.loads(args_raw)
         except json.JSONDecodeError:
-            # Try to parse as key=value pairs
-            args = {}
-            for part in args_raw.split(","):
-                if "=" in part:
-                    k, v = part.split("=", 1)
-                    args[k.strip()] = v.strip().strip('"').strip("'")
-            if not args:
-                args = {"input": args_raw}
+            # Try to repair truncated JSON first
+            repaired = _try_repair_json(args_raw)
+            if repaired:
+                try:
+                    args = json.loads(repaired)
+                except (json.JSONDecodeError, ValueError):
+                    repaired = None
+            if not repaired:
+                # Try to parse as key=value pairs
+                args = {}
+                for part in args_raw.split(","):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        args[k.strip()] = v.strip().strip('"').strip("'")
+                if not args:
+                    args = {"input": args_raw}
         calls.append({
             "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
             "type": "function",
@@ -640,7 +649,21 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
                         "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
                     })
             except json.JSONDecodeError:
-                pass
+                # Try to repair truncated JSON before dropping
+                repaired = _try_repair_json(match.group(1))
+                if repaired:
+                    try:
+                        data = json.loads(repaired)
+                        name = data.get("name", "")
+                        arguments = data.get("arguments", data.get("args", {}))
+                        if name:
+                            calls.append({
+                                "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+                                "type": "function",
+                                "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+                            })
+                    except (json.JSONDecodeError, ValueError):
+                        pass
     
     return calls
 
@@ -811,13 +834,28 @@ async def execute_tools(tool_calls: list[dict]) -> list[dict]:
         try:
             tool_args = json.loads(args_str)
         except (json.JSONDecodeError, KeyError) as e:
-            logger.error("Failed to parse tool arguments: %s", e)
-            results.append({
-                "role": "tool",
-                "tool_call_id": tool_call.get("id", ""),
-                "content": f"Error: Invalid tool arguments format: {e}",
-            })
-            continue
+            # Try to repair truncated JSON (common with long write_file content)
+            repaired = _try_repair_json(args_str)
+            if repaired is not None:
+                try:
+                    tool_args = json.loads(repaired)
+                    logger.info("Repaired truncated JSON for tool %s", tool_name)
+                except (json.JSONDecodeError, ValueError):
+                    logger.error("Failed to parse tool arguments even after repair: %s", e)
+                    results.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", ""),
+                        "content": f"Error: Invalid tool arguments format: {e}",
+                    })
+                    continue
+            else:
+                logger.error("Failed to parse tool arguments: %s", e)
+                results.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id", ""),
+                    "content": f"Error: Invalid tool arguments format: {e}",
+                })
+                continue
 
         # Execute with retry for transient errors
         result = await _execute_with_retry(tool_name, tool_args)

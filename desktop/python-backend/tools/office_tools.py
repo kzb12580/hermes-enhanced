@@ -569,6 +569,17 @@ def animate_ppt(path: str, animations: list, transitions: list = None, output: s
         output: 输出路径
     """
     try:
+        # LLM may pass animations/transitions as JSON strings instead of lists
+        if isinstance(animations, str):
+            try:
+                animations = json.loads(animations)
+            except (json.JSONDecodeError, ValueError):
+                return {"error": "animations must be a list of objects, got invalid JSON string", "success": False}
+        if isinstance(transitions, str):
+            try:
+                transitions = json.loads(transitions)
+            except (json.JSONDecodeError, ValueError):
+                transitions = None
         from .animate_ppt_engine import add_animations
         return add_animations(path, animations, output=output, transitions=transitions)
     except Exception as e:

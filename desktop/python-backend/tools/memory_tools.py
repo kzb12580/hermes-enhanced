@@ -33,6 +33,13 @@ class SaveMemoryTool(BaseTool):
         from datetime import datetime, timezone
         import uuid
 
+        # LLM may pass tags as a JSON string instead of a list
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (json.JSONDecodeError, ValueError):
+                tags = [tags]
+
         mid = str(uuid.uuid4())
         memory = {
             "id": mid,

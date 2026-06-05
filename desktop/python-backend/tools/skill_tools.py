@@ -42,6 +42,12 @@ class SaveSkillTool(BaseTool):
     async def execute(self, name: str, description: str, steps: str, tags: list = None, **kwargs) -> str:
         _ensure_dir()
         name = _sanitize_name(name)
+        # LLM may pass tags as a JSON string instead of a list
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (json.JSONDecodeError, ValueError):
+                tags = [tags]
         data = {
             "name": name,
             "description": description,
