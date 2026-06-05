@@ -573,9 +573,10 @@ def add_animations(
             if is_com_available():
                 _log.info("Using COM backend (PowerPoint automation)")
                 result = add_animations_com(pptx_path, animations, output=output, transitions=transitions)
-                if result.get("success"):
+                if result.get("success") and result.get("shapes_animated", 0) > 0:
                     return result
-                _log.warning("COM backend failed (%s), falling back to XML", result.get("error"))
+                _log.warning("COM backend: success=%s, shapes_animated=%d — falling back to XML",
+                             result.get("success"), result.get("shapes_animated", 0))
         except Exception as e:
             _log.warning("COM backend unavailable (%s), using XML", e)
 

@@ -135,6 +135,48 @@ def store_chunk(
     }
 
 
+def _smart_merge(parts: list[str], target_path: str) -> str:
+    """Smart merge that handles JSON array splits correctly.
+    
+    When a model splits a JSON array across chunks:
+      chunk 1: [{...},{...}]
+      chunk 2: [{...},{...}]
+    Simple concatenation produces [{...},{...}][{...},{...}] (invalid).
+    This function detects JSON arrays and merges them properly.
+    """
+    if len(parts) <= 1:
+        return "".join(parts)
+    
+    # Try JSON array merge: strip trailing ] from earlier chunks and leading [ from later chunks
+    stripped = []
+    for i, part in enumerate(parts):
+        p = part.strip()
+        if i < len(parts) - 1 and p.endswith("]"):
+            p = p[:-1]  # Strip trailing ]
+        if i > 0 and p.startswith("["):
+            p = p[1:]  # Strip leading [
+        stripped.append(p)
+    
+    merged = ",".join(stripped)  # Use comma to join array elements
+    
+    # Validate it's valid JSON
+    try:
+        json.loads(merged)
+        logger.info("Smart merge: detected JSON array split, merged %d parts correctly", len(parts))
+        return merged
+    except json.JSONDecodeError:
+        # Not valid JSON — try simple concatenation as fallback
+        simple = "".join(parts)
+        try:
+            json.loads(simple)
+            logger.info("Smart merge: simple concatenation is valid JSON")
+            return simple
+        except json.JSONDecodeError:
+            # Neither works — log warning and return simple concatenation
+            logger.warning("Smart merge: merged content is not valid JSON, returning raw concatenation")
+            return simple
+
+
 def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) -> dict:
     """Merge all chunks into the target file and clean up."""
     cd = _chunk_dir(target_path, workspace)
@@ -151,7 +193,7 @@ def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) ->
             }
         parts.append(chunk_file.read_text(encoding="utf-8"))
 
-    full_content = "".join(parts)
+    full_content = _smart_merge(parts, target_path)
 
     # Write to target path
     target = Path(target_path)

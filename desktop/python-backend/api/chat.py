@@ -1234,8 +1234,9 @@ async def chat(message: ChatMessage):
     # Log model configuration for debugging
     reasoning_type = get_reasoning_type(model)
     tool_arg_limit = get_max_tool_arg_chars(model)
-    logger.info("═══ Model: %s | reasoning=%s | max_tool_arg=%d chars | max_tokens=%d ═══",
-                model, reasoning_type or "none", tool_arg_limit, max_tokens)
+    logger.info("═══ Model: %s | reasoning=%s | max_tool_arg=%d chars | max_tokens=%d (user_set=%s, max_response=%d) ═══",
+                model, reasoning_type or "none", tool_arg_limit, max_tokens,
+                message.max_tokens, max_response)
 
     async def generate_stream():
         """Generate SSE stream for chat response with tool execution loop."""
