@@ -109,7 +109,8 @@ HARDCODED_PROFILES: dict[str, str] = {
 1. **JSON 截断** — MIMO 生成长 JSON 容易被截断（Unterminated string），所以参数越短越好
 2. **重复尝试** — 失败 2 次后必须换方案，不要一直重试同一个方法
 3. **不要写 Python 脚本生成 PPT** — 用 create_ppt 工具，不要用 python-pptx
-4. **不要自己实现动画** — PptxGenJS 的 transition 在 slide 定义里加就行
+4. **不要自己实现动画** — 用 animate_ppt 工具，不要自己拼 XML 或写 COM 脚本
+5. **动画工作流**: create_ppt(创建) → list_ppt_shapes(查看形状) → animate_ppt(加动画)
 
 ### ✅ MIMO 最佳实践
 - 先 `write_file` 写数据文件，再调用工具读取 — 比内联参数稳定 10 倍

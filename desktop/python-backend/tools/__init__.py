@@ -112,6 +112,9 @@ def _auto_register():
         "create_excel": office_tools.create_excel,
         "read_excel": office_tools.read_excel,
         "edit_excel": office_tools.edit_excel,
+        "animate_ppt": office_tools.animate_ppt,
+        "list_ppt_shapes": office_tools.list_ppt_shapes,
+        "list_anim_effects": office_tools.list_anim_effects,
     }
     for wrapper in OFFICE_TOOL_DEFINITIONS:
         try:

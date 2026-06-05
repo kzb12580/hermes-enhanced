@@ -170,10 +170,20 @@ Step 3: verify_file(output_path)
 - read_excel(path, sheet_name, max_rows) — 读取Excel
 - edit_excel(path, operations) — 编辑Excel（单元格/公式/图表/格式/合并）
 
+### PPT 动画工具（专用）
+- animate_ppt(path, animations, transitions) — 为PPT添加原生动画（40+种效果）
+  - 先用 list_ppt_shapes(path) 查看形状ID
+  - animations: [{"slide": 1, "effect": "fade", "target": "all_text", "duration": 0.5, "trigger": "afterprev"}]
+  - transitions: [{"slide": 1, "type": "fade", "duration": 1, "direction": "left"}]
+  - target选项: "all", "all_text", "title", "body", "all_images", "1,3,5"(形状ID)
+  - 触发方式: "onclick"(点击), "withprev"(同时), "afterprev"(之后)
+- list_ppt_shapes(path, slide) — 列出PPT形状名称和ID
+- list_anim_effects() — 列出所有可用动画效果
+
 ### Office 工具限制
 - create_ppt 用 PptxGenJS（Node.js），原生支持过渡动画，无需 COM 自动化
-- PPT 过渡动画：slide 定义中加 `"transition": {"type": "fade", "duration": 1}`
-- 支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
+- animate_ppt 用 XML 直接操作，支持逐元素动画编排，无需 python-pptx 或 COM
+- PPT 动画工作流: create_ppt(创建) → animate_ppt(加动画) → 完成
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>100行Excel）必须用 execute_code 写脚本
