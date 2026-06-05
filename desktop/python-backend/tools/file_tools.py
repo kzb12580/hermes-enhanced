@@ -120,7 +120,7 @@ class ReadFileTool(BaseTool):
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Absolute path to the file"},
+            "path": {"type": "string", "description": "文件路径"},
             "offset": {"type": "integer", "description": "Line number to start from (1-indexed, default 1)", "default": 1},
             "limit": {"type": "integer", "description": "Max lines to read (default 500)", "default": 500},
         },
@@ -160,7 +160,7 @@ class WriteFileTool(BaseTool):
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Absolute path to the file"},
+            "path": {"type": "string", "description": "文件路径"},
             "content": {"type": "string", "description": "Content to write"},
         },
         "required": ["path", "content"],
