@@ -290,15 +290,23 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
             config["author"] = author
 
         # Ensure pptxgenjs is installed (auto-install on first use)
+        # IMPORTANT: In PyInstaller-packaged apps, the source directory is READ-ONLY.
+        # We install to ~/.hermes-desktop/ which is always writable.
+        _is_win = sys.platform == "win32"
         tools_dir = os.path.dirname(os.path.abspath(__file__))
-        node_modules = os.path.join(tools_dir, "node_modules", "pptxgenjs")
+        user_pkg_dir = os.path.join(str(Path.home()), ".hermes-desktop", "pptxgenjs-pkg")
+        node_modules = os.path.join(user_pkg_dir, "node_modules", "pptxgenjs")
         if not os.path.isdir(node_modules):
-            _log.info("pptxgenjs not found, installing...")
-            # Windows: use shell=True so npm.cmd/node.cmd resolve via PATH
-            _is_win = sys.platform == "win32"
+            _log.info("pptxgenjs not found, installing to %s...", user_pkg_dir)
+            os.makedirs(user_pkg_dir, exist_ok=True)
+            # Create package.json if missing
+            pkg_json = os.path.join(user_pkg_dir, "package.json")
+            if not os.path.isfile(pkg_json):
+                with open(pkg_json, "w", encoding="utf-8") as f:
+                    json.dump({"name": "hermes-pptxgenjs", "version": "1.0.0", "dependencies": {"pptxgenjs": "^3.0.0"}}, f)
             install_result = subprocess.run(
-                ["npm", "install", "--production"],
-                cwd=tools_dir, capture_output=True, text=True, timeout=120, encoding="utf-8",
+                ["npm", "install"],
+                cwd=user_pkg_dir, capture_output=True, text=True, timeout=120, encoding="utf-8",
                 shell=_is_win,
             )
             if install_result.returncode != 0:
@@ -312,11 +320,15 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
 
         try:
             worker_script = os.path.join(os.path.dirname(__file__), "pptxgenjs_worker.js")
+            # Set NODE_PATH so node can find pptxgenjs in user directory
+            node_env = os.environ.copy()
+            node_env["NODE_PATH"] = os.path.join(user_pkg_dir, "node_modules")
             result = subprocess.run(
                 ["node", worker_script],
                 input=json.dumps(config, ensure_ascii=False),
                 capture_output=True, text=True, timeout=120, encoding="utf-8",
-                shell=(sys.platform == "win32"),
+                shell=_is_win,
+                env=node_env,
             )
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
