@@ -62,13 +62,10 @@ async def match_skills(request: SkillQuery):
 async def reload_skills():
     """Reload all skills from disk."""
     try:
-        skill_manager._skills.clear()
-        skill_manager._load_from_files()
-        if not skill_manager._skills:
-            skill_manager._load_builtin_hardcoded()
+        skill_manager.reload()
         return {
             "status": "ok",
-            "count": len(skill_manager._skills),
+            "count": len(skill_manager.get_all_skills()),
             "skills": [s.name for s in skill_manager.get_all_skills()],
         }
     except Exception as e:

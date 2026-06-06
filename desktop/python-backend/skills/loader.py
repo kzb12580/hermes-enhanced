@@ -44,10 +44,14 @@ class SkillLoader:
             self._load_from_dir(self.user_dir, is_builtin=False)
 
     def _load_from_dir(self, directory: str, is_builtin: bool) -> None:
-        """Iterate over *.md files in *directory* and parse each one."""
-        for file_path in sorted(Path(directory).glob("*.md")):
+        """Iterate over *.md and *.json files in *directory* and parse each one."""
+        for file_path in sorted(Path(directory).glob("*.*")):
             try:
-                skill = self._parse_skill(file_path, is_builtin)
+                skill = None
+                if file_path.suffix == ".md":
+                    skill = self._parse_skill(file_path, is_builtin)
+                elif file_path.suffix == ".json":
+                    skill = self._parse_json_skill(file_path, is_builtin)
                 if skill:
                     self.skills[skill.name] = skill
             except Exception as exc:
@@ -72,6 +76,37 @@ class SkillLoader:
             triggers=meta.get("triggers", []),
             tools=meta.get("tools", []),
             priority=int(meta.get("priority", 5)),
+            content=content,
+            is_builtin=is_builtin,
+            path=str(file_path),
+        )
+
+    @staticmethod
+    def _parse_json_skill(file_path: Path, is_builtin: bool) -> Optional[Skill]:
+        """Parse a JSON skill file (saved by save_skill tool)."""
+        import json as _json
+        try:
+            data = _json.loads(file_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        
+        name = data.get("name", file_path.stem)
+        description = data.get("description", "")
+        steps = data.get("steps", "")
+        tags = data.get("tags", [])
+        triggers = data.get("triggers", tags)  # triggers defaults to tags
+        
+        # Build markdown content from JSON data
+        content = f"## {name}\n{description}\n\n{steps}"
+        
+        return Skill(
+            name=name,
+            description=description,
+            category="user",
+            tags=tags,
+            triggers=triggers,
+            tools=[],
+            priority=3,  # User skills lower priority than builtin
             content=content,
             is_builtin=is_builtin,
             path=str(file_path),

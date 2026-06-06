@@ -180,6 +180,14 @@ Use openpyxl to read/write Excel files."""
                         break
         return matched
     
+    def reload(self):
+        """Reload all skills from disk."""
+        self._skills.clear()
+        self._load_from_files()
+        if not self._skills:
+            self._load_builtin_hardcoded()
+        logger.info("Reloaded %d skills", len(self._skills))
+
     def get_skills_context(self, query: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
         """Get skills context for system prompt."""
         if active_skills is not None:

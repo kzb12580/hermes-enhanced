@@ -67,6 +67,12 @@ class SaveSkillTool(BaseTool):
             if os.path.exists(tmp):
                 os.unlink(tmp)
             raise
+        # Refresh SkillManager cache so new skill is immediately available
+        try:
+            from api.skills_manager import skill_manager
+            skill_manager.reload()
+        except Exception:
+            pass
         return json.dumps({"ok": True, "path": str(path), "name": name}, ensure_ascii=False)
 
 
@@ -131,6 +137,12 @@ class DeleteSkillTool(BaseTool):
         if not path.exists():
             return json.dumps({"ok": False, "error": f"Skill '{name}' not found"}, ensure_ascii=False)
         path.unlink()
+        # Refresh SkillManager cache
+        try:
+            from api.skills_manager import skill_manager
+            skill_manager.reload()
+        except Exception:
+            pass
         return json.dumps({"ok": True, "deleted": name}, ensure_ascii=False)
 
 
