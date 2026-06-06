@@ -217,7 +217,7 @@ class WriteFileTool(BaseTool):
         p = checked
 
         try:
-            from api.safe_file_ops import atomic_save, verify_write
+            from tools.safe_file_ops import atomic_save, verify_write
             p.parent.mkdir(parents=True, exist_ok=True)
             atomic_save(lambda fp: Path(fp).write_text(content, encoding="utf-8", newline=""), str(p))
             if not verify_write(str(p), len(content) // 2):
