@@ -52,9 +52,17 @@ def _load_config():
 def _save_config():
     """Save config to disk."""
     try:
+        import tempfile, os
         _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(_config, f, indent=2, ensure_ascii=False)
+        fd, tmp = tempfile.mkstemp(dir=str(_CONFIG_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(_config, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, str(_CONFIG_FILE))
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
     except Exception as e:
         logger.warning("Failed to save config: %s", e)
 

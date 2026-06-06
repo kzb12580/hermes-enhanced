@@ -33,9 +33,16 @@ class OfficeToolWrapper(BaseTool):
         return self._parameters
 
     async def execute(self, **kwargs) -> str:
-        # Run sync function in thread pool
+        # Run sync function in thread pool — filter kwargs to function signature
+        import inspect
+        try:
+            sig = inspect.signature(self._fn)
+            valid_params = set(sig.parameters.keys())
+            filtered = {k: v for k, v in kwargs.items() if k in valid_params}
+        except (ValueError, TypeError):
+            filtered = kwargs
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, lambda: self._fn(**kwargs))
+        result = await loop.run_in_executor(None, lambda: self._fn(**filtered))
         if isinstance(result, dict):
             return json.dumps(result, ensure_ascii=False)
         return str(result)

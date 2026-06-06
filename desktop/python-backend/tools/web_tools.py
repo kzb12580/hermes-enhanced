@@ -40,8 +40,10 @@ def _validate_url(url: str) -> str | None:
     try:
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror:
-        # Cannot resolve — let httpx handle it (could be a transient DNS error)
-        return None
+        # DNS resolution failed — block to prevent SSRF bypass
+        return "Error: DNS resolution failed — SSRF blocked"
+    except OSError:
+        return "Error: DNS resolution failed — SSRF blocked"
 
     _PRIVATE_NETS = [
         ipaddress.ip_network("127.0.0.0/8"),
