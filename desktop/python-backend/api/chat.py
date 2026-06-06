@@ -243,8 +243,7 @@ class ChatMessage(BaseModel):
     max_tokens: Optional[int] = Field(default=None, ge=1, le=128000)
     attachments: Optional[list[dict]] = None
     # Frontend features that were silently dropped:
-    thinking_mode: Optional[str] = None  # off/auto/on
-    thinking_budget: Optional[int] = None
+    # thinking_mode/thinking_budget removed — not consumed by any model provider
     skills: Optional[list[str]] = None  # active skill IDs
     proxy_url: Optional[str] = None
 
@@ -627,7 +626,13 @@ def _salvage_truncated_execute_code(raw_args: str) -> str | None:
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8')
         tmp.write(raw_code)
         tmp.close()
-        return json.dumps({"path": tmp.name, "content": raw_code}, ensure_ascii=False)
+        # Return write_file args — but include clear instruction for the model
+        return json.dumps({
+            "path": tmp.name,
+            "content": raw_code,
+            "_salvaged": True,
+            "_instruction": f"代码被截断，已保存到 {tmp.name}。请用 terminal 运行: python {tmp.name}"
+        }, ensure_ascii=False)
     except Exception:
         return None
 
@@ -1172,8 +1177,11 @@ async def upload_file(file: UploadFile = FastAPIFile(...)):
     os.makedirs(upload_dir, exist_ok=True)
 
     # Generate unique filename to avoid collisions
-    ext = os.path.splitext(file.filename or "file")[1]
-    unique_name = f"{uuid.uuid4().hex[:12]}_{file.filename or 'file'}"
+    import re as _re
+    raw_name = file.filename or "file"
+    safe_name = _re.sub(r'[^a-zA-Z0-9._\-一-鿿]', '_', raw_name).strip('_') or 'file'
+    ext = os.path.splitext(safe_name)[1]
+    unique_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
     file_path = os.path.join(upload_dir, unique_name)
 
     # 分块读取，检查大小限制
@@ -1186,8 +1194,17 @@ async def upload_file(file: UploadFile = FastAPIFile(...)):
         if len(contents) > MAX_UPLOAD_SIZE:
             return {"error": f"File too large: max {MAX_UPLOAD_SIZE // 1024 // 1024}MB", "success": False}
 
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    # Atomic write
+    import tempfile
+    fd, tmp = tempfile.mkstemp(dir=upload_dir, suffix=ext)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(contents)
+        os.replace(tmp, file_path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
     logger.info("File uploaded: %s (%d bytes)", unique_name, len(contents))
 
@@ -1260,6 +1277,7 @@ async def chat(message: ChatMessage):
         try:
             current_messages = list(api_messages)
             raw_tool_calls = []  # 初始化，防止循环未执行时未绑定
+            complete_tool_calls = []  # 初始化，防止日志行引用未绑定
             consecutive_failures = 0  # 连续失败计数器
             last_fail_tool = ""  # 上次失败的工具名
             MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次自动终止
@@ -1311,8 +1329,17 @@ async def chat(message: ChatMessage):
                 # Accumulate streaming tool call deltas into complete tool calls
                 # Streaming sends partial updates: {index:0, id:"xxx", function:{name:"...", arguments:"..."}}
                 accumulated = {}
+                _auto_idx = 0
                 for tc in raw_tool_calls:
-                    idx = tc.get("index", 0)
+                    # Use id as key if available (most reliable), then index, then auto-increment
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        idx = f"id:{tc_id}"
+                    elif "index" in tc:
+                        idx = tc["index"]
+                    else:
+                        idx = _auto_idx
+                        _auto_idx += 1
                     if idx not in accumulated:
                         accumulated[idx] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
                     if tc.get("id"):
@@ -1390,7 +1417,7 @@ async def chat(message: ChatMessage):
                 logger.info(
                     "Tool iteration %d done (%.1fs) | tools=%d | reasoning=%d chars | response=%d chars | msgs=%d",
                     iteration + 1, iter_elapsed,
-                    len(complete_tool_calls) if 'complete_tool_calls' in dir() else 0,
+                    len(complete_tool_calls),
                     len(reasoning_text) if reasoning_text else 0,
                     len(full_response), len(current_messages),
                 )

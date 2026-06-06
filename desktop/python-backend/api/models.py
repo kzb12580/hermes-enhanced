@@ -71,9 +71,10 @@ async def list_models(
                     if resolved_ip.is_private or resolved_ip.is_loopback or resolved_ip.is_link_local:
                         return ModelsResponse(success=False, models=[], error=_BLOCKED_ERROR)
             except (socket.gaierror, OSError):
-                pass  # DNS 解析失败，让后续连接自然报错
-        except Exception:
-            pass
+                # DNS 解析失败 — 阻断连接，防止 DNS Rebinding 绕过
+                return ModelsResponse(success=False, models=[], error="DNS 解析失败，请检查 URL 是否正确")
+        except Exception as e:
+            logger.warning("SSRF check error for %s: %s", base_url, e)
 
         # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
         client_kwargs: dict = {"timeout": 15.0, "verify": True}

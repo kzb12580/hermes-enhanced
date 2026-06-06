@@ -58,14 +58,24 @@ def _load_meta(target_path: str, workspace: str | None = None) -> dict:
         return {}
     try:
         return json.loads(mp.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load chunk meta for %s: %s", target_path, e)
         return {}
 
 
 def _save_meta(target_path: str, meta: dict, workspace: str | None = None) -> None:
     mp = _meta_path(target_path, workspace)
     mp.parent.mkdir(parents=True, exist_ok=True)
-    mp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    import tempfile, os
+    fd, tmp = tempfile.mkstemp(dir=str(mp.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, str(mp))
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def store_chunk(
