@@ -191,8 +191,9 @@ function GeneralSettings() {
         </label>
         <input
           type="number"
-          value={maxTokens}
-          onChange={(e) => updateSettings({ maxTokens: Number(e.target.value) })}
+          value={maxTokens ?? ''}
+          placeholder="自动"
+          onChange={(e) => updateSettings({ maxTokens: e.target.value ? Number(e.target.value) : null })}
           min={256}
           max={128000}
           className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"

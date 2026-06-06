@@ -101,7 +101,7 @@ const defaultSettings: AppSettings = {
   providers: defaultProviders,
   systemPrompt: 'You are Hermes, an AI assistant. Be helpful, concise, and respond in the user\'s language. You can help with coding, research, writing, and general questions.',
   temperature: 0.7,
-  maxTokens: 126000,
+  maxTokens: null as number | null,  // null = 后端按模型自适应
   backendUrl: 'http://127.0.0.1:9876',
   apiKey: '',
   openLinksInExternalBrowser: true,

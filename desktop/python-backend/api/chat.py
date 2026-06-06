@@ -266,17 +266,29 @@ def estimate_tokens(text: str) -> int:
 
 
 def get_model_context_config(model: str) -> tuple[int, int]:
-    """Get context window and max response tokens for a model."""
+    """Get context window and max response tokens for a model.
+    
+    Returns (context_window, max_response_tokens).
+    max_response is used when frontend doesn't send max_tokens (auto mode).
+    """
     model_lower = model.lower()
     if "mimo" in model_lower:
-        return 1_000_000, 128_000  # max_tokens 拉满，防止大工具调用截断
+        return 1_000_000, 128_000
     if "claude" in model_lower:
-        return 200_000, 4096
+        return 200_000, 8192
+    if "gpt-4o" in model_lower:
+        return 128_000, 16384
     if "gpt-4" in model_lower:
-        return 128_000, 4096
+        return 128_000, 8192
     if "gpt-3.5" in model_lower:
         return 16_385, 4096
-    return 32_768, 4096
+    if "deepseek" in model_lower:
+        return 65_536, 8192
+    if "qwen" in model_lower:
+        return 131_072, 8192
+    if "gemini" in model_lower:
+        return 1_000_000, 8192
+    return 32_768, 8192  # 默认：给够 8192
 
 
 def trim_messages(messages: list[dict], max_input_tokens: int) -> list[dict]:
