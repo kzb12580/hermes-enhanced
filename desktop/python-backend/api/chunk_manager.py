@@ -165,15 +165,21 @@ def _smart_merge(parts: list[str], target_path: str) -> str:
         logger.info("Smart merge: detected JSON array split, merged %d parts correctly", len(parts))
         return merged
     except json.JSONDecodeError:
-        # Not valid JSON — try simple concatenation as fallback
-        simple = "".join(parts)
+        # Not JSON — use simple concatenation, but ensure each chunk ends with newline
+        # to prevent line-joining across chunk boundaries
+        fixed_parts = []
+        for i, part in enumerate(parts):
+            p = part
+            if i < len(parts) - 1 and p and not p.endswith("\n"):
+                p += "\n"
+            fixed_parts.append(p)
+        simple = "".join(fixed_parts)
         try:
             json.loads(simple)
             logger.info("Smart merge: simple concatenation is valid JSON")
             return simple
         except json.JSONDecodeError:
-            # Neither works — log warning and return simple concatenation
-            logger.warning("Smart merge: merged content is not valid JSON, returning raw concatenation")
+            logger.info("Smart merge: code/text merge, %d parts, %d chars", len(parts), len(simple))
             return simple
 
 

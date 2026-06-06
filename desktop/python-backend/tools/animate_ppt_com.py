@@ -170,6 +170,8 @@ def add_animations_com(
 
         slides_animated = 0
         shapes_animated = 0
+        shapes_failed = 0
+        transitions_failed = 0
 
         # Apply animations
         for anim_spec in animations:
@@ -229,6 +231,7 @@ def add_animations_com(
 
                     shapes_animated += 1
                 except Exception as e:
+                    shapes_failed += 1
                     _log.warning("Failed to animate shape %d on slide %d: %s",
                                  shape_idx, slide_num, e)
 
@@ -253,6 +256,7 @@ def add_animations_com(
                         slide.SlideShowTransition.Duration = duration
                         slide.SlideShowTransition.AdvanceOnClick = True
                     except Exception as e:
+                        transitions_failed += 1
                         _log.warning("Failed to set transition on slide %d: %s", slide_num, e)
 
         # Save
@@ -264,6 +268,8 @@ def add_animations_com(
             "path": abs_output,
             "slides_animated": slides_animated,
             "shapes_animated": shapes_animated,
+            "shapes_failed": shapes_failed,
+            "transitions_failed": transitions_failed,
             "backend": "com",
         }
 
