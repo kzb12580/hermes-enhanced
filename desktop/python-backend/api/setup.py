@@ -122,8 +122,11 @@ async def start_install(req: InstallRequest):
         _install_state["error"] = None
         _install_state["log"] = []
 
-    # 后台执行安装
-    asyncio.create_task(_run_install(req))
+    # 后台执行安装 — 保存 task 引用防止 GC 回收
+    task = asyncio.create_task(_run_install(req))
+    _background_tasks = getattr(asyncio, '_bg_tasks', set())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return {"success": True, "message": "安装已启动"}
 
 

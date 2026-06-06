@@ -182,8 +182,8 @@ Use openpyxl to read/write Excel files."""
     
     def get_skills_context(self, query: Optional[str] = None, active_skills: Optional[list[str]] = None) -> str:
         """Get skills context for system prompt."""
-        if active_skills:
-            skills = [s for s in self._skills.values() if s.name in active_skills]
+        if active_skills is not None:
+            skills = [s for s in self._skills.values() if s.name in active_skills] if active_skills else []
         elif query:
             skills = self.get_skills_for_query(query)
         else:
