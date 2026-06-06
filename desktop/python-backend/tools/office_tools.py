@@ -20,16 +20,46 @@ MAX_ROWS = 500_000
 
 
 def _safe_path(p: str) -> str:
-    """路径净化 + 系统目录保护"""
-    resolved = Path(p).resolve()
-    # 禁止写入系统目录 — 使用 parent 比较而非 startswith
-    blocked = ('/etc', '/usr', '/bin', '/sbin', '/boot', '/dev', '/proc', '/sys')
+    """路径净化 + 白名单验证（与 file_tools._resolve_safe_path 一致）"""
+    resolved = Path(p).expanduser().resolve()
     resolved_str = str(resolved)
+
+    # 黑名单：已知敏感目录（防御纵深）
+    blocked = ['/etc', '/usr', '/bin', '/sbin', '/boot', '/dev', '/proc', '/sys', '/run']
     for b in blocked:
-        # Check if resolved path IS or IS UNDER the blocked directory
         if resolved_str == b or resolved_str.startswith(b + '/') or resolved_str.startswith(b + '\\'):
             raise ValueError(f"不允许写入系统路径: {resolved_str}")
-    return resolved_str
+
+    # Windows 系统目录
+    if sys.platform == "win32":
+        win_blocked = [
+            os.environ.get("SystemRoot", r"C:\Windows"),
+            r"C:\Program Files", r"C:\Program Files (x86)", r"C:\ProgramData",
+        ]
+        for b in win_blocked:
+            b_resolved = str(Path(b).resolve())
+            if resolved_str.lower().startswith(b_resolved.lower()):
+                raise ValueError(f"不允许写入系统路径: {resolved_str}")
+
+    # 白名单：必须在允许目录下
+    import tempfile
+    allowed = [
+        str(Path.home().resolve()),
+        str(Path.cwd().resolve()),
+        str(Path(tempfile.gettempdir()).resolve()),
+    ]
+    # Windows: 允许所有盘符根目录
+    if sys.platform == "win32":
+        import string
+        for drive_letter in string.ascii_uppercase:
+            drive = Path(f"{drive_letter}:\\")
+            if drive.exists():
+                allowed.append(str(drive.resolve()))
+
+    if any(resolved_str == a or resolved_str.startswith(a + '/') or resolved_str.startswith(a + '\\') for a in allowed):
+        return resolved_str
+
+    raise ValueError(f"路径不在允许目录下: {resolved_str}")
 
 
 def _check_file(p: str, name: str = "file") -> Optional[dict]:
@@ -143,9 +173,10 @@ def edit_word(path: str, operations: list[dict]) -> dict:
             elif t == "add_image":
                 img_path = op.get("image_path", "")
                 if img_path:
-                    img_path = str(_safe_path(img_path))
-                    if isinstance(img_path, str) and img_path.startswith(("Error", "⚠️")):
-                        return {"error": f"Op #{i}: {img_path}", "success": False}
+                    try:
+                        img_path = _safe_path(img_path)
+                    except ValueError as e:
+                        return {"error": f"Op #{i}: {e}", "success": False}
                     err = _check_file(img_path, "image")
                     if err: return err
                     doc.add_picture(img_path, width=Inches(op.get("width", 6)))

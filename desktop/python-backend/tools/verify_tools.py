@@ -23,6 +23,18 @@ class VerifyFileTool(BaseTool):
     }
 
     async def execute(self, path: str, expected_content: str = "", min_size: int = 0, **kwargs) -> str:
+        # Path safety: block sensitive system directories
+        from pathlib import Path as _Path
+        try:
+            resolved = str(_Path(path).expanduser().resolve())
+        except (OSError, ValueError):
+            return json.dumps({"ok": False, "error": f"Invalid path: {path}"}, ensure_ascii=False)
+        _blocked = ['/etc/shadow', '/etc/passwd', '/root/.ssh', '/root/.gnupg',
+                     '/proc/', '/sys/', '/dev/']
+        for b in _blocked:
+            if resolved.startswith(b):
+                return json.dumps({"ok": False, "error": f"Access denied: {path}"}, ensure_ascii=False)
+
         if not os.path.exists(path):
             return json.dumps({"ok": False, "error": f"File not found: {path}"}, ensure_ascii=False)
         
