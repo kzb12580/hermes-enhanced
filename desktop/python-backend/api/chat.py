@@ -31,6 +31,10 @@ MAX_TOOL_RESULT_SIZE = 50_000  # 50KB per tool result
 MAX_TOOL_CALLS_PER_TURN = 50
 MAX_TOOL_ITERATIONS = 90  # Max tool execution loops per turn
 
+# Stable ID counter — avoids hash() randomization across processes
+import itertools as _itertools
+_id_counter = _itertools.count(1)
+
 # Apply adaptive limits from performance detection
 try:
     from perf_detect import get_limits as _get_perf_limits
@@ -694,7 +698,7 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
                         else:
                             logger.warning("Dropping tool_call with invalid JSON arguments: %s (%s)", name, e)
                             continue
-                tc_id = tc.get("id", f"call_{hash(name)}")
+                tc_id = tc.get("id", f"call_{next(_id_counter)}")
                 valid_calls.append({
                     "id": tc_id,
                     "type": "function",
@@ -757,7 +761,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
                 if not args:
                     args = {"input": args_raw}
         calls.append({
-            "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+            "id": f"txt_{next(_id_counter):08d}",
             "type": "function",
             "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
         })
@@ -771,7 +775,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
                 arguments = data.get("arguments", data.get("args", {}))
                 if name:
                     calls.append({
-                        "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+                        "id": f"txt_{next(_id_counter):08d}",
                         "type": "function",
                         "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
                     })
@@ -785,7 +789,7 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
                         arguments = data.get("arguments", data.get("args", {}))
                         if name:
                             calls.append({
-                                "id": f"txt_{hash(name) & 0xFFFFFFFF:08x}",
+                                "id": f"txt_{next(_id_counter):08d}",
                                 "type": "function",
                                 "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
                             })
@@ -1222,7 +1226,7 @@ async def chat(message: ChatMessage):
     })
 
     # Build API messages — use message-specific skills if provided
-    skills_override = message.skills if message.skills else None
+    skills_override = message.skills if message.skills is not None else None
     sys_prompt = build_system_prompt(message.system_prompt, active_skills=skills_override, model_name=message.model)
     context_window, max_response = get_model_context_config(message.model or "default")
     system_tokens = estimate_tokens(sys_prompt)

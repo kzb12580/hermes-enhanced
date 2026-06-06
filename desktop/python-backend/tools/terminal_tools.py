@@ -42,15 +42,20 @@ def _filter_harmless_ps_warnings(stderr: str) -> str:
         filtered.append(line)
     return "\n".join(filtered).strip()
 
-# Blocked commands (Windows-aware)
+# Blocked commands (Windows-aware) — use precise patterns, not loose substrings
 BLOCKED_PATTERNS = [
-    "rm -rf /", "format c:", "format d:", "format e:", "del /f /s /q C:", "rmdir /s /q C:",
-    "shutdown", "bcdedit", "diskpart", "reg delete",
-    "rm -rf /*", ":(){ :|:& };:", "mkfs",
-    # Extended blocklist
-    "del /s", "rd /s", "reboot",
-    "reg add", "net user", "net localgroup",
-    "Invoke-WebRequest", "certutil", "bitsadmin",
+    # Exact dangerous commands (matched at word boundary)
+    "rm -rf /", "rm -rf /*", ":(){ :|:& };:",
+    "format c:", "format d:", "format e:",
+    "del /f /s /q", "rmdir /s /q",
+    "shutdown /s", "shutdown /r", "shutdown /g",
+    "bcdedit", "diskpart",
+    ":(){ :|:& };:", "mkfs",
+    "reboot now",
+    # PowerShell/WMIC dangerous patterns
+    "Invoke-WebRequest", "certutil -decode", "bitsadmin /transfer",
+    "net user /add", "net localgroup administrators /add",
+    "reg add", "reg delete",
 ]
 
 

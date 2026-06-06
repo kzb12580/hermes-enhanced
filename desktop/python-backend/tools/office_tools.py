@@ -20,13 +20,16 @@ MAX_ROWS = 500_000
 
 
 def _safe_path(p: str) -> str:
-    """路径净化 + 白名单保护"""
-    resolved = str(Path(p).resolve())
-    # 禁止写入系统目录
+    """路径净化 + 系统目录保护"""
+    resolved = Path(p).resolve()
+    # 禁止写入系统目录 — 使用 parent 比较而非 startswith
     blocked = ('/etc', '/usr', '/bin', '/sbin', '/boot', '/dev', '/proc', '/sys')
-    if any(resolved.startswith(d) for d in blocked):
-        raise ValueError(f"不允许写入系统路径: {resolved}")
-    return resolved
+    resolved_str = str(resolved)
+    for b in blocked:
+        # Check if resolved path IS or IS UNDER the blocked directory
+        if resolved_str == b or resolved_str.startswith(b + '/') or resolved_str.startswith(b + '\\'):
+            raise ValueError(f"不允许写入系统路径: {resolved_str}")
+    return resolved_str
 
 
 def _check_file(p: str, name: str = "file") -> Optional[dict]:
@@ -540,7 +543,7 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
                             cell.alignment = Alignment(horizontal=op["align"])
 
             elif t == "auto_filter":
-                ws.auto_filter.ref = op.get("range", ws.dimensions)
+                ws.auto_filter.ref = str(op.get("range", ws.dimensions))
 
             elif t == "merge_cells":
                 ws.merge_cells(op.get("range", "A1:B1"))

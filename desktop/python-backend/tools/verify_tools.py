@@ -98,7 +98,7 @@ class VerifyCommandTool(BaseTool):
             try:
                 proc.kill()
                 await proc.wait()
-            except:
+            except Exception:
                 pass
             return json.dumps({"ok": False, "error": "Command timed out (25s)"}, ensure_ascii=False)
         except Exception as e:

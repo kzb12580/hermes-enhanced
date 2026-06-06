@@ -123,7 +123,10 @@ def is_com_available() -> bool:
             # PowerPoint not running, try to create
             try:
                 ppt = win32com.client.Dispatch("PowerPoint.Application")
-                ppt.Quit()
+                try:
+                    ppt.Quit()
+                except Exception:
+                    pass
                 return True
             except Exception:
                 return False

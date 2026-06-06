@@ -3,6 +3,8 @@
 import json
 import logging
 import time
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -32,13 +34,19 @@ class SessionManager:
                 self._sessions = {}
 
     def _save(self):
-        """Save sessions to disk."""
+        """Save sessions to disk (atomic write)."""
         try:
             _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-            _SESSIONS_FILE.write_text(
-                json.dumps(self._sessions, indent=2, ensure_ascii=False),
-                encoding="utf-8"
-            )
+            data = json.dumps(self._sessions, indent=2, ensure_ascii=False)
+            fd, tmp = tempfile.mkstemp(dir=str(_SESSIONS_DIR), suffix='.tmp')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(data)
+                os.replace(tmp, str(_SESSIONS_FILE))
+            except:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+                raise
         except Exception as e:
             logger.error("Failed to save sessions: %s", e)
 
