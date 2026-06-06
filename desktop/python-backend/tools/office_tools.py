@@ -11,6 +11,7 @@ import subprocess
 import sys
 from typing import Optional
 from pathlib import Path
+from tools.safe_file_ops import atomic_save, backup_file
 
 _log = logging.getLogger(__name__)
 
@@ -70,8 +71,7 @@ def create_word(path: str, title: str = "", content: str = "", template: str = "
                 doc.add_paragraph(para.strip())
 
         path = _safe_path(path)
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        doc.save(path)
+        atomic_save(lambda p: doc.save(p), path)
         return {"path": path, "success": True}
     except Exception as e:
         _log.error("create_word failed: %s", e, exc_info=True)
@@ -190,7 +190,8 @@ def edit_word(path: str, operations: list[dict]) -> dict:
             else:
                 return {"error": f"Unknown op type: {t}", "success": False}
 
-        doc.save(path)
+        backup_file(path)
+        atomic_save(lambda p: doc.save(p), path)
         return {"path": path, "operations": len(operations), "success": True}
     except Exception as e:
         _log.error("edit_word failed: %s", e, exc_info=True)
@@ -399,8 +400,7 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
                 ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
 
         path = _safe_path(path)
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        wb.save(path)
+        atomic_save(lambda p: wb.save(p), path)
         return {"path": path, "sheets": len(sheets), "success": True}
     except Exception as e:
         _log.error("create_excel failed: %s", e, exc_info=True)
@@ -548,7 +548,8 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
             else:
                 return {"error": f"Unknown op type: {t}", "success": False}
 
-        wb.save(path)
+        backup_file(path)
+        atomic_save(lambda p: wb.save(p), path)
         return {"path": path, "operations": len(operations), "success": True}
     except Exception as e:
         _log.error("edit_excel failed: %s", e, exc_info=True)

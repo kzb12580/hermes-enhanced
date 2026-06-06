@@ -205,7 +205,7 @@ class WriteFileTool(BaseTool):
 
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8")
+            p.write_text(content, encoding="utf-8", newline="")
             return f"Written {len(content)} chars to {path}"
         except Exception as e:
             return f"Error writing file: {e}"

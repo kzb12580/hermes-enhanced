@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from api.model_limits import CHUNK_TIMEOUT
+from tools.safe_file_ops import atomic_save, verify_write
 
 logger = logging.getLogger("hermes-backend.chunks")
 
@@ -147,40 +148,35 @@ def _smart_merge(parts: list[str], target_path: str) -> str:
     if len(parts) <= 1:
         return "".join(parts)
     
-    # Try JSON array merge: strip trailing ] from earlier chunks and leading [ from later chunks
-    stripped = []
-    for i, part in enumerate(parts):
-        p = part.strip()
-        if i < len(parts) - 1 and p.endswith("]"):
-            p = p[:-1]  # Strip trailing ]
-        if i > 0 and p.startswith("["):
-            p = p[1:]  # Strip leading [
-        stripped.append(p)
-    
-    merged = ",".join(stripped)  # Use comma to join array elements
-    
-    # Validate it's valid JSON
-    try:
-        json.loads(merged)
-        logger.info("Smart merge: detected JSON array split, merged %d parts correctly", len(parts))
-        return merged
-    except json.JSONDecodeError:
-        # Not JSON — use simple concatenation, but ensure each chunk ends with newline
-        # to prevent line-joining across chunk boundaries
-        fixed_parts = []
+    # Only strip brackets if ALL chunks look like JSON arrays
+    all_json_arrays = all(p.strip().startswith("[") and p.strip().endswith("]") for p in parts)
+    if all_json_arrays:
+        stripped = []
         for i, part in enumerate(parts):
-            p = part
-            if i < len(parts) - 1 and p and not p.endswith("\n"):
-                p += "\n"
-            fixed_parts.append(p)
-        simple = "".join(fixed_parts)
+            p = part.strip()
+            if i < len(parts) - 1 and p.endswith("]"):
+                p = p[:-1]
+            if i > 0 and p.startswith("["):
+                p = p[1:]
+            stripped.append(p)
+        merged = ",".join(stripped)
         try:
-            json.loads(simple)
-            logger.info("Smart merge: simple concatenation is valid JSON")
-            return simple
+            json.loads(merged)
+            logger.info("Smart merge: detected JSON array split, merged %d parts correctly", len(parts))
+            return merged
         except json.JSONDecodeError:
-            logger.info("Smart merge: code/text merge, %d parts, %d chars", len(parts), len(simple))
-            return simple
+            pass  # Fall through to simple concat
+    
+    # Simple concatenation with newline safety for code/text
+    fixed_parts = []
+    for i, part in enumerate(parts):
+        p = part
+        if i < len(parts) - 1 and p and not p.endswith("\n"):
+            p += "\n"
+        fixed_parts.append(p)
+    simple = "".join(fixed_parts)
+    logger.info("Smart merge: %d parts, %d chars", len(parts), len(simple))
+    return simple
 
 
 def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) -> dict:
@@ -208,7 +204,9 @@ def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) ->
         base = Path(workspace) if workspace else Path.cwd()
         target = base / target
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(full_content, encoding="utf-8")
+    atomic_save(lambda p: Path(p).write_text(full_content, encoding="utf-8"), str(target))
+    if not verify_write(str(target), len(full_content) // 2):
+        logger.error("Write verification failed for %s", target_path)
 
     # Clean up chunk directory
     shutil.rmtree(cd, ignore_errors=True)
