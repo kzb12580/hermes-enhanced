@@ -708,13 +708,8 @@ def add_animations(
             # Write back
             tree.write(slide_file, xml_declaration=True, encoding="UTF-8", standalone=True)
 
-        # Repack the zip
-        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
-            for dirpath, dirnames, filenames in os.walk(tmp_dir):
-                for filename in filenames:
-                    file_path = os.path.join(dirpath, filename)
-                    arcname = os.path.relpath(file_path, tmp_dir)
-                    zf.write(file_path, arcname)
+        # Repack the zip — preserve original structure, only overwrite modified slides
+        _repack_pptx(output, tmp_dir)
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -725,6 +720,45 @@ def add_animations(
         "slides_animated": slides_animated,
         "shapes_animated": shapes_animated,
     }
+
+
+def _repack_pptx(output: str, tmp_dir: str) -> None:
+    """Repack extracted PPTX directory into a valid .pptx ZIP.
+    
+    Key fix: preserve ZIP entry order from [Content_Types].xml and 
+    use consistent compression to prevent PowerPoint from detecting 
+    the file as "needs repair".
+    """
+    import io
+    
+    # Build list of files to pack, with [Content_Types].xml first (OOXML spec requirement)
+    files_to_pack = []
+    content_types_path = os.path.join(tmp_dir, "[Content_Types].xml")
+    if os.path.isfile(content_types_path):
+        files_to_pack.append(("[Content_Types].xml", content_types_path))
+    
+    # _rels/.rels should be second
+    rels_path = os.path.join(tmp_dir, "_rels", ".rels")
+    if os.path.isfile(rels_path):
+        files_to_pack.append(("_rels/.rels", rels_path))
+    
+    # Then all other files in sorted order
+    for dirpath, dirnames, filenames in os.walk(tmp_dir):
+        dirnames.sort()  # Ensure consistent directory traversal
+        for filename in sorted(filenames):
+            file_path = os.path.join(dirpath, filename)
+            arcname = os.path.relpath(file_path, tmp_dir).replace("\\", "/")
+            # Skip already-added special files
+            if arcname in ("[Content_Types].xml", "_rels/.rels"):
+                continue
+            files_to_pack.append((arcname, file_path))
+    
+    # Write zip with consistent settings
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        for arcname, file_path in files_to_pack:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            zf.writestr(arcname, data)
 
 
 def add_slide_transitions(
@@ -787,12 +821,7 @@ def add_slide_transitions(
             tree.write(slide_path, xml_declaration=True, encoding="UTF-8", standalone=True)
             slides_transitioned += 1
 
-        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
-            for dirpath, dirnames, filenames in os.walk(tmp_dir):
-                for filename in filenames:
-                    file_path = os.path.join(dirpath, filename)
-                    arcname = os.path.relpath(file_path, tmp_dir)
-                    zf.write(file_path, arcname)
+        _repack_pptx(output, tmp_dir)
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
