@@ -1285,7 +1285,8 @@ async def chat(message: ChatMessage):
             complete_tool_calls = []  # 初始化，防止日志行引用未绑定
             consecutive_failures = 0  # 连续失败计数器
             last_fail_tool = ""  # 上次失败的工具名
-            MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次自动终止
+            MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次触发警告
+            has_warned = False  # 是否已经警告过模型换方向
             
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
                 iter_start = time.time()
@@ -1427,10 +1428,29 @@ async def chat(message: ChatMessage):
                         consecutive_failures = 1
                         last_fail_tool = current_fail_tool
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                        error_hint = f"工具 {current_fail_tool} 连续失败{consecutive_failures}次，自动停止。请换一种方案或告知用户手动操作。"
-                        yield f"event: token\ndata: {error_hint}\n\n"
-                        logger.warning("Auto-stopping: tool %s failed %d times consecutively", current_fail_tool, consecutive_failures)
-                        break
+                        if not has_warned:
+                            # First time: warn the model and inject guidance as system message
+                            error_hint = f"⚠️ 工具 {current_fail_tool} 已连续失败{consecutive_failures}次。请立即停止使用此工具，换一种完全不同的方案。不要再重复相同思路。"
+                            yield f"event: token\\ndata: {error_hint}\\n\\n"
+                            logger.warning("Warning: tool %s failed %d times, injecting guidance", current_fail_tool, consecutive_failures)
+                            # Inject system message so the model sees the warning
+                            warning_msg = {
+                                "role": "system",
+                                "content": f"[系统提示] 工具 {current_fail_tool} 已连续失败 {consecutive_failures} 次。"
+                                           f"之前的尝试都失败了，请不要再用相同的方法。"
+                                           f"请换一种完全不同的方案，或者告知用户这个操作在当前环境下不可行并建议手动操作。"
+                            }
+                            current_messages.append(warning_msg)
+                            session["messages"].append(warning_msg)
+                            # Reset counter and mark warned
+                            consecutive_failures = 0
+                            has_warned = True
+                        else:
+                            # Second time: model was warned but still stuck — hard stop
+                            error_hint = f"工具 {current_fail_tool} 换方案后仍然失败，自动停止。请告知用户手动操作。"
+                            yield f"event: token\\ndata: {error_hint}\\n\\n"
+                            logger.warning("Auto-stopping: tool %s still failing after warning", current_fail_tool)
+                            break
                 else:
                     consecutive_failures = 0
                     last_fail_tool = ""
