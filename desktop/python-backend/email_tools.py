@@ -209,7 +209,7 @@ def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = Fals
             msg = email.message_from_bytes(raw_email)
 
             emails.append({
-                "id": msg_id.decode(),
+                "id": msg_id.decode(errors="replace"),
                 "from": _decode_header_value(msg.get("From", "")),
                 "to": _decode_header_value(msg.get("To", "")),
                 "subject": _decode_header_value(msg.get("Subject", "")),

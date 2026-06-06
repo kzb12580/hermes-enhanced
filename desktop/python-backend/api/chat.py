@@ -876,7 +876,7 @@ async def call_llm_streaming(
             if response.status_code != 200:
                 error_text = await response.aread()
                 logger.error("API error %d: %s", response.status_code, error_text[:500])
-                raise HTTPException(status_code=response.status_code, detail=error_text.decode())
+                raise HTTPException(status_code=response.status_code, detail=error_text.decode(errors="replace"))
 
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
@@ -1387,7 +1387,21 @@ async def chat(message: ChatMessage):
                 
                 # Track consecutive failures — per-tool tracking
                 # Only count if the SAME tool keeps failing (different tools failing is OK)
-                failed_tools = [r.get("content", "") for r in tool_results if r.get("content", "").startswith("Error:")]
+                def _is_tool_error(content: str) -> bool:
+                    if not content:
+                        return False
+                    if content.startswith("Error:") or content.startswith("Error "):
+                        return True
+                    # Check JSON error responses
+                    if content.startswith("{"):
+                        try:
+                            d = json.loads(content)
+                            if d.get("ok") is False or d.get("error"):
+                                return True
+                        except (json.JSONDecodeError, ValueError):
+                            pass
+                    return False
+                failed_tools = [r.get("content", "") for r in tool_results if _is_tool_error(r.get("content", ""))]
                 if failed_tools:
                     # Check if the failing tool is the same as last time
                     current_fail_tool = complete_tool_calls[0]["function"]["name"] if complete_tool_calls else "unknown"
