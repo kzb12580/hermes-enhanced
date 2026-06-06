@@ -1327,19 +1327,30 @@ async def chat(message: ChatMessage):
                     break
                 
                 # Accumulate streaming tool call deltas into complete tool calls
-                # Streaming sends partial updates: {index:0, id:"xxx", function:{name:"...", arguments:"..."}}
+                # OpenAI format: each delta has an "index" field; deltas with the same index
+                # belong to the same tool call. Some providers omit index — use id as fallback.
                 accumulated = {}
-                _auto_idx = 0
+                _id_to_idx = {}  # map id → index for providers that send id without index
+                _next_auto_idx = 0
                 for tc in raw_tool_calls:
-                    # Use id as key if available (most reliable), then index, then auto-increment
-                    tc_id = tc.get("id", "")
-                    if tc_id:
-                        idx = f"id:{tc_id}"
-                    elif "index" in tc:
+                    # Determine the index for this delta
+                    if "index" in tc and tc["index"] is not None:
                         idx = tc["index"]
+                    elif tc.get("id"):
+                        # First time seeing this id — assign an index
+                        tc_id = tc["id"]
+                        if tc_id not in _id_to_idx:
+                            _id_to_idx[tc_id] = _next_auto_idx
+                            _next_auto_idx += 1
+                        idx = _id_to_idx[tc_id]
                     else:
-                        idx = _auto_idx
-                        _auto_idx += 1
+                        # No index and no id — this is a continuation delta
+                        # Try to find the last incomplete entry
+                        if accumulated:
+                            idx = max(accumulated.keys())
+                        else:
+                            idx = _next_auto_idx
+                            _next_auto_idx += 1
                     if idx not in accumulated:
                         accumulated[idx] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
                     if tc.get("id"):
