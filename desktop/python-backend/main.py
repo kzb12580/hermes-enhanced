@@ -4,7 +4,6 @@ Listens on 127.0.0.1:9876 and exposes REST + SSE endpoints consumed by the
 Electron frontend.
 """
 
-import logging
 import os
 import signal
 import sys
@@ -12,7 +11,7 @@ import time
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -24,6 +23,12 @@ try:
 except ImportError:
     _HAS_SLOWAPI = False
 
+# ── 全面日志系统 ──────────────────────────────────────────────────────────
+from logger import get_logger, get_log_dir, get_log_files
+
+logger = get_logger("hermes-backend")
+api_logger = get_logger("hermes-backend.api")
+
 from api.chat import router as chat_router
 from api.config import router as config_router
 from api.models import router as models_router
@@ -33,28 +38,6 @@ from api.skills import router as skills_router
 from api.setup import router as setup_router
 from api.email import router as email_router
 from api.workflow import router as workflow_router
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-import os
-from pathlib import Path
-
-# 日志文件路径
-_log_dir = Path.home() / ".hermes" / "logs"
-_log_dir.mkdir(parents=True, exist_ok=True)
-_log_file = _log_dir / "desktop-backend.log"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-    handlers=[
-        logging.FileHandler(_log_file, encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger("hermes-backend")
-logger.info("日志文件: %s", _log_file)
 
 # ---------------------------------------------------------------------------
 # CUDA PATH auto-detection — 启动时自动添加 CUDA 到 PATH
@@ -133,7 +116,13 @@ _start_time = time.time()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log_files = get_log_files()
+    logger.info("═══════════════════════════════════════════════")
     logger.info("Hermes Desktop backend starting on %s:%d", _host, _port)
+    logger.info("日志目录: %s", get_log_dir())
+    for name, path in log_files.items():
+        logger.info("  %s → %s", name, path)
+    logger.info("═══════════════════════════════════════════════")
     yield
     logger.info("Hermes Desktop backend shutting down")
 
@@ -144,7 +133,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Hermes Desktop Backend",
-    version="2.8.1",
+    version="2.8.5",
     lifespan=lifespan,
 )
 
@@ -162,6 +151,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── API 请求日志中间件 ────────────────────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """记录每个 HTTP 请求的方法、路径、状态码、耗时"""
+    start = time.time()
+    method = request.method
+    path = request.url.path
+    query = str(request.url.query) if request.url.query else ""
+    client = request.client.host if request.client else "unknown"
+
+    api_logger.debug("→ %s %s%s  [client=%s]", method, path, f"?{query}" if query else "", client)
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        elapsed = (time.time() - start) * 1000
+        api_logger.error("✗ %s %s  %.0fms  EXCEPTION: %s", method, path, elapsed, exc, exc_info=True)
+        raise
+
+    elapsed = (time.time() - start) * 1000
+    status = response.status_code
+    level = "error" if status >= 500 else "warning" if status >= 400 else "info"
+    getattr(api_logger, level)(
+        "← %s %s  %d  %.0fms", method, path, status, elapsed
+    )
+    return response
 
 # 全局异常处理
 @app.exception_handler(Exception)

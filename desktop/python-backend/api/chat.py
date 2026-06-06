@@ -1,9 +1,8 @@
-"""Chat API — handles chat sessions with tool execution."""
+"""Chat API — handles chat sessions with tool support."""
 
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from typing import Optional
@@ -14,6 +13,7 @@ from fastapi import UploadFile, File as FastAPIFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from logger import get_logger
 from api.session_manager import SessionManager
 from api.memory import get_memory_context
 from api.prompts import build_system_prompt as _build_system_prompt, build_tools_description
@@ -21,7 +21,9 @@ from api.skills_manager import skill_manager
 from api.model_limits import get_max_tool_arg_chars, get_reasoning_type, is_reasoning_model
 from tools import all_tools, openai_tools, execute_tool
 
-logger = logging.getLogger("hermes-backend.chat")
+logger = get_logger("hermes-backend.chat")
+llm_logger = get_logger("hermes-backend.llm")
+tools_logger = get_logger("hermes-backend.tools")
 router = APIRouter()
 
 # ─── Constants (base defaults, overridden by perf_detect) ──────────────────
@@ -961,11 +963,15 @@ async def call_llm(
 async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
     """Execute multiple tool calls with retry and error recovery."""
     results = []
-    for tool_call in tool_calls[:MAX_TOOL_CALLS_PER_TURN]:
+    tools_logger.info("═══ 执行 %d 个工具调用 ═══", len(tool_calls))
+    for i, tool_call in enumerate(tool_calls[:MAX_TOOL_CALLS_PER_TURN]):
         tool_name = tool_call["function"]["name"]
         args_str = tool_call["function"]["arguments"]
         tc_start = time.time()
-        logger.info("─── Tool call: %s | args_len=%d chars ───", tool_name, len(args_str))
+        tc_id = tool_call.get("id", "unknown")
+        logger.info("─── Tool call #%d: %s | id=%s | args_len=%d chars ───", i + 1, tool_name, tc_id, len(args_str))
+        tools_logger.info("─── [#%d] %s | id=%s | args_len=%d ───", i + 1, tool_name, tc_id, len(args_str))
+        tools_logger.debug("  args_raw: %s", args_str[:2000])
         
         # Check for oversized tool arguments — only for tools that support temp file recovery
         if len(args_str) > 15_000 and tool_name in ("write_file", "execute_code"):
@@ -1022,10 +1028,14 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
             result += f"\n\n⚠️ 代码被截断已保存到此文件，请用 terminal 运行: python {salvaged_from}"
         tc_elapsed = time.time() - tc_start
         is_error = result.startswith("Error") or '"error":' in result[:200]
+        status_str = "ERROR" if is_error else "OK"
         logger.info("Tool %s result: %.1fs | %s | %s...",
-                     tool_name, tc_elapsed,
-                     "ERROR" if is_error else "OK",
-                     result[:200])
+                     tool_name, tc_elapsed, status_str, result[:200])
+        tools_logger.info("  ← %s | %.1fs | %s | result_len=%d chars", tool_name, tc_elapsed, status_str, len(result))
+        if is_error:
+            tools_logger.warning("  错误详情: %s", result[:500])
+        else:
+            tools_logger.debug("  result_preview: %s", result[:1000])
 
         results.append({
             "role": "tool",
@@ -1227,10 +1237,22 @@ async def chat(message: ChatMessage):
     """Process a chat message with tool support."""
     session_id = message.session_id or str(int(time.time() * 1000))
 
+    # ── 详细记录请求参数 ──
+    logger.info("═══════════════════════════════════════════════")
+    logger.info("Chat 请求 | session=%s | model=%s", session_id, message.model)
+    logger.info("  base_url=%s | api_key=%s...", message.base_url or "(默认)", (message.api_key or "")[:8])
+    logger.info("  temperature=%s | max_tokens=%s", message.temperature, message.max_tokens)
+    logger.info("  attachments=%d | skills=%s", len(message.attachments or []), message.skills)
+    logger.info("  proxy_url=%s", message.proxy_url or "(无)")
+    logger.info("  content_len=%d chars | content_preview=%s...", len(message.content), message.content[:200])
+
     # Get or create session
     session = session_manager.get_session(session_id)
     if not session:
         session = session_manager.create_session(session_id)
+        logger.info("  新建 session: %s", session_id)
+    else:
+        logger.info("  已有 session: %s | 历史消息=%d条", session_id, len(session.get("messages", [])))
 
     # Add user message to history
     # Prepend attachment info to content if present
@@ -1256,15 +1278,22 @@ async def chat(message: ChatMessage):
     system_tokens = estimate_tokens(sys_prompt)
     max_input_tokens = context_window - max_response - system_tokens - 500
 
+    # ── 上下文构建日志 ──
+    logger.info("  context_window=%d | max_response=%d | system_tokens=%d | max_input=%d",
+                context_window, max_response, system_tokens, max_input_tokens)
+    logger.info("  system_prompt_len=%d chars", len(sys_prompt))
+
     api_messages = [{"role": "system", "content": sys_prompt}]
     # Sanitize session messages — fix any malformed tool_calls before sending to API
     sanitized = _sanitize_messages(trim_messages(session["messages"], max_input_tokens))
     api_messages.extend(sanitized)
+    logger.info("  发送给 LLM: %d 条消息 (含 system)", len(api_messages))
 
     # Prepare API call
     base_url = message.base_url or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
     api_key = message.api_key or os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
+        logger.error("API key 未配置!")
         raise HTTPException(status_code=401, detail="API key not configured")
 
     model = message.model or "gpt-3.5-turbo"
@@ -1278,6 +1307,10 @@ async def chat(message: ChatMessage):
     logger.info("═══ Model: %s | reasoning=%s | max_tool_arg=%d chars | max_tokens=%d (user_set=%s, max_response=%d) ═══",
                 model, reasoning_type or "none", tool_arg_limit, max_tokens,
                 message.max_tokens, max_response)
+    llm_logger.info("═══ LLM 请求 ═══ model=%s | base_url=%s | max_tokens=%d | temp=%.2f | tools=%d",
+                     model, base_url, max_tokens, temperature, len(tools))
+    llm_logger.info("  消息数=%d | 估算输入 tokens≈%d", len(api_messages),
+                     sum(estimate_tokens(m.get("content", "")) for m in api_messages))
 
     async def generate_stream():
         """Generate SSE stream for chat response with tool execution loop."""
@@ -1296,9 +1329,13 @@ async def chat(message: ChatMessage):
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
                 reasoning_text = ""  # Accumulate reasoning_content for MIMO
-                
+
                 # Sanitize before each LLM call — drop broken tool_calls from previous iteration
                 current_messages = _sanitize_messages(current_messages)
+
+                llm_logger.info("── LLM 调用 #%d | 消息数=%d | 估算 tokens≈%d ──",
+                                iteration + 1, len(current_messages),
+                                sum(estimate_tokens(m.get("content", "")) + estimate_tokens(json.dumps(m.get("tool_calls", ""))) for m in current_messages))
                 
                 async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
                     if isinstance(chunk, str) and chunk.startswith('{"reasoning_content"'):
@@ -1329,9 +1366,16 @@ async def chat(message: ChatMessage):
                     if text_tool_calls:
                         raw_tool_calls = text_tool_calls
                         logger.info("Parsed %d text-based tool calls from response", len(text_tool_calls))
-                
+
+                # ── LLM 响应日志 ──
+                llm_logger.info("  响应: content=%d chars | tool_calls=%d | reasoning=%d chars",
+                                len(full_response), len(raw_tool_calls), len(reasoning_text))
+                if full_response:
+                    llm_logger.debug("  content_preview: %s", full_response[:500])
+
                 # If no tool calls, we're done
                 if not raw_tool_calls:
+                    llm_logger.info("  无工具调用，对话结束")
                     break
                 
                 # Accumulate streaming tool call deltas into complete tool calls

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+import time
 from typing import Any
 
 from .base import BaseTool
+from logger import get_logger
 
-logger = logging.getLogger("hermes-backend.tools")
+logger = get_logger("hermes-backend.tools")
 
 # Global registry
 _tools: dict[str, BaseTool] = {}
@@ -17,7 +18,7 @@ _tools: dict[str, BaseTool] = {}
 def register(tool: BaseTool) -> None:
     """Register a tool instance."""
     _tools[tool.name] = tool
-    logger.info("Registered tool: %s", tool.name)
+    logger.info("注册工具: %s", tool.name)
 
 
 def get_tool(name: str) -> BaseTool | None:
@@ -37,16 +38,34 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     """Execute a tool by name. Returns result string or error string."""
     tool = _tools.get(name)
     if not tool:
+        logger.error("未知工具: '%s'", name)
         return f"Error: Unknown tool '{name}'"
+
+    start = time.time()
+    # 隐藏大型参数的完整内容
+    args_preview = {k: (v[:200] + "..." if isinstance(v, str) and len(v) > 200 else v) for k, v in arguments.items()}
+    logger.debug("执行 %s(%s)", name, args_preview)
+
     try:
         timeout = getattr(tool, "timeout", 60)
         result = await asyncio.wait_for(tool.execute(**arguments), timeout=timeout)
-        return result if result is not None else f"Error: tool '{name}' returned no result"
+        elapsed = time.time() - start
+
+        if result is None:
+            logger.warning("工具 %s 返回 None (%.2fs)", name, elapsed)
+            return f"Error: tool '{name}' returned no result"
+
+        logger.debug("工具 %s 完成 (%.2fs) | result_len=%d", name, elapsed, len(result))
+        return result
+
     except asyncio.TimeoutError:
         timeout = getattr(tool, "timeout", 60)
+        elapsed = time.time() - start
+        logger.error("工具 %s 超时 (%.1fs > %ds)", name, elapsed, timeout)
         return f"Error: tool '{name}' timed out after {timeout}s"
     except Exception as e:
-        logger.error("Tool %s failed: %s", name, e, exc_info=True)
+        elapsed = time.time() - start
+        logger.error("工具 %s 异常 (%.2fs): %s", name, elapsed, e, exc_info=True)
         return f"Error executing {name}: {e}"
 
 
