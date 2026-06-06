@@ -5,11 +5,14 @@ from __future__ import annotations
 import fnmatch
 import glob as globmod
 import json
+import logging
 import os
 import re
 import sys
 import tempfile
 from pathlib import Path
+
+logger = logging.getLogger("hermes-backend.file_tools")
 
 from .base import BaseTool
 from . import register
@@ -170,6 +173,16 @@ class WriteFileTool(BaseTool):
     }
 
     async def execute(self, path: str, content: str = "", chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
+        # If oversized recovery wrote content to a temp file, read from it
+        content_file = kwargs.get("content_file", "")
+        if content_file and os.path.isfile(content_file):
+            try:
+                with open(content_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                logger.info("Read %d chars from temp file: %s", len(content), content_file)
+            except Exception as e:
+                logger.warning("Failed to read content_file %s: %s", content_file, e)
+
         # Guard against empty content (model may have truncated the call)
         if not content:
             return json.dumps({"ok": False, "error": "content is required but was empty"}, ensure_ascii=False)

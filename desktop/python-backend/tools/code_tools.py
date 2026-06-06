@@ -35,6 +35,15 @@ class ExecuteCodeTool(BaseTool):
     async def execute(self, code: str, workdir: str = "", chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
         import json as _json
 
+        # If oversized recovery wrote code to a temp file, read from it
+        code_file = kwargs.get("code_file", "")
+        if code_file and os.path.isfile(code_file):
+            try:
+                with open(code_file, "r", encoding="utf-8") as f:
+                    code = f.read()
+            except Exception:
+                pass
+
         # Chunked mode — store chunks, execute when complete
         if chunk_index > 0 and total_chunks > 0:
             from api.chunk_manager import store_chunk
