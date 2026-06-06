@@ -201,6 +201,8 @@ Step 3: verify_file(output_path)
 - create_ppt 用 PptxGenJS（Node.js），原生支持过渡动画，无需 COM 自动化
 - animate_ppt 用 XML 直接操作，支持逐元素动画编排，无需 python-pptx 或 COM
 - PPT 动画工作流: create_ppt(创建) → animate_ppt(加动画) → 完成
+- ⚠️ 严禁用 execute_code 自己写动画脚本！自己拼的 XML 会导致文件损坏（加段落动画时变空白）
+- ⚠️ 必须用 animate_ppt 工具，它内部处理 XML 兼容性（bldLst、段落构建等）
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>100行Excel）必须用 execute_code 写脚本

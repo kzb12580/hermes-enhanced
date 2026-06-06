@@ -688,14 +688,32 @@ def add_animations(
                     _log.warning("No cSld found in slide %d", slide_num)
                     continue
 
-                # Remove existing timing if present
+                # Remove existing timing AND bldLst if present
                 existing_timing = c_sld.find(_ns("timing"))
                 if existing_timing is not None:
                     c_sld.remove(existing_timing)
+                existing_bld = c_sld.find(_ns("bldLst"))
+                if existing_bld is not None:
+                    c_sld.remove(existing_bld)
 
                 # Build and inject new timing tree
                 timing = _build_timing_tree(effect_elements, next_id + 100)
                 c_sld.append(timing)
+
+                # Add bldLst (build list) for paragraph-level animation compatibility
+                # Without this, PowerPoint cannot add paragraph animations to shapes
+                # that already have animations — it causes file corruption
+                bld_lst = etree.SubElement(c_sld, _ns("bldLst"))
+                for anim_spec in slide_anims:
+                    target = anim_spec.get("target", "all_text")
+                    selected = _select_shapes(shapes, target)
+                    for shape_name, shape_id in selected:
+                        bld_p = etree.SubElement(bld_lst, _ns("bldP"))
+                        bld_p.set("spid", str(shape_id))
+                        bld_p.set("grpId", "0")
+                        bld_p.set("bld", "anim")
+                        bld_p.set("animBg", "1")
+
                 slides_animated += 1
 
             # Inject slide transition
