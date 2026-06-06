@@ -217,11 +217,14 @@ class WriteFileTool(BaseTool):
         p = checked
 
         try:
+            from api.safe_file_ops import atomic_save, verify_write
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8", newline="")
+            atomic_save(lambda fp: Path(fp).write_text(content, encoding="utf-8", newline=""), str(p))
+            if not verify_write(str(p), len(content) // 2):
+                return json.dumps({"ok": False, "error": f"Write verification failed for {path}"}, ensure_ascii=False)
             return f"Written {len(content)} chars to {path}"
         except Exception as e:
-            return f"Error writing file: {e}"
+            return f"Error writing file: {e}" 
 
 
 class SearchFilesTool(BaseTool):

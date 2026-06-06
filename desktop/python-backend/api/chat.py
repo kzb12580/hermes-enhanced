@@ -960,8 +960,8 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
         tc_start = time.time()
         logger.info("─── Tool call: %s | args_len=%d chars ───", tool_name, len(args_str))
         
-        # Check for oversized tool arguments — try to extract key field to file
-        if len(args_str) > 15_000:  # 15KB threshold
+        # Check for oversized tool arguments — only for tools that support temp file recovery
+        if len(args_str) > 15_000 and tool_name in ("write_file", "execute_code"):
             logger.warning("Tool %s has oversized arguments (%d chars), attempting recovery", tool_name, len(args_str))
             recovered = await _handle_oversized_args(tool_name, args_str, tool_call)
             if recovered:

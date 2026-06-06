@@ -207,6 +207,11 @@ def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) ->
     atomic_save(lambda p: Path(p).write_text(full_content, encoding="utf-8"), str(target))
     if not verify_write(str(target), len(full_content) // 2):
         logger.error("Write verification failed for %s", target_path)
+        return {
+            "ok": False,
+            "error": f"Write verification failed for {target_path}",
+            "status": "verify_failed",
+        }
 
     # Clean up chunk directory
     shutil.rmtree(cd, ignore_errors=True)

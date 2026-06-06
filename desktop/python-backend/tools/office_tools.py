@@ -490,7 +490,7 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
             ws = wb[sheet_name]
 
             if t == "set_cell":
-                ws.cell(row=op["row"], column=op["col"], value=op.get("value"))
+                ws.cell(row=op.get("row", 1), column=op.get("col", 1), value=op.get("value"))
 
             elif t == "set_range":
                 data = op.get("data", [])
@@ -525,7 +525,7 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
                 ws.add_chart(chart, pos)
 
             elif t == "add_formula":
-                ws.cell(row=op["row"], column=op["col"], value=op.get("formula", ""))
+                ws.cell(row=op.get("row", 1), column=op.get("col", 1), value=op.get("formula", ""))
 
             elif t == "format_cells":
                 cell_range = op.get("range", "A1:A1")

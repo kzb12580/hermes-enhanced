@@ -29,8 +29,20 @@ def _load_memories() -> dict:
 
 
 def _save_memories(memories: dict):
-    _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-    _MEMORY_FILE.write_text(json.dumps(memories, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        import tempfile, os
+        _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(_MEMORY_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(memories, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, str(_MEMORY_FILE))
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+    except Exception as e:
+        logger.error("Failed to save memories: %s", e)
 
 
 # Load on startup

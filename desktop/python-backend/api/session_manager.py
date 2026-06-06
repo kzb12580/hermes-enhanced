@@ -43,7 +43,7 @@ class SessionManager:
                 with os.fdopen(fd, 'w', encoding='utf-8') as f:
                     f.write(data)
                 os.replace(tmp, str(_SESSIONS_FILE))
-            except:
+            except BaseException:
                 if os.path.exists(tmp):
                     os.unlink(tmp)
                 raise
