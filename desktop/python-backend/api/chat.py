@@ -570,13 +570,14 @@ def _salvage_truncated_write_file(raw_args: str) -> str | None:
     content_start = content_match.end()
     raw_content = raw_args[content_start:]
     
-    # Unescape JSON string escapes in the partial content
-    raw_content = raw_content.replace('\\"', '"')
-    raw_content = raw_content.replace('\\n', chr(10))
-    raw_content = raw_content.replace('\\t', chr(9))
-    raw_content = raw_content.replace('\\\\', '\\')
+    # Unescape JSON string escapes (order: quotes → backslash → special chars)
+    raw_content = raw_content.replace('\\\\\"', '\"')
+    raw_content = raw_content.replace('\\\\\\\\', '\\x00')  # temp placeholder
+    raw_content = raw_content.replace('\\\\n', chr(10))
+    raw_content = raw_content.replace('\\\\t', chr(9))
+    raw_content = raw_content.replace('\\x00', '\\\\')
     
-    if raw_content.endswith('\\'):
+    if raw_content.endswith('\\\\'):
         raw_content = raw_content[:-1]
     
     if not raw_content:
@@ -1366,7 +1367,7 @@ async def chat(message: ChatMessage):
                         last_fail_tool = current_fail_tool
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         error_hint = f"工具 {current_fail_tool} 连续失败{consecutive_failures}次，自动停止。请换一种方案或告知用户手动操作。"
-                        yield f"event: token\\ndata: {error_hint}\\n\\n"
+                        yield f"event: token\ndata: {error_hint}\n\n"
                         logger.warning("Auto-stopping: tool %s failed %d times consecutively", current_fail_tool, consecutive_failures)
                         break
                 else:

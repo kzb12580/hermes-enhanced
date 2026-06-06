@@ -14,9 +14,10 @@ quality degradation.
 # Per-model limits (characters). Keys are matched case-insensitively
 # against model name using `in` operator. First match wins.
 MODEL_LIMITS: list[tuple[str, int]] = [
-    ("mimo",      8000),   # 128K output token, 可以大一些
+    ("mimo",      8000),
     ("deepseek",  8000),
     ("qwen",      8000),
+    ("gpt-4o",   30000),   # Must be before gpt-4
     ("gpt-4",    30000),
     ("gpt-3.5",   4000),
     ("claude",   50000),

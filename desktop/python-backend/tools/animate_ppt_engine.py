@@ -291,10 +291,10 @@ def _build_timing_tree(animations: list[etree._Element], next_id: int) -> etree.
     seq_child = etree.SubElement(seq_c_tn, _ns("childTnLst"))
 
     # Add each animation to the sequence
-    for anim in animations:
+    for i, anim in enumerate(animations):
         par_elem = etree.SubElement(seq_child, _ns("par"))
         par_c_tn = etree.SubElement(par_elem, _ns("cTn"), attrib={
-            "id": str(next_id + 2),
+            "id": str(next_id + 2 + i * 10),
             "fill": "hold",
         })
         par_child = etree.SubElement(par_c_tn, _ns("childTnLst"))
