@@ -169,7 +169,11 @@ class WriteFileTool(BaseTool):
         "required": ["path", "content"],
     }
 
-    async def execute(self, path: str, content: str, chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
+    async def execute(self, path: str, content: str = "", chunk_index: int = 0, total_chunks: int = 0, **kwargs) -> str:
+        # Guard against empty content (model may have truncated the call)
+        if not content:
+            return json.dumps({"ok": False, "error": "content is required but was empty"}, ensure_ascii=False)
+
         # Chunked write mode
         if chunk_index > 0 and total_chunks > 0:
             from api.chunk_manager import store_chunk

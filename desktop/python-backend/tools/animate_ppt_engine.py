@@ -584,7 +584,18 @@ def add_animations(
 
     # ── XML injection backend ──
     _log.info("Using XML injection backend")
-    shutil.copy2(pptx_path, output)
+    # Handle file lock: if source is locked (e.g. by PowerPoint), retry with backoff
+    for _attempt in range(3):
+        try:
+            shutil.copy2(pptx_path, output)
+            break
+        except PermissionError:
+            if _attempt < 2:
+                import time
+                _log.warning("File locked, retrying in 1s (attempt %d/3)", _attempt + 1)
+                time.sleep(1)
+            else:
+                raise
 
     # Build transition index: {slide_num: transition_element}
     trans_index = {}

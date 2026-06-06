@@ -14,7 +14,7 @@ quality degradation.
 # Per-model limits (characters). Keys are matched case-insensitively
 # against model name using `in` operator. First match wins.
 MODEL_LIMITS: list[tuple[str, int]] = [
-    ("mimo",      3000),   # MIMO truncates aggressively
+    ("mimo",      8000),   # 128K output token, 可以大一些
     ("deepseek",  8000),
     ("qwen",      8000),
     ("gpt-4",    30000),
@@ -23,7 +23,7 @@ MODEL_LIMITS: list[tuple[str, int]] = [
     ("gemini",   30000),
 ]
 
-DEFAULT_LIMIT = 5000  # Fallback for unknown models
+DEFAULT_LIMIT = 8000  # Fallback for unknown models
 
 # Timeout for incomplete chunk sets (seconds)
 CHUNK_TIMEOUT = 30 * 60  # 30 minutes
