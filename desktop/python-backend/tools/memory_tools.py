@@ -153,8 +153,3 @@ class DeleteMemoryTool(BaseTool):
         return json.dumps({"ok": True, "deleted": memory_id}, ensure_ascii=False)
 
 
-# Register all memory tools
-register(SaveMemoryTool())
-register(SearchMemoryTool())
-register(ListMemoryTool())
-register(DeleteMemoryTool())

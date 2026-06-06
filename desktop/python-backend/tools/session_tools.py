@@ -112,5 +112,3 @@ class GetSessionHistoryTool(BaseTool):
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
-register(SearchSessionTool())
-register(GetSessionHistoryTool())

@@ -76,9 +76,9 @@ def _check_blocked(command: str) -> str:
         r'rm\s+-rf\s+\*',          # rm -rf *
         r'shutdown\b',             # shutdown (词边界)
         r'reboot\b',               # reboot
-        r'powershell\s+-e[cn]',    # powershell -enc/-ec
-        r'cmd\s*/c\b',             # cmd /c
-        r'cmd\.exe\s*/c\b',        # cmd.exe /c
+        r'powershell(?:\.exe)?\s+-e[cn]',    # powershell -enc/-ec (also powershell.exe)
+        r'cmd(?:\.exe)?\s*/c\b',             # cmd /c or cmd.exe /c (with optional space)
+        r'cmd(?:\.exe)?/c\b',                # cmd/c or cmd.exe/c (no space)
         r'>\s*/dev/sd',            # 写入磁盘设备
         r'dd\s+.*of=/dev/',        # dd 写入设备
         r'mkfs\b',                 # 格式化

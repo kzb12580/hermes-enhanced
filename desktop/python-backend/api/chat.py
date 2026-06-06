@@ -561,7 +561,8 @@ def _salvage_truncated_write_file(raw_args: str) -> str | None:
     """Salvage a truncated write_file tool call by extracting path and partial content."""
     import re
     
-    path_match = re.search(r'"path"\s*:\s*"([^"]*)"', raw_args)
+    # Match "path" only at the start of the JSON (before "content"), not inside content value
+    path_match = re.search(r'"path"\s*:\s*"([^"]*)"', raw_args[:500])
     if not path_match:
         return None
     path = path_match.group(1)
@@ -626,12 +627,11 @@ def _salvage_truncated_execute_code(raw_args: str) -> str | None:
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8')
         tmp.write(raw_code)
         tmp.close()
-        # Return write_file args — but include clear instruction for the model
+        # Return write_file args — _salvaged_from_execute_code tells execute_tools to append instruction
         return json.dumps({
             "path": tmp.name,
             "content": raw_code,
-            "_salvaged": True,
-            "_instruction": f"代码被截断，已保存到 {tmp.name}。请用 terminal 运行: python {tmp.name}"
+            "_salvaged_from_execute_code": tmp.name,
         }, ensure_ascii=False)
     except Exception:
         return None
@@ -1011,10 +1011,15 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
             tool_args["_model"] = model
 
         # Execute with retry for transient errors
+        # Extract salvaged marker before execution (not a real tool parameter)
+        salvaged_from = tool_args.pop("_salvaged_from_execute_code", None)
         result = await _execute_with_retry(tool_name, tool_args)
         result = truncate_tool_result(result)
+        # If this write_file was salvaged from a truncated execute_code, append instruction
+        if salvaged_from:
+            result += f"\n\n⚠️ 代码被截断已保存到此文件，请用 terminal 运行: python {salvaged_from}"
         tc_elapsed = time.time() - tc_start
-        is_error = result.startswith("Error") or '"error"' in result[:100]
+        is_error = result.startswith("Error") or '"error":' in result[:200]
         logger.info("Tool %s result: %.1fs | %s | %s...",
                      tool_name, tc_elapsed,
                      "ERROR" if is_error else "OK",

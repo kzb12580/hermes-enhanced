@@ -75,6 +75,8 @@ async def list_models(
                 return ModelsResponse(success=False, models=[], error="DNS 解析失败，请检查 URL 是否正确")
         except Exception as e:
             logger.warning("SSRF check error for %s: %s", base_url, e)
+            # Block request if SSRF check itself fails — fail-closed
+            return ModelsResponse(success=False, models=[], error=f"安全检查失败: {e}")
 
         # Proxy resolution: explicit proxy_url > system env vars (HTTP_PROXY/HTTPS_PROXY)
         client_kwargs: dict = {"timeout": 15.0, "verify": True}

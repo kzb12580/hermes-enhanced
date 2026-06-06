@@ -106,6 +106,3 @@ class TodoListTool(BaseTool):
         )
 
 
-register(TodoCreateTool())
-register(TodoUpdateTool())
-register(TodoListTool())

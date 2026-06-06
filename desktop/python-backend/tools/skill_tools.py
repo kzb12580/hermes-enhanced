@@ -146,7 +146,3 @@ class DeleteSkillTool(BaseTool):
         return json.dumps({"ok": True, "deleted": name}, ensure_ascii=False)
 
 
-register(SaveSkillTool())
-register(ListSkillsTool())
-register(LoadSkillTool())
-register(DeleteSkillTool())
