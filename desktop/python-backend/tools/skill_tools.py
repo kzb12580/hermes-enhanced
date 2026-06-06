@@ -57,7 +57,16 @@ class SaveSkillTool(BaseTool):
             "created_at": __import__("datetime").datetime.now().isoformat(),
         }
         path = SKILLS_DIR / f"{name}.json"
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        import tempfile, os
+        fd, tmp = tempfile.mkstemp(dir=str(SKILLS_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, str(path))
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
         return json.dumps({"ok": True, "path": str(path), "name": name}, ensure_ascii=False)
 
 
