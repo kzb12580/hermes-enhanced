@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Hermes Desktop Backend",
-    version="2.8.0",
+    version="2.8.1",
     lifespan=lifespan,
 )
 
