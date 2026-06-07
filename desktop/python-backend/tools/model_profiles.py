@@ -553,9 +553,7 @@ _DEFAULT_PROFILE = """## 🎯 通用模型优化策略
 - PPT: 用 create_ppt 工具（PptxGenJS），不要用 python-pptx
   - ≤5页：直接传 slides 参数（必须用 elements 数组格式）
   - >5页：write_file("slides.json", [...]) → create_ppt(path, slides_file="slides.json")
-  1. list_ppt_shapes(path) 查看形状 ID
-  2. animate_ppt(path, animations=[{slide, effect, target}]) 添加动画
-  3. 支持 64 种动画 + 27 种幻灯片切换
+  - 不做元素动画，创建完成后提示用户参考《PPT动画添加说明》
 - Word: 用 create_word 工具
 - Excel: 用 create_excel / edit_excel 工具
 - 不要用 execute_code 自己写 Office 文件 — 用专用工具
