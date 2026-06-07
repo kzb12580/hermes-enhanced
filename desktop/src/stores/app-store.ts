@@ -3,7 +3,7 @@
  * Wires up IPC event listeners from the main process to keep state in sync.
  */
 import { create } from 'zustand'
-import type { PythonState, AppSettings, UpdateStatus, UpdateInfo, UpdateProgress } from '../../electron/shared/types'
+import type { PythonState, MainProcessSettings, UpdateStatus, UpdateInfo, UpdateProgress } from '../types/electron-api'
 
 interface AppState {
   // Python 后端状态
@@ -11,8 +11,8 @@ interface AppState {
   setPythonState: (state: PythonState) => void
 
   // 应用设置
-  settings: AppSettings | null
-  setSettings: (settings: AppSettings) => void
+  settings: MainProcessSettings | null
+  setSettings: (settings: MainProcessSettings) => void
 
   // 更新状态
   updateStatus: UpdateStatus
@@ -82,7 +82,7 @@ export const useAppStore = create<AppState>((set, get) => ({
    * Call this once in the root component's useEffect.
    */
   initIpcListeners: () => {
-    const api = (window as any).api;
+    const api = window.api;
     if (!api) return; // Not running in Electron
 
     const cleanups: (() => void)[] = [];

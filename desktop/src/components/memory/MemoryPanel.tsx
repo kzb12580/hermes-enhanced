@@ -17,7 +17,7 @@ export function MemoryPanel() {
   const [newMemory, setNewMemory] = useState('');
   const [newTags, setNewTags] = useState('');
 
-  const headers = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {};
+  const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 
   const fetchMemories = useCallback(async () => {
     setLoading(true);

@@ -32,7 +32,7 @@ export interface ChatCompletionRequest {
   proxy_url?: string;
   skills?: string[];
   temperature?: number;
-  max_tokens?: number;
+  max_tokens?: number | null;
   attachments?: Array<{ filename: string; path: string; size: number }>;
 }
 

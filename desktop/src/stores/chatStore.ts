@@ -90,7 +90,12 @@ const STREAM_THROTTLE_MS = 33; // ~30fps
 let pendingTokenBuffer = '';
 let pendingMessageId: string | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let flushStoreRef: { appendToMessage: (id: string, content: string) => void; appendToThinking: (id: string, content: string) => void } | null = null;
+type StreamFlushStore = {
+  appendToMessage: (id: string, content: string) => void;
+  appendToThinking: (id: string, content: string) => void;
+};
+
+let flushStoreRef: StreamFlushStore | null = null;
 
 // Thinking token throttle buffers
 let pendingThinkingBuffer = '';
@@ -105,7 +110,7 @@ function flushPendingTokens() {
   flushTimer = null;
 }
 
-function scheduleTokenFlush(messageId: string, token: string, store: { appendToMessage: (id: string, content: string) => void }) {
+function scheduleTokenFlush(messageId: string, token: string, store: StreamFlushStore) {
   pendingTokenBuffer += token;
   pendingMessageId = messageId;
   flushStoreRef = store;
@@ -122,10 +127,10 @@ function flushPendingThinking() {
   thinkingFlushTimer = null;
 }
 
-function scheduleThinkingFlush(messageId: string, token: string, store: { appendToThinking: (id: string, content: string) => void }) {
+function scheduleThinkingFlush(messageId: string, token: string, store: StreamFlushStore) {
   pendingThinkingBuffer += token;
   pendingThinkingMessageId = messageId;
-  flushStoreRef = flushStoreRef || store;
+  flushStoreRef = store;
   if (!thinkingFlushTimer) {
     thinkingFlushTimer = setTimeout(flushPendingThinking, STREAM_THROTTLE_MS);
   }

@@ -21,12 +21,13 @@ class ModelsResponse(BaseModel):
     error: Optional[str] = None
 
 
-@router.get("/api/models", response_model=ModelsResponse)
-async def list_models(
-    base_url: str = Query(..., description="Provider base URL (e.g. https://api.openai.com/v1)"),
-    api_key: str = Query("", description="API key for authentication"),
-    proxy_url: str = Query("", description="Optional proxy URL (e.g. http://127.0.0.1:7890)"),
-):
+class ModelsRequest(BaseModel):
+    base_url: str
+    api_key: str = ""
+    proxy_url: str = ""
+
+
+async def _fetch_models(base_url: str, api_key: str = "", proxy_url: str = "") -> ModelsResponse:
     """Fetch available models from an OpenAI-compatible /v1/models endpoint."""
     # Normalize URL
     url = base_url.rstrip("/")
@@ -132,3 +133,19 @@ async def list_models(
     except Exception as e:
         logger.error("Unexpected error: %s", e)
         return ModelsResponse(success=False, models=[], error=f"未知错误: {e}")
+
+
+@router.post("/api/models", response_model=ModelsResponse)
+async def list_models_post(request: ModelsRequest):
+    """Fetch models without exposing api_key in URL/query logs."""
+    return await _fetch_models(request.base_url, request.api_key, request.proxy_url)
+
+
+@router.get("/api/models", response_model=ModelsResponse)
+async def list_models(
+    base_url: str = Query(..., description="Provider base URL (e.g. https://api.openai.com/v1)"),
+    api_key: str = Query("", description="API key for authentication"),
+    proxy_url: str = Query("", description="Optional proxy URL (e.g. http://127.0.0.1:7890)"),
+):
+    """Fetch available models from an OpenAI-compatible /v1/models endpoint."""
+    return await _fetch_models(base_url, api_key, proxy_url)

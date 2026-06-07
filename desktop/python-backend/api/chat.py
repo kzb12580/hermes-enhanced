@@ -198,7 +198,7 @@ Step 3: verify_file(output_path)
 - 创建PPT完成后，告诉用户："如需添加文字/图片入场动画，请在PowerPoint中操作，参考《PPT动画添加说明》"
 
 ### Office 工具限制
-- create_ppt 用 PptxGenJS（Node.js），支持过渡动画（在 slides JSON 的 transition 字段中设置）
+- create_ppt 用 PptxGenJS（Node.js），支持页面切换效果（在 slides JSON 的 transition 字段中设置），不支持元素动画
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>100行Excel）必须用 execute_code 写脚本
@@ -1236,7 +1236,7 @@ async def chat(message: ChatMessage):
     # ── 详细记录请求参数 ──
     logger.info("═══════════════════════════════════════════════")
     logger.info("Chat 请求 | session=%s | model=%s", session_id, message.model)
-    logger.info("  base_url=%s | api_key=%s...", message.base_url or "(默认)", (message.api_key or "")[:8])
+    logger.info("  base_url=%s | api_key=%s", message.base_url or "(默认)", "***REDACTED***" if message.api_key else "(未提供)")
     logger.info("  temperature=%s | max_tokens=%s", message.temperature, message.max_tokens)
     logger.info("  attachments=%d | skills=%s", len(message.attachments or []), message.skills)
     logger.info("  proxy_url=%s", message.proxy_url or "(无)")

@@ -32,7 +32,7 @@ function GeneralSettings() {
   // Workspace path — stored in Electron store, not Zustand
   const [workspacePath, setWorkspacePath] = useState('');
   useEffect(() => {
-    const api = (window as any).api;
+    const api = window.api;
     if (api?.settings?.get) {
       api.settings.get('workspacePath').then((v: string) => setWorkspacePath(v || ''));
     }
@@ -40,14 +40,14 @@ function GeneralSettings() {
 
   const handleWorkspaceChange = (value: string) => {
     setWorkspacePath(value);
-    const api = (window as any).api;
+    const api = window.api;
     if (api?.settings?.set) {
       api.settings.set('workspacePath', value);
     }
   };
 
   const handleBrowseFolder = async () => {
-    const api = (window as any).api;
+    const api = window.api;
     if (api?.dialog?.selectFolder) {
       const result = await api.dialog.selectFolder();
       if (result) handleWorkspaceChange(result);
@@ -283,7 +283,6 @@ function GeneralSettings() {
 function AboutSection() {
   const [version, setVersion] = useState('v...');
   useEffect(() => {
-    // @ts-ignore - window.api injected by preload
     window.api?.app?.getVersion?.()?.then((v: string) => { if (v) setVersion('v' + v); })?.catch(() => {});
   }, []);
 

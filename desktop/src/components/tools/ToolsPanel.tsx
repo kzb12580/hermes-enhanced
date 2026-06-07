@@ -13,7 +13,7 @@ export function ToolsPanel() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const headers = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {};
+  const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 
   const fetchTools = useCallback(async () => {
     setLoading(true);

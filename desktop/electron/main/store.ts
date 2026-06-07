@@ -99,7 +99,7 @@ class SettingsStore {
   /** 监听设置变化 */
   onChange<K extends keyof AppSettings>(
     key: K,
-    callback: (newValue: AppSettings[K], oldValue: AppSettings[K]) => void
+    callback: (newValue: AppSettings[K] | undefined, oldValue: AppSettings[K] | undefined) => void
   ): () => void {
     return this.store.onDidChange(key, callback) ?? (() => {})
   }

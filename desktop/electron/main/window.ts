@@ -81,7 +81,7 @@ export function createMainWindow(): BrowserWindow {
     }
 
     if (menu.items.length > 0) {
-      menu.popup({ window: mainWindow })
+      menu.popup({ window: mainWindow ?? undefined })
     }
   })
 

@@ -107,7 +107,7 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="create_ppt",
-        description="创建PPT（PptxGenJS引擎，支持过渡动画/阴影/透明度/图表/表格）。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
+        description="创建PPT（PptxGenJS引擎，支持页面切换/阴影/透明度/图表/表格，不支持元素动画）。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
         fn=None,
         parameters={
             "type": "object",

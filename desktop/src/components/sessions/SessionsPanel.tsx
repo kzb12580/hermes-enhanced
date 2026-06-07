@@ -15,7 +15,7 @@ export function SessionsPanel() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const headers = apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {};
+  const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);

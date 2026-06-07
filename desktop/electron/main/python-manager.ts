@@ -15,7 +15,7 @@ import { net } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, appendFileSync, writeFileSync } from 'fs'
 import { createServer } from 'net'
-import treeKill = require('tree-kill')
+import treeKill from 'tree-kill'
 import { IPC_CHANNELS, PythonState, PythonHealthResponse, PythonStatus } from '../shared/types'
 import { settingsStore } from './store'
 
@@ -868,7 +868,7 @@ export class PythonManager {
   private updateStatus(status: PythonStatus): void {
     this.state.status = status
     this.sendToRenderer(IPC_CHANNELS.PYTHON_STATUS_CHANGE, this.getState())
-    app.emit('python-status-changed', this.getState())
+    ;(app as NodeJS.EventEmitter).emit('python-status-changed', this.getState())
   }
 
   private sendToRenderer(channel: string, data: unknown): void {

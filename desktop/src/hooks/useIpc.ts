@@ -6,17 +6,17 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
-import type { API } from '../../electron/preload/index';
+import type { ElectronAPI, MainProcessSettings } from '../types/electron-api';
 
-type ApiType = API;
+type ApiType = ElectronAPI;
 
 const isElectron = (): boolean => {
-  return typeof window !== 'undefined' && Boolean((window as any).api);
+  return typeof window !== 'undefined' && Boolean(window.api);
 };
 
 function getApi(): ApiType | null {
   if (!isElectron()) return null;
-  return (window as any).api as ApiType;
+  return window.api ?? null;
 }
 
 /**
@@ -80,10 +80,10 @@ export function useIpcInvoke() {
 
       // Settings
       case 'settings:get':
-        return api.settings.get(args[0] as keyof import('../../electron/shared/types').AppSettings) as Promise<T>;
+        return api.settings.get(args[0] as keyof MainProcessSettings) as Promise<T>;
       case 'settings:set':
         return api.settings.set(
-          args[0] as keyof import('../../electron/shared/types').AppSettings,
+          args[0] as keyof MainProcessSettings,
           args[1] as never
         ) as Promise<T>;
       case 'settings:get-all':
@@ -102,7 +102,7 @@ export function useIpcInvoke() {
  * Hook for listening to events from the main process.
  * Uses the on* listener methods on window.api.
  */
-export function useIpcReceive(channel: string, handler: (data: any) => void) {
+export function useIpcReceive(channel: string, handler: (data: unknown) => void) {
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
@@ -157,7 +157,8 @@ export function useBackendStatus(callback: (status: { online: boolean; version?:
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
-  useIpcReceive('python:status-change', (state: any) => {
+  useIpcReceive('python:status-change', (data) => {
+    const state = data as { status?: string };
     callbackRef.current({
       online: state.status === 'running',
       version: undefined,

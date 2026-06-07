@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Hermes Desktop Backend",
-    version="2.8.5",
+    version="2.8.7",
     lifespan=lifespan,
 )
 
@@ -161,6 +161,14 @@ async def log_requests(request: Request, call_next):
     method = request.method
     path = request.url.path
     query = str(request.url.query) if request.url.query else ""
+    if query:
+        # 避免把 api_key / token 等敏感查询参数写入 desktop-api.log
+        from urllib.parse import parse_qsl, urlencode
+        sensitive = {"api_key", "key", "token", "access_token", "refresh_token", "authorization"}
+        query = urlencode([
+            (k, "***REDACTED***" if k.lower() in sensitive else v)
+            for k, v in parse_qsl(query, keep_blank_values=True)
+        ])
     client = request.client.host if request.client else "unknown"
 
     api_logger.debug("→ %s %s%s  [client=%s]", method, path, f"?{query}" if query else "", client)

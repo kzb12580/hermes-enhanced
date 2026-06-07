@@ -21,14 +21,13 @@ async function fetchModels(
   apiKey: string
 ): Promise<{ success: boolean; models: string[]; error?: string }> {
   try {
-    const params = new URLSearchParams({ base_url: baseUrl });
-    if (apiKey) params.set('api_key', apiKey);
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    const res = await fetch(`${getBackendUrl()}/api/models?${params}`, {
-      method: 'GET',
+    const res = await fetch(`${getBackendUrl()}/api/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: baseUrl, api_key: apiKey }),
       signal: controller.signal,
     });
 

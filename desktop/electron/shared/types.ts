@@ -50,11 +50,14 @@ export const IPC_CHANNELS = {
 } as const
 
 // ==================== App.isQuitting augmentation ====================
-// Declared here (single source of truth) so both main/window.ts and
-// main/index.ts can reference it without duplicate declarations.
-declare module 'electron' {
-  interface App {
-    isQuitting: boolean
+// Electron 39 exports `App` from the module as a type alias, so augment the
+// global Electron namespace instead of `declare module 'electron'` to avoid a
+// duplicate identifier error while keeping app.isQuitting typed everywhere.
+declare global {
+  namespace Electron {
+    interface App {
+      isQuitting?: boolean
+    }
   }
 }
 

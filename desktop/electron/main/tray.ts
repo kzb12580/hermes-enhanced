@@ -112,7 +112,7 @@ export function createTray(pythonManager: PythonManager): Tray {
   updateContextMenu()
 
   // 监听 PythonManager 发出的应用级事件，更新菜单
-  app.on('python-status-changed', updateContextMenu)
+  ;(app as NodeJS.EventEmitter).on('python-status-changed', updateContextMenu)
 
   // 单击托盘图标显示/隐藏窗口
   tray.on('click', () => {

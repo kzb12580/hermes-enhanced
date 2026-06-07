@@ -97,7 +97,7 @@ export function ChatView() {
 
   // Listen for show-about event from tray menu
   useEffect(() => {
-    const api = (window as any).api;
+    const api = window.api;
     if (!api?.app?.onShowAbout) return;
     const cleanup = api.app.onShowAbout(() => {
       setSettingsOpen(true);

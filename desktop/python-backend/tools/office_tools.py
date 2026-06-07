@@ -262,7 +262,7 @@ def read_word(path: str) -> dict:
 def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16x9",
                title: str = "", author: str = "", slides_file: str = "") -> dict:
     """
-    创建 PPT 演示文稿（基于 PptxGenJS，支持动画/过渡/阴影/透明度）
+    创建 PPT 演示文稿（基于 PptxGenJS，支持页面切换/阴影/透明度；不支持元素动画）
 
     参数:
       - path: 输出文件路径
