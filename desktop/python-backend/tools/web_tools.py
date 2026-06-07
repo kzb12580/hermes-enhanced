@@ -71,13 +71,13 @@ def _validate_url(url: str) -> str | None:
 
 class WebSearchTool(BaseTool):
     name = "web_search"
-    description = "Search the web. Returns titles, URLs, and snippets. Supports multiple search engines (DuckDuckGo, Bing, Sogou)."
+    description = "搜索互联网，返回标题、URL 和摘要。支持多个搜索引擎（DuckDuckGo、Bing、搜狗）。"
     requires_network = True
     parameters = {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Search query"},
-            "limit": {"type": "integer", "description": "Max results (default 5)", "default": 5},
+            "query": {"type": "string", "description": "搜索关键词"},
+            "limit": {"type": "integer", "description": "最多返回结果数量（默认 5）", "default": 5},
         },
         "required": ["query"],
     }
@@ -366,12 +366,12 @@ class WebSearchTool(BaseTool):
 
 class WebExtractTool(BaseTool):
     name = "web_extract"
-    description = "Extract text content from a web page URL."
+    description = "从网页 URL 提取文本内容。"
     requires_network = True
     parameters = {
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "URL to extract content from"},
+            "url": {"type": "string", "description": "要提取内容的网页 URL"},
         },
         "required": ["url"],
     }

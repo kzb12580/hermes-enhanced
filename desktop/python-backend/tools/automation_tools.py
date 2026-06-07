@@ -23,7 +23,7 @@ _PLATFORM = platform.system()
 
 class MouseClickTool(BaseTool):
     name = "mouse_click"
-    description = "Click at screen coordinates. Use screen_capture first to find coordinates."
+    description = "在屏幕坐标处点击。请先用 screen_capture 获取坐标。"
     timeout = 10
 
     @property
@@ -31,10 +31,10 @@ class MouseClickTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "x": {"type": "integer", "description": "X coordinate (pixels)"},
-                "y": {"type": "integer", "description": "Y coordinate (pixels)"},
+                "x": {"type": "integer", "description": "X 坐标（像素）"},
+                "y": {"type": "integer", "description": "Y 坐标（像素）"},
                 "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"},
-                "clicks": {"type": "integer", "description": "Number of clicks (1=single, 2=double)", "default": 1},
+                "clicks": {"type": "integer", "description": "点击次数（1=单击，2=双击）", "default": 1},
             },
             "required": ["x", "y"],
         }
@@ -53,7 +53,7 @@ class MouseClickTool(BaseTool):
 
 class MouseMoveTool(BaseTool):
     name = "mouse_move"
-    description = "Move mouse to coordinates smoothly."
+    description = "平滑移动鼠标到指定坐标。"
     timeout = 10
 
     @property
@@ -61,9 +61,9 @@ class MouseMoveTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "x": {"type": "integer", "description": "X coordinate"},
-                "y": {"type": "integer", "description": "Y coordinate"},
-                "duration": {"type": "number", "description": "Move duration in seconds", "default": 0.3},
+                "x": {"type": "integer", "description": "X 坐标"},
+                "y": {"type": "integer", "description": "Y 坐标"},
+                "duration": {"type": "number", "description": "移动持续时间（秒）", "default": 0.3},
             },
             "required": ["x", "y"],
         }
@@ -78,7 +78,7 @@ class MouseMoveTool(BaseTool):
 
 class MouseDragTool(BaseTool):
     name = "mouse_drag"
-    description = "Drag mouse from current position to target coordinates."
+    description = "从当前位置拖动鼠标到目标坐标。"
     timeout = 15
 
     @property
@@ -107,7 +107,7 @@ class MouseDragTool(BaseTool):
 
 class MouseScrollTool(BaseTool):
     name = "mouse_scroll"
-    description = "Scroll mouse wheel at current position or specified coordinates."
+    description = "在当前位置或指定坐标滚动鼠标滚轮。"
     timeout = 10
 
     @property
@@ -115,9 +115,9 @@ class MouseScrollTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "amount": {"type": "integer", "description": "Scroll amount (positive=up, negative=down)", "default": 3},
-                "x": {"type": "integer", "description": "X coordinate (optional)"},
-                "y": {"type": "integer", "description": "Y coordinate (optional)"},
+                "amount": {"type": "integer", "description": "滚动量（正数向上，负数向下）", "default": 3},
+                "x": {"type": "integer", "description": "X 坐标 (optional)"},
+                "y": {"type": "integer", "description": "Y 坐标 (optional)"},
             },
             "required": ["amount"],
         }
@@ -135,7 +135,7 @@ class MouseScrollTool(BaseTool):
 
 class KeyboardTypeTool(BaseTool):
     name = "keyboard_type"
-    description = "Type text string. Supports special keys like {enter}, {tab}, {ctrl+c}. Use screen_capture to find input fields first."
+    description = "输入文本字符串。支持 {enter}、{tab}、{ctrl+c} 等特殊按键。请先用 screen_capture 定位输入框。"
     timeout = 30
 
     @property
@@ -143,8 +143,8 @@ class KeyboardTypeTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "Text to type"},
-                "interval": {"type": "number", "description": "Delay between keystrokes in seconds", "default": 0.02},
+                "text": {"type": "string", "description": "要输入的文本"},
+                "interval": {"type": "number", "description": "按键之间的延迟（秒）", "default": 0.02},
             },
             "required": ["text"],
         }
@@ -159,7 +159,7 @@ class KeyboardTypeTool(BaseTool):
 
 class KeyboardHotkeyTool(BaseTool):
     name = "keyboard_hotkey"
-    description = "Press key combination. Examples: 'ctrl+c', 'ctrl+v', 'alt+tab', 'enter', 'escape', 'ctrl+a', 'ctrl+s'."
+    description = "按下快捷键组合。例如：'ctrl+c'、'ctrl+v'、'alt+tab'、'enter'、'escape'、'ctrl+a'、'ctrl+s'。"
     timeout = 10
 
     @property
@@ -169,7 +169,7 @@ class KeyboardHotkeyTool(BaseTool):
             "properties": {
                 "keys": {
                     "type": "string",
-                    "description": "Key combo separated by '+'. Examples: ctrl+c, alt+tab, ctrl+shift+s",
+                    "description": "快捷键组合，用 '+' 分隔。例如：ctrl+c、alt+tab、ctrl+shift+s",
                 },
             },
             "required": ["keys"],
@@ -186,7 +186,7 @@ class KeyboardHotkeyTool(BaseTool):
 
 class KeyboardPressTool(BaseTool):
     name = "keyboard_press"
-    description = "Press a single key. Valid keys: enter, tab, escape, space, backspace, delete, up, down, left, right, f1-f12, home, end, pageup, pagedown."
+    description = "按下单个按键。可用按键：enter、tab、escape、space、backspace、delete、up、down、left、right、f1-f12、home、end、pageup、pagedown。"
     timeout = 10
 
     @property
@@ -194,8 +194,8 @@ class KeyboardPressTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "key": {"type": "string", "description": "Key name to press"},
-                "presses": {"type": "integer", "description": "Number of times to press", "default": 1},
+                "key": {"type": "string", "description": "要按下的按键名称"},
+                "presses": {"type": "integer", "description": "按键次数", "default": 1},
             },
             "required": ["key"],
         }
@@ -211,7 +211,7 @@ class KeyboardPressTool(BaseTool):
 
 class ListWindowsTool(BaseTool):
     name = "list_windows"
-    description = "List all visible windows with their titles and handles."
+    description = "列出所有可见窗口及其标题和句柄。"
     timeout = 10
 
     @property
@@ -275,7 +275,7 @@ class ListWindowsTool(BaseTool):
 
 class FindWindowTool(BaseTool):
     name = "find_window"
-    description = "Find a window by partial title match. Returns window handle and position."
+    description = "按标题片段查找窗口，返回窗口句柄和位置。"
     timeout = 10
 
     @property
@@ -283,7 +283,7 @@ class FindWindowTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "Partial window title to search for (case-insensitive)"},
+                "title": {"type": "string", "description": "要搜索的窗口标题片段（不区分大小写）"},
             },
             "required": ["title"],
         }
@@ -331,7 +331,7 @@ class FindWindowTool(BaseTool):
 
 class BringToFrontTool(BaseTool):
     name = "bring_to_front"
-    description = "Bring a window to the foreground by title or handle."
+    description = "通过标题或句柄将窗口置于前台。"
     timeout = 10
 
     @property
@@ -339,7 +339,7 @@ class BringToFrontTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "Partial window title (case-insensitive)"},
+                "title": {"type": "string", "description": "窗口标题片段（不区分大小写）"},
             },
             "required": ["title"],
         }
@@ -383,7 +383,7 @@ class BringToFrontTool(BaseTool):
 
 class WaitTool(BaseTool):
     name = "wait"
-    description = "Wait/pause for specified seconds. Use between automation steps."
+    description = "等待指定秒数，常用于自动化步骤之间暂停。"
     timeout = 60
 
     @property
@@ -391,7 +391,7 @@ class WaitTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "seconds": {"type": "number", "description": "Seconds to wait", "default": 1.0},
+                "seconds": {"type": "number", "description": "等待秒数", "default": 1.0},
             },
             "required": ["seconds"],
         }
@@ -406,7 +406,7 @@ class WaitTool(BaseTool):
 
 class GetMousePosTool(BaseTool):
     name = "get_mouse_position"
-    description = "Get current mouse cursor position. Useful for debugging automation."
+    description = "获取当前鼠标指针位置，便于调试自动化操作。"
     timeout = 5
 
     @property
@@ -423,7 +423,7 @@ class GetMousePosTool(BaseTool):
 
 class ScreenSizeTool(BaseTool):
     name = "get_screen_size"
-    description = "Get screen resolution in pixels."
+    description = "获取屏幕分辨率（像素）。"
     timeout = 5
 
     @property

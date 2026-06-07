@@ -73,20 +73,18 @@ class OCRTool(BaseTool):
 
     name = "ocr_extract"
     description = (
-        "Extract text from an image using OCR. "
-        "Works best with clear text on screenshots, documents, photos. "
-        "Supports Chinese + English automatically."
+        "使用 OCR 从图片中提取文字。适合截图、文档、照片中的清晰文字，默认支持中英文。"
     )
     parameters = {
         "type": "object",
         "properties": {
             "image_path": {
                 "type": "string",
-                "description": "Path to the image file (PNG/JPG/BMP/TIFF)",
+                "description": "图片文件路径（PNG/JPG/BMP/TIFF）",
             },
             "language": {
                 "type": "string",
-                "description": "OCR language: 'chi_sim+eng' (Chinese+English, default), 'eng' (English only), 'chi_sim' (Chinese only)",
+                "description": "OCR 语言：'chi_sim+eng'（中英，默认）、'eng'（仅英文）、'chi_sim'（仅中文）",
                 "default": "chi_sim+eng",
             },
         },

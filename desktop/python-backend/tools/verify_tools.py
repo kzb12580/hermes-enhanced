@@ -10,14 +10,14 @@ from . import register
 
 class VerifyFileTool(BaseTool):
     name = "verify_file"
-    description = "Verify a file exists and optionally check its content. Use after creating/writing files to confirm success. Always verify your work."
+    description = "验证文件是否存在，并可选检查其内容。创建或写入文件后使用，用于确认操作成功。"
     timeout = 10
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "File path to verify"},
-            "expected_content": {"type": "string", "description": "Optional: substring that should exist in the file", "default": ""},
-            "min_size": {"type": "integer", "description": "Optional: minimum file size in bytes", "default": 0},
+            "path": {"type": "string", "description": "要验证的文件路径"},
+            "expected_content": {"type": "string", "description": "可选：文件中应包含的字符串", "default": ""},
+            "min_size": {"type": "integer", "description": "可选：最小文件大小（字节）", "default": 0},
         },
         "required": ["path"],
     }
@@ -56,13 +56,13 @@ class VerifyFileTool(BaseTool):
 
 class VerifyCommandTool(BaseTool):
     name = "verify_command"
-    description = "Run a verification command and check its output. Use to verify installations, services, configurations."
+    description = "运行验证命令并检查输出。用于验证安装、服务或配置。"
     timeout = 30
     parameters = {
         "type": "object",
         "properties": {
-            "command": {"type": "string", "description": "Command to run for verification"},
-            "expected_in_output": {"type": "string", "description": "String that should appear in output", "default": ""},
+            "command": {"type": "string", "description": "要运行的验证命令"},
+            "expected_in_output": {"type": "string", "description": "输出中应出现的字符串", "default": ""},
         },
         "required": ["command"],
     }

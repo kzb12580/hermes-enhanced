@@ -31,7 +31,7 @@ jobs:
           - os: macos-latest
             platform: mac
             artifact_name: mac
-          - os: windows-latest
+          - os: windows-2025
             platform: win
             artifact_name: win-unpacked
 

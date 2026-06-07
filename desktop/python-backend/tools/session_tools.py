@@ -9,13 +9,13 @@ from . import register
 
 class SearchSessionTool(BaseTool):
     name = "search_session"
-    description = "Search past conversation sessions by keyword. Use when user references something from a previous conversation, or when you need to recall what was discussed before."
+    description = "按关键词搜索历史会话。当用户提到之前的对话，或需要回忆过去讨论内容时使用。"
     timeout = 15
     parameters = {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Keywords to search for in past sessions"},
-            "limit": {"type": "integer", "description": "Max sessions to return (default 5)", "default": 5},
+            "query": {"type": "string", "description": "要搜索的历史会话关键词"},
+            "limit": {"type": "integer", "description": "最多返回的会话数量（默认 5）", "default": 5},
         },
         "required": ["query"],
     }
@@ -71,12 +71,12 @@ class SearchSessionTool(BaseTool):
 
 class GetSessionHistoryTool(BaseTool):
     name = "get_session_history"
-    description = "Get the last N messages from the current session. Use to recall what was discussed earlier in THIS conversation."
+    description = "获取当前会话最近 N 条消息。用于回忆本轮对话前面讨论过的内容。"
     timeout = 5
     parameters = {
         "type": "object",
         "properties": {
-            "count": {"type": "integer", "description": "Number of recent messages to return (default 10)", "default": 10},
+            "count": {"type": "integer", "description": "返回的最近消息数量（默认 10）", "default": 10},
         },
     }
 

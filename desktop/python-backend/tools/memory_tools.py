@@ -9,19 +9,19 @@ from . import register
 
 class SaveMemoryTool(BaseTool):
     name = "save_memory"
-    description = "Save important information to persistent memory. Use this to remember user preferences, facts, corrections, or anything the user wants you to remember across conversations."
+    description = "保存重要信息到长期记忆。用于记住用户偏好、事实、纠正信息或用户希望跨会话保留的内容。"
     timeout = 10
     parameters = {
         "type": "object",
         "properties": {
             "content": {
                 "type": "string",
-                "description": "The information to remember. Be specific and concise.",
+                "description": "要保存到记忆的信息，请具体且简洁。",
             },
             "tags": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Optional tags for categorization (e.g., ['preference', 'user-info'])",
+                "description": "可选标签，用于分类（例如 ['preference', 'user-info']）",
                 "default": [],
             },
         },
@@ -62,14 +62,14 @@ class SaveMemoryTool(BaseTool):
 
 class SearchMemoryTool(BaseTool):
     name = "search_memory"
-    description = "Search persistent memories by keyword. Use this to recall previously saved information about the user or past conversations."
+    description = "按关键词搜索长期记忆，用于回忆已保存的用户信息或历史对话内容。"
     timeout = 10
     parameters = {
         "type": "object",
         "properties": {
             "keyword": {
                 "type": "string",
-                "description": "Keyword to search for in memories",
+                "description": "要在记忆中搜索的关键词",
             },
         },
         "required": ["keyword"],
@@ -101,7 +101,7 @@ class SearchMemoryTool(BaseTool):
 
 class ListMemoryTool(BaseTool):
     name = "list_memories"
-    description = "List all saved persistent memories. Use to review what you've remembered about the user."
+    description = "列出所有已保存的长期记忆，用于查看已经记住的用户信息。"
     timeout = 10
     parameters = {
         "type": "object",
@@ -129,14 +129,14 @@ class ListMemoryTool(BaseTool):
 
 class DeleteMemoryTool(BaseTool):
     name = "delete_memory"
-    description = "Delete a specific memory by its ID."
+    description = "按 ID 删除指定记忆。"
     timeout = 10
     parameters = {
         "type": "object",
         "properties": {
             "memory_id": {
                 "type": "string",
-                "description": "The ID of the memory to delete",
+                "description": "要删除的记忆 ID",
             },
         },
         "required": ["memory_id"],

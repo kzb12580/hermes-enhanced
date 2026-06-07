@@ -24,7 +24,7 @@ jobs:
             platform: linux
           - os: macos-latest
             platform: mac
-          - os: windows-latest
+          - os: windows-2025
             platform: win
 
     defaults:

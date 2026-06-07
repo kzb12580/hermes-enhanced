@@ -143,10 +143,19 @@ if _HAS_SLOWAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — allow the Electron renderer (localhost)
+# CORS — allow only local/Electron renderer origins.
+# Backend binds to 127.0.0.1 by default; avoid wildcard CORS so arbitrary web
+# pages cannot call local desktop APIs from the browser.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://127.0.0.1:9876",
+        "http://localhost:9876",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "file://",
+        "null",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

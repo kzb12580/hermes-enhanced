@@ -12,18 +12,18 @@ from . import register
 
 class ExecuteCodeTool(BaseTool):
     name = "execute_code"
-    description = "Execute a Python script and return stdout. For large scripts (>20 lines), use chunk_index/total_chunks to split, or write_file first then execute_command."
+    description = "执行 Python 脚本并返回 stdout。大型脚本（超过 20 行）请使用 chunk_index/total_chunks 分块，或先 write_file 再 execute_command。"
     timeout = 120
     parameters = {
         "type": "object",
         "properties": {
             "code": {
                 "type": "string",
-                "description": "Python code to execute. Use print() for output. Available: os, json, pathlib, subprocess, re, math, csv, datetime, collections.",
+                "description": "要执行的 Python 代码。使用 print() 输出结果。可用模块：os、json、pathlib、subprocess、re、math、csv、datetime、collections。",
             },
             "workdir": {
                 "type": "string",
-                "description": "Working directory (optional)",
+                "description": "工作目录（可选）",
                 "default": "",
             },
             "chunk_index": {"type": "integer", "description": "当前块号(从1开始)，大脚本分块时使用", "default": 0},

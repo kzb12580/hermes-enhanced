@@ -94,20 +94,20 @@ def _check_blocked(command: str) -> str:
 class TerminalTool(BaseTool):
     name = "terminal"
     description = (
-        "Execute a shell command and return stdout/stderr. On Windows uses PowerShell, on Linux/macOS uses bash. "
-        "⚠️ PowerShell does NOT use Unix-style flags (--flag). Use PowerShell syntax: "
-        "-Flag (e.g., -Force, -Recurse, -Path). "
-        "Common mistakes: 'cp --overwrite' → use 'Copy-Item -Force'; "
-        "'mv --verbose' → use 'Move-Item -Verbose'; "
-        "'rm -rf' → use 'Remove-Item -Recurse -Force'; "
-        "'cd dir && cmd' → use 'cd dir; cmd' (PowerShell uses ; not &&)."
+        "执行 Shell 命令并返回 stdout/stderr。Windows 使用 PowerShell，Linux/macOS 使用 bash。"
+        "⚠️ PowerShell 不使用 Unix 风格的 --flag 参数，请使用 -Flag 语法，"
+        "例如 -Force、-Recurse、-Path。常见修正："
+        "cp --overwrite → Copy-Item -Force；"
+        "mv --verbose → Move-Item -Verbose；"
+        "rm -rf → Remove-Item -Recurse -Force；"
+        "cd dir && cmd → cd dir; cmd（PowerShell 用 ; 串联命令）。"
     )
     parameters = {
         "type": "object",
         "properties": {
-            "command": {"type": "string", "description": "Shell command to execute"},
-            "workdir": {"type": "string", "description": "Working directory (optional)", "default": ""},
-            "timeout": {"type": "integer", "description": "Timeout in seconds (default 180)", "default": 180},
+            "command": {"type": "string", "description": "要执行的 Shell 命令"},
+            "workdir": {"type": "string", "description": "工作目录（可选）", "default": ""},
+            "timeout": {"type": "integer", "description": "超时时间（秒，默认 180）", "default": 180},
         },
         "required": ["command"],
     }

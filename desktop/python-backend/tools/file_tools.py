@@ -120,13 +120,13 @@ def _resolve_safe_path(path_str: str) -> Path | str:
 
 class ReadFileTool(BaseTool):
     name = "read_file"
-    description = "Read a file's content with line numbers. Use offset/limit for large files."
+    description = "读取文件内容并显示行号。大文件请使用 offset/limit 分页读取。"
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "文件路径"},
-            "offset": {"type": "integer", "description": "Line number to start from (1-indexed, default 1)", "default": 1},
-            "limit": {"type": "integer", "description": "Max lines to read (default 500)", "default": 500},
+            "offset": {"type": "integer", "description": "起始行号（从 1 开始，默认 1）", "default": 1},
+            "limit": {"type": "integer", "description": "最多读取行数（默认 500）", "default": 500},
         },
         "required": ["path"],
     }
@@ -160,12 +160,12 @@ class ReadFileTool(BaseTool):
 
 class WriteFileTool(BaseTool):
     name = "write_file"
-    description = "Write content to a file. Creates parent directories. Overwrites existing content. For large content, use chunk_index/total_chunks to split."
+    description = "写入文件内容，自动创建父目录并覆盖已有内容。大内容请使用 chunk_index/total_chunks 分块写入。"
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "文件路径"},
-            "content": {"type": "string", "description": "Content to write"},
+            "content": {"type": "string", "description": "要写入的内容"},
             "chunk_index": {"type": "integer", "description": "当前块号(从1开始)，大文件分块写入时使用", "default": 0},
             "total_chunks": {"type": "integer", "description": "总块数，大文件分块写入时使用", "default": 0},
         },
@@ -229,13 +229,13 @@ class WriteFileTool(BaseTool):
 
 class SearchFilesTool(BaseTool):
     name = "search_files"
-    description = "Search for a regex pattern inside files. Returns matching lines with line numbers."
+    description = "在文件中搜索正则表达式，返回带行号的匹配行。"
     parameters = {
         "type": "object",
         "properties": {
-            "pattern": {"type": "string", "description": "Regex pattern to search for"},
-            "path": {"type": "string", "description": "Directory or file to search in (default: current dir)", "default": "."},
-            "file_glob": {"type": "string", "description": "File glob filter, e.g. '*.py'", "default": ""},
+            "pattern": {"type": "string", "description": "要搜索的正则表达式"},
+            "path": {"type": "string", "description": "要搜索的目录或文件（默认当前目录）", "default": "."},
+            "file_glob": {"type": "string", "description": "文件 glob 过滤器，例如 '*.py'", "default": ""},
         },
         "required": ["pattern"],
     }
@@ -356,12 +356,12 @@ class SearchFilesTool(BaseTool):
 
 class ListFilesTool(BaseTool):
     name = "list_files"
-    description = "List files and directories in a path."
+    description = "列出指定路径下的文件和目录。"
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Directory path to list (default: current dir)", "default": "."},
-            "pattern": {"type": "string", "description": "Glob pattern filter, e.g. '*.py'", "default": ""},
+            "path": {"type": "string", "description": "要列出的目录路径（默认当前目录）", "default": "."},
+            "pattern": {"type": "string", "description": "glob 过滤器，例如 '*.py'", "default": ""},
         },
         "required": [],
     }

@@ -13,7 +13,7 @@ _todos: list[dict] = []
 
 class TodoCreateTool(BaseTool):
     name = "todo_create"
-    description = "Create a task plan before starting complex work. Break large tasks into steps. Use this FIRST when user gives a multi-step task."
+    description = "在开始复杂工作前创建任务计划，把大任务拆成步骤。用户提出多步骤任务时优先使用。"
     timeout = 5
     parameters = {
         "type": "object",
@@ -33,7 +33,7 @@ class TodoCreateTool(BaseTool):
                     },
                     "required": ["id", "content"],
                 },
-                "description": "List of tasks with id, content, status",
+                "description": "任务列表，每项包含 id、content、status",
             },
         },
         "required": ["tasks"],
@@ -60,14 +60,14 @@ class TodoCreateTool(BaseTool):
 
 class TodoUpdateTool(BaseTool):
     name = "todo_update"
-    description = "Update task status. Mark tasks as in_progress, completed, or failed. Track your progress."
+    description = "更新任务状态，可标记为 in_progress、completed 或 failed，用于跟踪进度。"
     timeout = 5
     parameters = {
         "type": "object",
         "properties": {
             "task_id": {
                 "type": "string",
-                "description": "ID of the task to update",
+                "description": "要更新的任务 ID",
             },
             "status": {
                 "type": "string",
@@ -92,7 +92,7 @@ class TodoUpdateTool(BaseTool):
 
 class TodoListTool(BaseTool):
     name = "todo_list"
-    description = "List all current tasks and their status. Use to check progress or report to user."
+    description = "列出当前所有任务及其状态，用于检查进度或向用户汇报。"
     timeout = 5
     parameters = {"type": "object", "properties": {}}
 

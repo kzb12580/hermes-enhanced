@@ -194,7 +194,7 @@ Step 3: verify_file(output_path)
 - transition 示例: {"slide": 1, "type": "fade", "duration": 1}
 - 支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
 - ⚠️ 不要尝试添加元素动画（入场/退出等），只做内容和页面切换
-- ⚠️ 不要用 execute_code 调用 animate_ppt_engine 或任何动画相关代码
+- ⚠️ 不要尝试通过 execute_code 或脚本添加元素动画；元素动画功能已禁用，避免文件损坏
 - 创建PPT完成后，告诉用户："如需添加文字/图片入场动画，请在PowerPoint中操作，参考《PPT动画添加说明》"
 
 ### Office 工具限制

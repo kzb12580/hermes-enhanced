@@ -26,15 +26,15 @@ def _ensure_dir():
 
 class SaveSkillTool(BaseTool):
     name = "save_skill"
-    description = "Save a successful workflow as a reusable skill. Use after completing a complex task that could be repeated. Include step-by-step instructions, commands, and pitfalls."
+    description = "将成功工作流保存为可复用技能。适用于完成可重复的复杂任务后，需包含步骤、命令和注意事项。"
     timeout = 10
     parameters = {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Skill name (lowercase, hyphens, e.g. 'create-report')"},
-            "description": {"type": "string", "description": "What this skill does"},
-            "steps": {"type": "string", "description": "Step-by-step instructions to reproduce this workflow"},
-            "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags for categorization", "default": []},
+            "name": {"type": "string", "description": "技能名称（小写，可用连字符，例如 'create-report'）"},
+            "description": {"type": "string", "description": "这个技能的用途说明"},
+            "steps": {"type": "string", "description": "复现该工作流的逐步说明"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "分类标签", "default": []},
         },
         "required": ["name", "description", "steps"],
     }
@@ -78,7 +78,7 @@ class SaveSkillTool(BaseTool):
 
 class ListSkillsTool(BaseTool):
     name = "list_skills"
-    description = "List all saved skills/workflows. Use to find reusable approaches for tasks."
+    description = "列出所有已保存技能/工作流，用于查找可复用的任务处理方法。"
     timeout = 5
     parameters = {"type": "object", "properties": {}}
 
@@ -100,12 +100,12 @@ class ListSkillsTool(BaseTool):
 
 class LoadSkillTool(BaseTool):
     name = "load_skill"
-    description = "Load a saved skill to see its full instructions. Use before executing a known workflow."
+    description = "加载已保存技能并查看完整说明。执行已知工作流前使用。"
     timeout = 5
     parameters = {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Skill name to load"},
+            "name": {"type": "string", "description": "要加载的技能名称"},
         },
         "required": ["name"],
     }
@@ -121,12 +121,12 @@ class LoadSkillTool(BaseTool):
 
 class DeleteSkillTool(BaseTool):
     name = "delete_skill"
-    description = "Delete a saved skill."
+    description = "删除已保存技能。"
     timeout = 5
     parameters = {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Skill name to delete"},
+            "name": {"type": "string", "description": "要删除的技能名称"},
         },
         "required": ["name"],
     }

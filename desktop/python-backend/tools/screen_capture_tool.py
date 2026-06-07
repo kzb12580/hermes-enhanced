@@ -20,18 +20,18 @@ class ScreenCaptureTool(BaseTool):
 
     name = "screen_capture"
     description = (
-        "Take a screenshot of the current screen. Returns the image file path. "
+        "截取当前屏幕截图，并返回图片文件路径。"
     )
     parameters = {
         "type": "object",
         "properties": {
             "region": {
                 "type": "string",
-                "description": "Optional region to capture: 'full' (default), 'active_window', or 'x,y,width,height'",
+                "description": "可选截图区域：'full'（默认）、'active_window' 或 'x,y,width,height'",
             },
             "save_path": {
                 "type": "string",
-                "description": "Optional path to save screenshot. Default: temp directory.",
+                "description": "可选截图保存路径。默认保存到临时目录。",
             },
         },
         "required": [],
