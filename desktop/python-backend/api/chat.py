@@ -1023,7 +1023,7 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
         if salvaged_from:
             result += f"\n\n⚠️ 代码被截断已保存到此文件，请用 terminal 运行: python {salvaged_from}"
         tc_elapsed = time.time() - tc_start
-        is_error = result.startswith("Error") or '"error":' in result[:200]
+        is_error = _is_tool_result_error(result)
         status_str = "ERROR" if is_error else "OK"
         logger.info("Tool %s result: %.1fs | %s | %s...",
                      tool_name, tc_elapsed, status_str, result[:200])
@@ -1039,6 +1039,34 @@ async def execute_tools(tool_calls: list[dict], model: str = "") -> list[dict]:
             "content": result,
         })
     return results
+
+
+def _is_tool_result_error(content: str) -> bool:
+    """判断工具结果是否是真失败。
+
+    有些工具会在成功时返回 stderr/warning 到 JSON 的 error 字段，
+    例如 execute_code 运行 pip 后 stderr 里只有升级提示。此时 ok=true，
+    不能仅凭出现 error 字段就把结果标成 ERROR。
+    """
+    if not content:
+        return False
+    if content.startswith("Error:") or content.startswith("Error "):
+        return True
+    if not content.startswith("{"):
+        return False
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return False
+    if isinstance(data, dict):
+        if data.get("ok") is False:
+            return True
+        if data.get("ok") is True:
+            return False
+        if data.get("exit_code") not in (None, 0):
+            return True
+        return bool(data.get("error"))
+    return False
 
 
 # Retryable error patterns (transient failures that may succeed on retry)
@@ -1363,14 +1391,12 @@ async def chat(message: ChatMessage):
                         raw_tool_calls = text_tool_calls
                         logger.info("Parsed %d text-based tool calls from response", len(text_tool_calls))
 
-                # ── LLM 响应日志 ──
-                llm_logger.info("  响应: content=%d chars | tool_calls=%d | reasoning=%d chars",
-                                len(full_response), len(raw_tool_calls), len(reasoning_text))
-                if full_response:
-                    llm_logger.debug("  content_preview: %s", full_response[:500])
-
                 # If no tool calls, we're done
                 if not raw_tool_calls:
+                    llm_logger.info("  响应: content=%d chars | tool_calls=0 | reasoning=%d chars",
+                                    len(full_response), len(reasoning_text))
+                    if full_response:
+                        llm_logger.debug("  content_preview: %s", full_response[:500])
                     llm_logger.info("  无工具调用，对话结束")
                     break
                 
@@ -1412,6 +1438,15 @@ async def chat(message: ChatMessage):
                         accumulated[idx]["function"]["arguments"] += func["arguments"]
                 
                 complete_tool_calls = list(accumulated.values())
+
+                # ── LLM 响应日志 ──
+                # raw_tool_calls 是流式 delta 片段，不是完整工具调用；日志里同时记录两者，避免把 20472 这类片段数误读为工具数。
+                llm_logger.info(
+                    "  响应: content=%d chars | tool_calls=%d | tool_deltas=%d | reasoning=%d chars",
+                    len(full_response), len(complete_tool_calls), len(raw_tool_calls), len(reasoning_text),
+                )
+                if full_response:
+                    llm_logger.debug("  content_preview: %s", full_response[:500])
                 
                 # Log tool call details for debugging truncation
                 for tc in complete_tool_calls:
@@ -1446,21 +1481,7 @@ async def chat(message: ChatMessage):
                 
                 # Track consecutive failures — per-tool tracking
                 # Only count if the SAME tool keeps failing (different tools failing is OK)
-                def _is_tool_error(content: str) -> bool:
-                    if not content:
-                        return False
-                    if content.startswith("Error:") or content.startswith("Error "):
-                        return True
-                    # Check JSON error responses
-                    if content.startswith("{"):
-                        try:
-                            d = json.loads(content)
-                            if d.get("ok") is False or d.get("error"):
-                                return True
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-                    return False
-                failed_tools = [r.get("content", "") for r in tool_results if _is_tool_error(r.get("content", ""))]
+                failed_tools = [r.get("content", "") for r in tool_results if _is_tool_result_error(r.get("content", ""))]
                 if failed_tools:
                     # Check if the failing tool is the same as last time
                     current_fail_tool = complete_tool_calls[0]["function"]["name"] if complete_tool_calls else "unknown"

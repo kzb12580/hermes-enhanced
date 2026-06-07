@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import zipfile
 from .base import BaseTool
 from . import register
 
@@ -17,7 +18,7 @@ class VerifyFileTool(BaseTool):
         "properties": {
             "path": {"type": "string", "description": "要验证的文件路径"},
             "expected_content": {"type": "string", "description": "可选：文件中应包含的字符串", "default": ""},
-            "min_size": {"type": "integer", "description": "可选：最小文件大小（字节）", "default": 0},
+            "min_size": {"type": "integer", "description": "可选：最小文件大小（字节）。Office 文件优先校验结构，不建议用固定大阈值判断质量。", "default": 0},
         },
         "required": ["path"],
     }
@@ -35,10 +36,34 @@ class VerifyFileTool(BaseTool):
         
         size = os.path.getsize(path)
         result = {"ok": True, "path": path, "size": size}
+
+        ext = os.path.splitext(path)[1].lower()
+        is_office = ext in {".pptx", ".docx", ".xlsx"}
+        if is_office:
+            if not zipfile.is_zipfile(path):
+                result["ok"] = False
+                result["error"] = f"Office 文件结构无效：{ext} 不是有效的 ZIP/OOXML 文件"
+            else:
+                try:
+                    with zipfile.ZipFile(path) as zf:
+                        names = set(zf.namelist())
+                    required = {"[Content_Types].xml", "_rels/.rels"}
+                    missing = sorted(required - names)
+                    if missing:
+                        result["ok"] = False
+                        result["error"] = "Office 文件结构缺少必要组件：" + ", ".join(missing)
+                    else:
+                        result["office_structure"] = "valid"
+                except Exception as e:
+                    result["ok"] = False
+                    result["error"] = f"Office 文件结构校验失败：{e}"
         
         if min_size and size < min_size:
-            result["ok"] = False
-            result["error"] = f"File too small: {size} bytes (expected >= {min_size})"
+            if result.get("office_structure") == "valid":
+                result["warning"] = f"文件大小 {size} 字节低于 min_size={min_size}，但 Office 结构有效；请按页数/内容进一步校验。"
+            else:
+                result["ok"] = False
+                result["error"] = f"File too small: {size} bytes (expected >= {min_size})"
         
         if expected_content:
             try:

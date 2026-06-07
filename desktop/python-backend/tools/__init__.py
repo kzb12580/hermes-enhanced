@@ -76,8 +76,9 @@ def _auto_register():
     from .file_tools import ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool
     from .terminal_tools import TerminalTool
     from .web_tools import WebSearchTool, WebExtractTool
-    from .screen_capture_tool import ScreenCaptureTool
-    from .ocr_tool import OCRTool
+    # These modules self-register at import time.
+    from .screen_capture_tool import ScreenCaptureTool  # noqa: F401
+    from .ocr_tool import OCRTool  # noqa: F401
     from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
     from . import office_tools
     from .memory_tools import SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool
@@ -90,15 +91,13 @@ def _auto_register():
         WaitTool, GetMousePosTool, ScreenSizeTool,
     )
     from .verify_tools import VerifyFileTool, VerifyCommandTool
-    from .code_tools import ExecuteCodeTool
+    from .code_tools import ExecuteCodeTool  # noqa: F401
     from .skill_tools import SaveSkillTool, ListSkillsTool, LoadSkillTool, DeleteSkillTool
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
         TerminalTool,
         WebSearchTool, WebExtractTool,
-        ScreenCaptureTool,
-        OCRTool,
         # Memory tools
         SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool,
         # Session tools
@@ -112,8 +111,6 @@ def _auto_register():
         WaitTool, GetMousePosTool, ScreenSizeTool,
         # Verify tools
         VerifyFileTool, VerifyCommandTool,
-        # Code execution
-        ExecuteCodeTool,
         # Skill tools
         SaveSkillTool, ListSkillsTool, LoadSkillTool, DeleteSkillTool,
     ]:
