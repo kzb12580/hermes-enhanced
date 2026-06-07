@@ -22,6 +22,7 @@ source-map/package/
 source-map/claude-code-2.1.88.tgz
 source-map/README.md
 __pycache__/
+.codegraph/
 
 # Environment variables and secrets
 .env
