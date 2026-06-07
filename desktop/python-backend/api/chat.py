@@ -189,27 +189,21 @@ Step 3: verify_file(output_path)
 - read_excel(path, sheet_name, max_rows) — 读取Excel
 - edit_excel(path, operations) — 编辑Excel（单元格/公式/图表/格式/合并）
 
-### PPT 动画工具（专用）
-- animate_ppt(path, animations, transitions) — 为PPT添加原生动画（40+种效果）
-  - 先用 list_ppt_shapes(path) 查看形状ID
-  - animations: [{"slide": 1, "effect": "fade", "target": "all_text", "duration": 0.5, "trigger": "afterprev"}]
-  - transitions: [{"slide": 1, "type": "fade", "duration": 1, "direction": "left"}]
-  - target选项: "all", "all_text", "title", "body", "all_images", "1,3,5"(形状ID)
-  - 触发方式: "onclick"(点击), "withprev"(同时), "afterprev"(之后)
-  - ⚠️ 动画和切换效果必须在同一次调用中传入，不要分两次调用！
-  - ⚠️ 第二次调用时必须传入完整动画列表，不能用空列表 []，否则会丢失已有动画！
-- list_ppt_shapes(path, slide) — 列出PPT形状名称和ID
-- list_anim_effects() — 列出所有可用动画效果
+### PPT 创建提示
+- 用 create_ppt 创建PPT，slides JSON 中可设置 transition（页面切换效果）
+- transition 示例: {"slide": 1, "type": "fade", "duration": 1}
+- 支持的 transition type: fade, push, cover, uncover, wipe, split, blinds, checkerboard, random
+- ⚠️ 不要尝试添加元素动画（入场/退出等），只做内容和页面切换
+- ⚠️ 不要用 execute_code 调用 animate_ppt_engine 或任何动画相关代码
+- 创建PPT完成后，告诉用户："如需添加文字/图片入场动画，请在PowerPoint中操作，参考《PPT动画添加说明》"
 
 ### Office 工具限制
-- create_ppt 用 PptxGenJS（Node.js），原生支持过渡动画，无需 COM 自动化
-- animate_ppt 用 XML 直接操作，支持逐元素动画编排，无需 python-pptx 或 COM
-- PPT 动画工作流: create_ppt(创建) → animate_ppt(加动画) → 完成
-- ⚠️ 严禁用 execute_code 自己写动画脚本！自己拼的 XML 会导致文件损坏（加段落动画时变空白）
-- ⚠️ 必须用 animate_ppt 工具，它内部处理 XML 兼容性（bldLst、段落构建等）
+- create_ppt 用 PptxGenJS（Node.js），支持过渡动画（在 slides JSON 的 transition 字段中设置）
 - Word/Excel 不支持同时打开同一个文件编辑（会锁定）
 - 如果操作失败2次，换一种方案或告知用户手动操作
 - 大文件（>100行Excel）必须用 execute_code 写脚本
+- ⚠️ PPT动画已禁用：不要尝试用 execute_code 添加动画（会导致文件损坏）
+- ⚠️ 专注做好PPT内容，动画由用户在PowerPoint中手动添加
 
 ### GUI Automation
 - mouse_move/click/drag/scroll — 鼠标控制

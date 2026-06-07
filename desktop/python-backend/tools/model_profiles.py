@@ -103,16 +103,12 @@ HARDCODED_PROFILES: dict[str, str] = {
 - **禁止深层嵌套** — slides 数组最多 2 层，对象属性最多 3 层
 - **单次参数不超过 3KB** — 超过就用 write_file 写文件再传文件路径
 - **slides_file 优先** — 超过 5 页的 PPT 必须用 `write_file("slides.json", ...)` + `create_ppt(path, slides_file="slides.json")`
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - **不要在 tool_call 的 arguments 里写大段 JSON** — 写文件传路径
 
 ### 🚫 MIMO 常见陷阱
 1. **JSON 截断** — MIMO 生成长 JSON 容易被截断（Unterminated string），所以参数越短越好
 2. **重复尝试** — 失败 2 次后必须换方案，不要一直重试同一个方法
 3. **不要写 Python 脚本生成 PPT** — 用 create_ppt 工具，不要用 python-pptx
-4. **不要自己实现动画** — 用 animate_ppt 工具，不要自己拼 XML 或写 COM 脚本
-5. **动画工作流**: create_ppt(创建) → list_ppt_shapes(查看形状) → animate_ppt(加动画)
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 
 ### ✅ MIMO 最佳实践
 - 先 `write_file` 写数据文件，再调用工具读取 — 比内联参数稳定 10 倍
@@ -151,7 +147,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建优化
 - PPT: 用 create_ppt 工具（PptxGenJS），不要用 python-pptx
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word: 用 create_word 工具，支持模板和格式化
 - Excel: 用 create_excel / edit_excel 工具
 - 不要用 execute_code 自己写 Office 文件 — 用专用工具
@@ -179,7 +174,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具（PptxGenJS），不要用 python-pptx
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - PPT 过渡动画: slide 定义中加 `"transition": {"type": "fade", "duration": 1}`
 - Word/Excel: 用专用工具，不要自己写脚本
 """,
@@ -206,7 +200,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具，支持 PptxGenJS 全部特性
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 - 大文件: write_file + 工具的 file 参数
 """,
@@ -233,7 +226,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具（PptxGenJS），不要用 python-pptx
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 - 不要用 execute_code 自己写 Office 文件
 """,
@@ -260,7 +252,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具（PptxGenJS）
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 - 大数据: write_file 写文件 → 工具读文件
 """,
@@ -288,7 +279,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具，必须用 slides_file
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 - 不要用 execute_code 自己写 Office 文件
 """,
@@ -310,7 +300,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -334,7 +323,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -357,7 +345,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -376,7 +363,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -397,7 +383,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -416,7 +401,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -441,7 +425,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具，必须用 slides_file
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 
@@ -460,7 +443,6 @@ HARDCODED_PROFILES: dict[str, str] = {
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
 - Word/Excel: 用专用工具
 """,
 }
@@ -569,10 +551,8 @@ _DEFAULT_PROFILE = """## 🎯 通用模型优化策略
 
 ### 🎨 文档创建
 - PPT: 用 create_ppt 工具（PptxGenJS），不要用 python-pptx
-- **PPT 动画**: 用 animate_ppt 工具（动画+切换必须同一次调用传入，不能分两次！不能用空列表覆盖！）
   - ≤5页：直接传 slides 参数（必须用 elements 数组格式）
   - >5页：write_file("slides.json", [...]) → create_ppt(path, slides_file="slides.json")
-- **PPT 动画**: 用 animate_ppt 工具（不要自己写 Python 脚本拼 XML！）
   1. list_ppt_shapes(path) 查看形状 ID
   2. animate_ppt(path, animations=[{slide, effect, target}]) 添加动画
   3. 支持 64 种动画 + 27 种幻灯片切换
