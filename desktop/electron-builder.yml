@@ -32,6 +32,8 @@ extraResources:
     to: python-backend-source
     filter:
       - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
       - '**/*.txt'
       - '**/*.md'
       - '!**/.venv/**'
