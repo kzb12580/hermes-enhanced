@@ -159,15 +159,21 @@ def _smart_merge(parts: list[str], target_path: str) -> str:
         return "".join(parts)
     
     # Only strip brackets if ALL chunks look like JSON arrays
-    all_json_arrays = all(p.strip().startswith("[") and p.strip().endswith("]") for p in parts)
+    all_json_arrays = all(p.strip().startswith("[") and "]" in p.strip() for p in parts)
     if all_json_arrays:
         stripped = []
         for i, part in enumerate(parts):
             p = part.strip()
-            if i < len(parts) - 1 and p.endswith("]"):
-                p = p[:-1]
+            # Strip trailing content after last ] (e.g. comma, newline)
+            last_bracket = p.rfind("]")
+            if last_bracket >= 0:
+                p = p[:last_bracket + 1]
+            # Strip leading [ for non-first chunks
             if i > 0 and p.startswith("["):
                 p = p[1:]
+            # Strip trailing ] for non-last chunks
+            if i < len(parts) - 1 and p.endswith("]"):
+                p = p[:-1]
             stripped.append(p)
         merged = ",".join(stripped)
         try:

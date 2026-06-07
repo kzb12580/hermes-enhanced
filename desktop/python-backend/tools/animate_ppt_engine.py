@@ -592,8 +592,9 @@ def add_animations(
         except PermissionError:
             if _attempt < 2:
                 import time
-                _log.warning("File locked, retrying in 1s (attempt %d/3)", _attempt + 1)
-                time.sleep(1)
+                delay = 2 * (_attempt + 1)  # 2s, 4s
+                _log.warning("File locked, retrying in %ds (attempt %d/3)", delay, _attempt + 1)
+                time.sleep(delay)
             else:
                 raise
 

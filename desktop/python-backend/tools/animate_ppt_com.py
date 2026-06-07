@@ -278,6 +278,19 @@ def add_animations_com(
 
     except Exception as e:
         _log.error("COM animation failed: %s", e, exc_info=True)
+        # COM 失败后强制释放资源，防止文件锁残留
+        try:
+            del pres
+        except Exception:
+            pass
+        try:
+            del ppt
+        except Exception:
+            pass
+        import gc
+        gc.collect()
+        import time
+        time.sleep(1)  # 等待 COM 释放文件锁
         return {"error": str(e), "success": False, "backend": "com"}
 
     finally:
@@ -291,6 +304,11 @@ def add_animations_com(
                 ppt.Quit()
         except Exception:
             pass
+        # 强制释放 COM 对象引用
+        pres = None
+        ppt = None
+        import gc
+        gc.collect()
 
 
 def _select_com_shapes(slide, target: str) -> list[int]:
