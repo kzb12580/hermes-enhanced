@@ -196,6 +196,8 @@ Step 3: verify_file(output_path)
   - transitions: [{"slide": 1, "type": "fade", "duration": 1, "direction": "left"}]
   - target选项: "all", "all_text", "title", "body", "all_images", "1,3,5"(形状ID)
   - 触发方式: "onclick"(点击), "withprev"(同时), "afterprev"(之后)
+  - ⚠️ 动画和切换效果必须在同一次调用中传入，不要分两次调用！
+  - ⚠️ 第二次调用时必须传入完整动画列表，不能用空列表 []，否则会丢失已有动画！
 - list_ppt_shapes(path, slide) — 列出PPT形状名称和ID
 - list_anim_effects() — 列出所有可用动画效果
 

@@ -619,6 +619,26 @@ def add_animations(
             anims_by_slide[slide_num] = []
         anims_by_slide[slide_num].append(anim)
 
+    # 安全检查：空动画+有transitions时，不能覆盖已有动画
+    if not anims_by_slide and trans_index:
+        # 检查源文件是否已有动画（timing 元素）
+        _check_zip = zipfile.ZipFile(pptx_path, "r")
+        has_existing_anim = False
+        for name in _check_zip.namelist():
+            if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
+                content = _check_zip.read(name).decode("utf-8")
+                if "<p:timing" in content or ":timing>" in content:
+                    has_existing_anim = True
+                    break
+        _check_zip.close()
+        if has_existing_anim:
+            return {
+                "success": False,
+                "error": "源文件已有动画，但 animations 列表为空。"
+                         "请传入完整动画列表（不能用空列表），否则会丢失已有动画。"
+                         "如需仅添加 transitions，请同时传入原始动画列表。",
+            }
+
     slides_animated = 0
     shapes_animated = 0
 
