@@ -73,8 +73,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path desktop/buildResources/vcredist
-          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "desktop/buildResources/vcredist/vc_redist.x64.exe"
+          New-Item -ItemType Directory -Force -Path buildResources/vcredist
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "buildResources/vcredist/vc_redist.x64.exe"
 
       # ---- Python backend ----
       - name: Setup Python
@@ -88,7 +88,10 @@ jobs:
 
       - name: Build Python backend
         working-directory: desktop/python-backend
-        run: pyinstaller build.spec --distpath ../dist-backend --workpath ../build-backend
+        shell: bash
+        run: |
+          rm -rf ../build-backend ../dist-backend
+          pyinstaller build.spec --distpath ../dist-backend --workpath ../build-backend --clean
 
       # ---- macOS code signing (conditional) ----
       - name: Check macOS signing secret
