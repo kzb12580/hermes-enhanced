@@ -132,7 +132,10 @@ jobs:
           path: |
             desktop/dist/*.dmg
             desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.rpm
             desktop/dist/*.exe
+            desktop/dist/*.blockmap
             desktop/dist/*.zip
             desktop/dist/*.snap
             desktop/dist/latest*.yml
@@ -160,7 +163,10 @@ jobs:
         with:
           files: |
             artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
             artifacts/**/*.exe
+            artifacts/**/*.blockmap
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.snap
