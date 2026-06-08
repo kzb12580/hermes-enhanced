@@ -81,7 +81,10 @@ mac:
         - arm64
 
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  # Include arch because x64 and arm64 DMGs are built concurrently on macOS.
+  # Without this, both hdiutil convert processes write the same output path and
+  # one or both DMG builds fail intermittently.
+  artifactName: ${name}-${version}-${arch}.${ext}
   contents:
     - x: 130
       y: 220

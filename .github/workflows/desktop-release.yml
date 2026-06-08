@@ -1,9 +1,8 @@
 name: Release Desktop App
 
 on:
-  push:
-    tags:
-      - "v*"
+  # Release publishing is handled by desktop-build.yml to avoid duplicate assets.
+  # Keep this workflow manual-only for emergency rebuilds.
   workflow_dispatch:
 
 permissions:
