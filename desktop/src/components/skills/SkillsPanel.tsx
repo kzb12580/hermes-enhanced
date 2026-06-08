@@ -85,7 +85,7 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
       setSelectedDetail(null);
       return;
     }
-    const skill = skills.find((s) => s.id === selectedId || s.name === selectedId);
+    const skill = skills.find((s) => (s.name || s.id) === selectedId);
     if (!skill) return;
 
     // Try to get full detail from API
@@ -124,7 +124,10 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
     setSelectedId(null);
   }, [filterCategory]);
 
-  const selected = filtered.find((s) => s.id === selectedId || s.name === selectedId) || filtered[0] || null;
+  const getSkillKey = (skill: SkillInfo) => skill.name || skill.id;
+  const isSkillActive = (skill: SkillInfo) => activeSkills.includes(skill.name) || activeSkills.includes(skill.id);
+  const selected = filtered.find((s) => getSkillKey(s) === selectedId) || filtered[0] || null;
+  const selectedActive = selected ? isSkillActive(selected) : false;
 
   // Reload skills handler
   const handleReload = async () => {
@@ -154,7 +157,7 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
             <Sparkles size={18} className="text-[var(--hermes-accent)]" />
             <h2 className="text-sm font-semibold text-text-primary">技能管理</h2>
             <span className="text-xs text-text-muted">
-              {activeSkills.length} 已激活
+              {activeSkills.length} 已激活 · 技能是工作流提示，不是工具开关
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -226,11 +229,12 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
             ) : (
               <div className="py-1">
                 {filtered.map((skill) => {
-                  const isActive = activeSkills.includes(skill.id) || activeSkills.includes(skill.name);
-                  const isSelected = selected?.id === skill.id || selected?.name === skill.name;
+                  const skillKey = getSkillKey(skill);
+                  const isActive = isSkillActive(skill);
+                  const isSelected = selected ? getSkillKey(selected) === skillKey : false;
                   return (
                     <div
-                      key={skill.id}
+                      key={skillKey}
                       className={`flex items-center transition-all duration-150
                         ${isSelected
                           ? 'bg-[var(--hermes-accent)]/10 border-l-2 border-[var(--hermes-accent)]'
@@ -238,7 +242,7 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                         }`}
                     >
                       <button
-                        onClick={() => setSelectedId(skill.id)}
+                        onClick={() => setSelectedId(skillKey)}
                         className="flex-1 text-left px-4 py-2.5 flex items-center gap-3"
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
@@ -267,7 +271,7 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onToggleActive(skill.id || skill.name);
+                          onToggleActive(skillKey);
                         }}
                         className={`flex-shrink-0 px-2 py-1 mr-2 rounded text-xs transition-colors
                           ${isActive
@@ -293,19 +297,19 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center
-                      ${activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
+                      ${selectedActive
                         ? 'bg-[var(--hermes-accent)]/20'
                         : 'bg-[var(--bg-tertiary)]'
                       }`}>
                       {selected.is_builtin ? (
                         <Zap size={20} className={
-                          activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
+                          selectedActive
                             ? 'text-[var(--hermes-accent)]'
                             : 'text-text-muted'
                         } />
                       ) : (
                         <User size={20} className={
-                          activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
+                          selectedActive
                             ? 'text-[var(--hermes-accent)]'
                             : 'text-text-muted'
                         } />
@@ -333,14 +337,14 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
 
                   {/* Enable / Disable toggle */}
                   <button
-                    onClick={() => onToggleActive(selected.id || selected.name)}
+                    onClick={() => onToggleActive(getSkillKey(selected))}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
-                      ${activeSkills.includes(selected.id) || activeSkills.includes(selected.name)
+                      ${selectedActive
                         ? 'bg-[var(--hermes-accent)] text-bg-primary hover:opacity-80'
                         : 'bg-[var(--bg-tertiary)] text-text-secondary hover:bg-[var(--bg-surface)] border border-[var(--hermes-border)]'
                       }`}
                   >
-                    {activeSkills.includes(selected.id) || activeSkills.includes(selected.name) ? (
+                    {selectedActive ? (
                       <>
                         <Power size={12} />
                         已激活
