@@ -33,6 +33,17 @@ def _xml_texts(root: ET.Element, tag: str) -> list[str]:
     return texts
 
 
+def _normalize_search_text(text: str) -> str:
+    """Normalize human-visible text for lenient verification.
+
+    Office files often split labels across cells/runs, while users/models pass
+    the expected phrase as one continuous string. Keep exact matching available
+    first, then compare a whitespace/punctuation-light form to avoid false
+    negatives such as sheet name "产品销售汇总" not appearing in cell text.
+    """
+    return re.sub(r"[\s\u3000:：|｜,，;；._\-—/\\]+", "", text or "").lower()
+
+
 def _verify_docx_content(zf: zipfile.ZipFile) -> dict:
     if "word/document.xml" not in zf.namelist():
         return {"status": "invalid", "error": "缺少 word/document.xml"}
@@ -68,6 +79,17 @@ def _verify_xlsx_content(zf: zipfile.ZipFile) -> dict:
         except Exception:
             shared_strings = []
 
+    workbook_sheet_titles: list[str] = []
+    try:
+        workbook_root = ET.fromstring(zf.read("xl/workbook.xml"))
+        workbook_sheet_titles = [
+            sheet.get("name", "").strip()
+            for sheet in workbook_root.findall(".//main:sheet", _NS)
+            if sheet.get("name", "").strip()
+        ]
+    except Exception:
+        workbook_sheet_titles = []
+
     sheet_names = sorted(
         (name for name in names if name.startswith("xl/worksheets/sheet") and name.endswith(".xml")),
         key=_natural_key,
@@ -75,7 +97,7 @@ def _verify_xlsx_content(zf: zipfile.ZipFile) -> dict:
     if not sheet_names:
         return {"status": "invalid", "error": "缺少 xl/worksheets/sheet*.xml"}
 
-    text_values: list[str] = []
+    text_values: list[str] = list(workbook_sheet_titles)
     non_empty_cells = 0
     formula_cells = 0
     numeric_cells = 0
@@ -113,6 +135,7 @@ def _verify_xlsx_content(zf: zipfile.ZipFile) -> dict:
     return {
         "status": "valid" if non_empty_cells else "empty",
         "sheets": len(sheet_names),
+        "sheet_names": workbook_sheet_titles,
         "non_empty_cells": non_empty_cells,
         "formula_cells": formula_cells,
         "numeric_cells": numeric_cells,
@@ -427,7 +450,7 @@ class VerifyFileTool(BaseTool):
                 else:
                     with open(path, 'r', encoding='utf-8', errors='replace') as f:
                         content = f.read()
-                if expected_content not in content:
+                if expected_content not in content and _normalize_search_text(expected_content) not in _normalize_search_text(content):
                     result["ok"] = False
                     result["error"] = "Expected content not found in file"
             except Exception as e:

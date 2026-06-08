@@ -121,6 +121,12 @@ _root.addHandler(_all_handler)
 _root.addHandler(_console_handler)
 _root.addHandler(_error_handler)
 
+# 第三方 HTTP 库在 DEBUG 级别会输出大量连接/TLS/流式响应细节（例如
+# httpcore 的 GeneratorExit），会淹没桌面版真正有价值的工具/API 日志。
+# 保持 hermes-backend 自身 DEBUG 详细度，同时把依赖库降噪到 WARNING。
+for _noisy_logger in ("httpcore", "httpx", "urllib3", "asyncio"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
+
 # ── 公共接口 ────────────────────────────────────────────────────────────────
 
 def get_logger(name: str) -> logging.Logger:
