@@ -182,6 +182,13 @@ class WriteFileTool(BaseTool):
                 logger.info("Read %d chars from temp file: %s", len(content), content_file)
             except Exception as e:
                 logger.warning("Failed to read content_file %s: %s", content_file, e)
+            finally:
+                # content_file is an oversized-argument spill file created by chat.py;
+                # remove it after loading so only the requested output file remains.
+                try:
+                    os.unlink(content_file)
+                except Exception:
+                    pass
 
         # Guard against empty content (model may have truncated the call)
         if not content:

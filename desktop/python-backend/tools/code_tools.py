@@ -41,8 +41,13 @@ class ExecuteCodeTool(BaseTool):
             try:
                 with open(code_file, "r", encoding="utf-8") as f:
                     code = f.read()
-            except Exception:
-                pass
+            finally:
+                # code_file is an oversized-argument spill file created by chat.py;
+                # once loaded it must not remain in /tmp or the workspace.
+                try:
+                    os.unlink(code_file)
+                except Exception:
+                    pass
 
         # Chunked mode — store chunks, execute when complete
         if chunk_index > 0 and total_chunks > 0:

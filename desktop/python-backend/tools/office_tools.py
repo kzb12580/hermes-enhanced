@@ -9,6 +9,8 @@ import logging
 import shutil
 import subprocess
 import sys
+import re
+import zipfile
 from typing import Optional
 from pathlib import Path
 from tools.safe_file_ops import atomic_save, backup_file
@@ -78,6 +80,9 @@ def create_word(path: str, title: str = "", content: str = "", template: str = "
                 font_size: int = 12, line_spacing: float = 1.5) -> dict:
     """创建 Word 文档（支持模板、字体、行距）"""
     try:
+        if not template and not title.strip() and not content.strip():
+            return {"error": "Word 内容为空：请提供 title、content 或 template", "success": False}
+
         from docx import Document
         from docx.shared import Pt, Cm
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -254,6 +259,195 @@ def read_word(path: str) -> dict:
         return {"error": str(e), "success": False}
 
 
+
+def _repair_pptx_office_compatibility(path: str) -> dict:
+    """Post-process PptxGenJS output to avoid Microsoft PowerPoint repair prompts.
+
+    PptxGenJS 3.x can generate PPTX files that are valid ZIP/OOXML enough for
+    LibreOffice but still make Microsoft PowerPoint show "found a problem with
+    content" on every open. The most common cause in our generated decks is the
+    notesMaster/notesSlide scaffold. We do not create speaker notes, so it is
+    safe to remove that infrastructure and its relationships/content types.
+    """
+    notes_prefixes = ("ppt/notesMasters/", "ppt/notesSlides/")
+    invalid_shape_map = {
+        'prst="oval"': 'prst="ellipse"',
+        'prst="roundedRectangle"': 'prst="roundRect"',
+    }
+
+    try:
+        with zipfile.ZipFile(path, "r") as zin:
+            entries = {info.filename: zin.read(info.filename) for info in zin.infolist()}
+            infos = {info.filename: info for info in zin.infolist()}
+    except zipfile.BadZipFile:
+        return {"status": "error", "error": "生成的 PPTX 不是有效 ZIP"}
+
+    changed = False
+    removed: list[str] = []
+    patched: list[str] = []
+
+    # Remove notes master/slides and their relationship files/directories.
+    for name in list(entries):
+        if name.startswith(notes_prefixes):
+            removed.append(name)
+            entries.pop(name, None)
+            changed = True
+
+    def patch_xml(name: str, fn) -> None:
+        nonlocal changed
+        if name not in entries:
+            return
+        text = entries[name].decode("utf-8", "replace")
+        new_text = fn(text)
+        if new_text != text:
+            entries[name] = new_text.encode("utf-8")
+            patched.append(name)
+            changed = True
+
+    existing_slide_masters = {
+        "/" + name for name in entries
+        if name.startswith("ppt/slideMasters/") and name.endswith(".xml")
+    }
+
+    def strip_notes_content_types(text: str) -> str:
+        text = re.sub(r'<Override PartName="/ppt/notesMasters/[^\"]+"[^>]*/>', '', text)
+        text = re.sub(r'<Override PartName="/ppt/notesSlides/[^\"]+"[^>]*/>', '', text)
+
+        # PptxGenJS 3.x may emit one slideMaster Override per slide while only
+        # slideMaster1.xml exists. PowerPoint treats those phantom overrides as
+        # unreadable content and repairs the file on open.
+        def keep_existing_slide_master(match: re.Match) -> str:
+            part = match.group(1)
+            return match.group(0) if part in existing_slide_masters else ""
+
+        text = re.sub(
+            r'<Override PartName="(/ppt/slideMasters/[^\"]+)"[^>]*/>',
+            keep_existing_slide_master,
+            text,
+        )
+        return text
+
+    def strip_notes_relationships(text: str) -> str:
+        text = re.sub(r'<Relationship [^>]*Type="http://schemas\.openxmlformats\.org/officeDocument/2006/relationships/notesMaster"[^>]*/>', '', text)
+        text = re.sub(r'<Relationship [^>]*Type="http://schemas\.openxmlformats\.org/officeDocument/2006/relationships/notesSlide"[^>]*/>', '', text)
+        return text
+
+    def strip_notes_master_ids(text: str) -> str:
+        text = re.sub(r'<p:notesMasterIdLst>.*?</p:notesMasterIdLst>', '', text, flags=re.S)
+        return text
+
+    patch_xml("[Content_Types].xml", strip_notes_content_types)
+    patch_xml("ppt/_rels/presentation.xml.rels", strip_notes_relationships)
+    patch_xml("ppt/presentation.xml", strip_notes_master_ids)
+
+    # Also remove slide-level relationships that point to deleted notesSlides.
+    # Leaving dangling rels makes PowerPoint repair the deck even when the
+    # notesSlides files themselves have been removed.
+    for rel_name in list(entries):
+        if rel_name.startswith("ppt/slides/_rels/") and rel_name.endswith(".xml.rels"):
+            patch_xml(rel_name, strip_notes_relationships)
+
+    # Defensive cleanup for known PptxGenJS 3.x shape-preset incompatibilities.
+    for name in list(entries):
+        if not (name.startswith("ppt/slides/") and name.endswith(".xml")):
+            continue
+        text = entries[name].decode("utf-8", "replace")
+        new_text = text
+        for bad, good in invalid_shape_map.items():
+            new_text = new_text.replace(bad, good)
+        if new_text != text:
+            entries[name] = new_text.encode("utf-8")
+            patched.append(name)
+            changed = True
+
+    if not changed:
+        return {"status": "unchanged", "removed": [], "patched": []}
+
+    tmp_path = f"{path}.compat.tmp"
+    try:
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+            for name, data in entries.items():
+                info = infos.get(name)
+                if info is not None:
+                    zi = zipfile.ZipInfo(filename=name, date_time=info.date_time)
+                    zi.external_attr = info.external_attr
+                    zi.comment = info.comment
+                    zi.extra = info.extra
+                    zi.create_system = info.create_system
+                else:
+                    zi = zipfile.ZipInfo(filename=name)
+                zout.writestr(zi, data)
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+    return {"status": "repaired", "removed": removed, "patched": patched}
+
+def _ppt_slide_size(layout: str) -> tuple[float, float]:
+    """Return slide size in inches for PptxGenJS layouts."""
+    key = (layout or "16x9").lower()
+    if key in {"16x9", "layout_16x9"}:
+        return 10.0, 5.625
+    if key in {"wide", "layout_wide"}:
+        return 13.333, 7.5
+    if key in {"16x10", "layout_16x10"}:
+        return 10.0, 6.25
+    if key in {"4x3", "layout_4x3"}:
+        return 10.0, 7.5
+    return 13.333, 7.5
+
+
+def _validate_ppt_layout(slides: list[dict], layout: str) -> list[dict]:
+    """Validate source slide element coordinates before generating PPT.
+
+    This catches the common failure where the model places elements outside the
+    slide but later reports success because the PPTX file itself is structurally valid.
+    """
+    slide_w, slide_h = _ppt_slide_size(layout)
+    tol = 0.02
+    issues: list[dict] = []
+    for slide_idx, slide in enumerate(slides or [], 1):
+        for elem_idx, el in enumerate(slide.get("elements") or [], 1):
+            # Lines may intentionally use x2/y2 rather than w/h; only validate
+            # elements that declare a rectangular box.
+            if not isinstance(el, dict):
+                continue
+            if not any(k in el for k in ("x", "y", "w", "h")):
+                continue
+            try:
+                x = float(el.get("x", 0))
+                y = float(el.get("y", 0))
+                w = float(el.get("w", 0))
+                h = float(el.get("h", 0))
+            except (TypeError, ValueError):
+                issues.append({"slide": slide_idx, "element": elem_idx, "type": el.get("type"), "error": "坐标不是数字"})
+                continue
+            over = []
+            if x < -tol:
+                over.append("left")
+            if y < -tol:
+                over.append("top")
+            if w < 0 or h < 0:
+                over.append("negative_size")
+            if x + w > slide_w + tol:
+                over.append("right")
+            if y + h > slide_h + tol:
+                over.append("bottom")
+            if over:
+                issues.append({
+                    "slide": slide_idx,
+                    "element": elem_idx,
+                    "type": el.get("type", "text"),
+                    "overflow": over,
+                    "x": x, "y": y, "w": w, "h": h,
+                    "slide_w": slide_w, "slide_h": slide_h,
+                })
+                if len(issues) >= 20:
+                    return issues
+    return issues
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PPT 工具 — 基于 PptxGenJS (Node.js)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -268,7 +462,8 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
       - path: 输出文件路径
       - slides: 幻灯片数组（简单PPT直接传，复杂PPT用slides_file）
       - slides_file: 幻灯片JSON文件路径（避免大JSON截断，推荐>5页时使用）
-      - layout: 布局 (16x9 / 16x10 / 4x3 / wide)
+      - layout: 布局 (16x9=10×5.625英寸 / 16x10=10×6.25 / 4x3=10×7.5 / wide=13.333×7.5)
+      - 坐标单位为英寸；所有元素必须满足 x>=0、y>=0、x+w<=页面宽、y+h<=页面高
       - title: 演示文稿标题
       - author: 作者
 
@@ -282,12 +477,12 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
         "elements": [
           {"type": "text", "text": "标题", "x": 1, "y": 2, "w": 8, "h": 2,
            "fontSize": 44, "bold": true, "color": "FFFFFF", "align": "center"},
-          {"type": "shape", "shape": "rect", "x": 0, "y": 6.5, "w": 13.333, "h": 1,
+          {"type": "shape", "shape": "rect", "x": 0, "y": 5.0, "w": 10, "h": 0.5,
            "fill": {"color": "065A82"}},
-          {"type": "image", "path": "https://...", "x": 1, "y": 3, "w": 5, "h": 3},
+          {"type": "image", "path": "https://...", "x": 1, "y": 2.3, "w": 4, "h": 2.5},
           {"type": "chart", "chartType": "bar",
            "data": [{"name": "销量", "labels": ["Q1","Q2"], "values": [450,550]}],
-           "x": 0.5, "y": 1, "w": 9, "h": 4},
+           "x": 0.5, "y": 1, "w": 8.5, "h": 3.8},
           {"type": "table", "rows": [["H1","H2"],["c1","c2"]], "x": 1, "y": 1, "w": 8, "h": 2}
         ]
       }
@@ -312,6 +507,14 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
 
         if not slides or not isinstance(slides, list):
             return {"error": "slides 参数缺失或为空。请提供 slides 数组或 slides_file 路径。", "success": False}
+
+        layout_issues = _validate_ppt_layout(slides, layout)
+        if layout_issues:
+            return {
+                "error": "PPT 页面元素超出幻灯片范围，请缩小或移动这些元素后重试",
+                "layout_issues": layout_issues,
+                "success": False,
+            }
 
         path = _safe_path(path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -372,6 +575,12 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
                 return {"error": f"PptxGenJS error: {error_msg}", "success": False}
 
             output = json.loads(result.stdout)
+            if output.get("success") and output.get("path"):
+                compat = _repair_pptx_office_compatibility(output["path"])
+                if compat.get("status") in {"repaired", "unchanged"}:
+                    output["office_compatibility"] = compat
+                else:
+                    return {"error": f"PPT Office 兼容性处理失败: {compat.get('error')}", "success": False}
             return output
         finally:
             os.unlink(config_path)
@@ -393,7 +602,12 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None, layout: str = "16
 def create_excel(path: str, sheets: list[dict]) -> dict:
     """创建 Excel 表格"""
     try:
+        if not isinstance(sheets, list) or not sheets:
+            return {"error": "sheets must be a non-empty list", "success": False}
         total_rows = sum(len(s.get("data", [])) for s in sheets)
+        total_headers = sum(len(s.get("headers", [])) for s in sheets)
+        if total_rows == 0 and total_headers == 0:
+            return {"error": "Excel 内容为空：请至少提供 headers 或 data", "success": False}
         if total_rows > MAX_ROWS:
             return {"error": f"Too many rows ({total_rows})", "success": False}
 
@@ -401,8 +615,6 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
         wb = Workbook()
-        if not isinstance(sheets, list) or not sheets:
-            return {"error": "sheets must be a non-empty list", "success": False}
 
         for i, sheet_data in enumerate(sheets):
             ws = wb.active if i == 0 else wb.create_sheet()

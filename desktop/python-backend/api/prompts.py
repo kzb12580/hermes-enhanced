@@ -136,7 +136,7 @@ You have tools. Use them.
    - Word: create_word(path, content)
    - Excel: create_excel(path, sheets=[...])
 3. PPT 专注于内容创作，如需动画请参考《PPT动画添加说明》
-4. Verify output file exists
+4. Verify output file exists, has valid structure, and contains key readable content
 5. Tell user the file path
 ```
 

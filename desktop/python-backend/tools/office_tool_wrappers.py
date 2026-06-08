@@ -107,13 +107,13 @@ OFFICE_TOOL_DEFINITIONS = [
     ),
     OfficeToolWrapper(
         name="create_ppt",
-        description="创建PPT（PptxGenJS引擎，支持页面切换/阴影/透明度/图表/表格，不支持元素动画）。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
+        description="创建PPT（PptxGenJS引擎，支持页面切换/阴影/透明度/图表/表格，不支持元素动画）。坐标单位为英寸：16x9页面=10×5.625，wide页面=13.333×7.5；元素必须满足x+w不超过页面宽、y+h不超过页面高。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
         fn=None,
         parameters={
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "保存路径，如 /tmp/slides.pptx"},
-                "layout": {"type": "string", "description": "幻灯片布局: 16x9 / 16x10 / 4x3 / wide", "default": "16x9"},
+                "layout": {"type": "string", "description": "幻灯片布局：16x9=10×5.625英寸，16x10=10×6.25，4x3=10×7.5，wide=13.333×7.5", "default": "16x9"},
                 "title": {"type": "string", "description": "演示文稿标题（可选）"},
                 "author": {"type": "string", "description": "作者（可选）"},
                 "slides_file": {"type": "string", "description": "slides JSON文件路径（推荐>5页PPT使用，避免截断）。先write_file保存JSON，再传此参数"},
@@ -133,10 +133,10 @@ OFFICE_TOOL_DEFINITIONS = [
                                     "properties": {
                                         "type": {"type": "string", "enum": ["text", "shape", "image", "chart", "table"], "description": "元素类型"},
                                         "text": {"description": "文本内容（string或富文本数组[{text,options}]）"},
-                                        "x": {"type": "number", "description": "X位置（英寸）"},
-                                        "y": {"type": "number", "description": "Y位置（英寸）"},
-                                        "w": {"type": "number", "description": "宽度（英寸）"},
-                                        "h": {"type": "number", "description": "高度（英寸）"},
+                                        "x": {"type": "number", "description": "X位置（英寸，必须>=0）"},
+                                        "y": {"type": "number", "description": "Y位置（英寸，必须>=0）"},
+                                        "w": {"type": "number", "description": "宽度（英寸；16x9时x+w必须<=10）"},
+                                        "h": {"type": "number", "description": "高度（英寸；16x9时y+h必须<=5.625）"},
                                         "fontSize": {"type": "integer", "description": "字号"},
                                         "fontFace": {"type": "string", "description": "字体"},
                                         "color": {"type": "string", "description": "文字颜色（6位hex，无#）"},

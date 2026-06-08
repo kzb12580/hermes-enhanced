@@ -229,8 +229,17 @@ def _merge_chunks(target_path: str, meta: dict, workspace: str | None = None) ->
             "status": "verify_failed",
         }
 
-    # Clean up chunk directory
+    # Clean up chunk directory. If it was the last active chunk set, remove the
+    # empty .hermes_chunks base too so the user workspace only contains the
+    # intended output files after a successful merge.
     shutil.rmtree(cd, ignore_errors=True)
+    base = _get_chunk_base(workspace)
+    try:
+        if base.exists() and base.is_dir() and not any(base.iterdir()):
+            base.rmdir()
+    except OSError:
+        # Non-empty or transient filesystem error: leave it for stale cleanup.
+        pass
     logger.info("Merged %d chunks → %s (%d chars)", total, target_path, len(full_content))
 
     return {

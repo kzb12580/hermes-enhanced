@@ -67,7 +67,7 @@ Before doing ANYTHING complex (3+ steps), create a task plan:
 
 ### Phase 3: VERIFY
 After EVERY file write, command execution, or system change:
-- Call `verify_file` to confirm files exist and have correct content
+- Call `verify_file` to confirm files exist, structure is valid, and key readable content is present
 - Call `verify_command` to confirm commands succeeded
 - NEVER assume success — always verify
 
@@ -138,7 +138,7 @@ Step 3: verify_file(output_path)
 - write_file(path, content) — 创建/覆盖文件，自动创建目录
 - search_files(pattern, path, file_glob) — 按内容或文件名搜索
 - list_files(path, pattern) — 列出目录内容
-- verify_file(path) — 验证文件存在且内容正确
+- verify_file(path) — 验证文件存在、Office结构有效、关键可读内容存在
 
 ### Code Execution
 - execute_code(code, workdir) — 执行Python脚本，返回stdout。用于批量操作、数据处理、复杂逻辑
@@ -888,10 +888,15 @@ async def call_llm_streaming(
                         if "choices" in chunk and chunk["choices"]:
                             choice = chunk["choices"][0]
                             delta = choice.get("delta", {}) if choice else {}
-                            # Log finish_reason for truncation detection
+                            # Log finish_reason for truncation detection.
+                            # `tool_calls` is the normal finish reason when the model is asking us
+                            # to execute tools; warning on every tool turn pollutes desktop logs.
                             fr = choice.get("finish_reason")
                             if fr and fr != "stop":
-                                logger.warning("LLM finish_reason=%s (may indicate truncation)", fr)
+                                if fr == "tool_calls":
+                                    logger.info("LLM finish_reason=%s (tool execution requested)", fr)
+                                else:
+                                    logger.warning("LLM finish_reason=%s (may indicate truncation)", fr)
                             # Handle reasoning_content (MIMO requirement)
                             if "reasoning_content" in delta and delta["reasoning_content"]:
                                 rlen = len(delta["reasoning_content"])
