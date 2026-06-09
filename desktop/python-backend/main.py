@@ -28,6 +28,7 @@ from logger import get_logger, get_log_dir, get_log_files
 
 logger = get_logger("hermes-backend")
 api_logger = get_logger("hermes-backend.api")
+_api_request_throttle = {}
 
 from api.chat import router as chat_router
 from api.config import router as config_router
@@ -133,7 +134,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Hermes Desktop Backend",
-    version="1.1.2",
+    version="1.1.3",
     lifespan=lifespan,
 )
 
@@ -180,7 +181,17 @@ async def log_requests(request: Request, call_next):
         ])
     client = request.client.host if request.client else "unknown"
 
-    api_logger.debug("→ %s %s%s  [client=%s]", method, path, f"?{query}" if query else "", client)
+    _is_health_path = path.rstrip("/") == "/api/health"
+    _skip_health_request_log = False
+    if _is_health_path:
+        _api_logger_name = getattr(api_logger, "name", "")
+        _health_last_logged_at = _api_request_throttle.get(_api_logger_name)
+        if _health_last_logged_at is None or (time.time() - _health_last_logged_at) > 30:
+            _api_request_throttle[_api_logger_name] = time.time()
+        else:
+            _skip_health_request_log = True
+    if not _skip_health_request_log:
+        api_logger.debug("→ %s %s%s  [client=%s]", method, path, f"?{query}" if query else "", client)
 
     try:
         response = await call_next(request)
@@ -191,10 +202,16 @@ async def log_requests(request: Request, call_next):
 
     elapsed = (time.time() - start) * 1000
     status = response.status_code
-    level = "error" if status >= 500 else "warning" if status >= 400 else "info"
-    getattr(api_logger, level)(
-        "← %s %s  %d  %.0fms", method, path, status, elapsed
-    )
+    if _is_health_path:
+        if status >= 400 or elapsed > 100:
+            api_logger.warning("← %s %s  %d  %.0fms", method, path, status, elapsed)
+        elif not _skip_health_request_log:
+            api_logger.info("← %s %s  %d  %.0fms", method, path, status, elapsed)
+    else:
+        level = "error" if status >= 500 else "warning" if status >= 400 else "info"
+        getattr(api_logger, level)(
+            "← %s %s  %d  %.0fms", method, path, status, elapsed
+        )
     return response
 
 # 全局异常处理

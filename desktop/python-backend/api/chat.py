@@ -1351,7 +1351,7 @@ async def chat(message: ChatMessage):
             last_fail_tool = ""  # 上次失败的工具名
             MAX_CONSECUTIVE_FAILURES = 3  # 同一工具连续失败3次触发警告
             has_warned = False  # 是否已经警告过模型换方向
-            
+            MAX_STREAM_RETRIES = 1  # 单次迭代内允许的流式断线重试次数
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
                 iter_start = time.time()
                 # Call LLM with streaming
@@ -1365,29 +1365,45 @@ async def chat(message: ChatMessage):
                 llm_logger.info("── LLM 调用 #%d | 消息数=%d | 估算 tokens≈%d ──",
                                 iteration + 1, len(current_messages),
                                 sum(estimate_tokens(m.get("content", "")) + estimate_tokens(json.dumps(m.get("tool_calls", ""))) for m in current_messages))
-                
-                async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
-                    if isinstance(chunk, str) and chunk.startswith('{"reasoning_content"'):
-                        # MIMO reasoning_content — capture but don't send to frontend
-                        try:
-                            rc_data = json.loads(chunk)
-                            reasoning_text += rc_data.get("reasoning_content", "")
-                        except json.JSONDecodeError:
-                            pass
-                    elif isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
-                        # Regular content token
-                        full_response += chunk
-                        yield f"event: token\ndata: {chunk}\n\n"
-                    elif isinstance(chunk, str) and chunk.startswith('{"tool_calls"'):
-                        # Tool call delta from streaming
-                        try:
-                            tc_data = json.loads(chunk)
-                            tc = tc_data.get("tool_calls")
-                            if tc:
-                                raw_tool_calls.extend(tc)
-                        except json.JSONDecodeError:
-                            pass
-                
+
+                for stream_attempt in range(MAX_STREAM_RETRIES + 1):
+                    attempt_yielded_tokens = False
+                    stream_interrupted = False
+                    try:
+                        async for chunk in call_llm_streaming(base_url, api_key, model, current_messages, max_tokens, temperature, tools, proxy_url=message.proxy_url):
+                            if isinstance(chunk, str) and chunk.startswith('{"reasoning_content"'):
+                                # MIMO reasoning_content — capture but don't send to frontend
+                                try:
+                                    rc_data = json.loads(chunk)
+                                    reasoning_text += rc_data.get("reasoning_content", "")
+                                except json.JSONDecodeError:
+                                    pass
+                            elif isinstance(chunk, str) and not chunk.startswith('{"tool_calls"'):
+                                # Regular content token
+                                full_response += chunk
+                                attempt_yielded_tokens = True
+                                yield f"event: token\ndata: {chunk}\n\n"
+                            elif isinstance(chunk, str) and chunk.startswith('{"tool_calls"'):
+                                # Tool call delta from streaming
+                                try:
+                                    tc_data = json.loads(chunk)
+                                    tc = tc_data.get("tool_calls")
+                                    if tc:
+                                        raw_tool_calls.extend(tc)
+                                except json.JSONDecodeError:
+                                    pass
+                    except Exception as stream_exc:
+                        # 仅在尚未向客户端输出任何 token 时允许一次重试，避免重复内容。
+                        if not attempt_yielded_tokens and stream_attempt < MAX_STREAM_RETRIES and isinstance(stream_exc, (httpx.ReadError, httpx.RemoteProtocolError, httpx.TimeoutException)):
+                            logger.warning("LLM stream interrupted before response, retrying once: %s", stream_exc)
+                            stream_interrupted = True
+                            continue
+                        raise
+                    break
+
+                if stream_interrupted:
+                    llm_logger.warning("LLM 首包前流式中断，已完成自动重试")
+
                 # If no API tool calls, try parsing text-based tool calls
                 # (for models that don't support function calling natively)
                 if not raw_tool_calls and full_response:
