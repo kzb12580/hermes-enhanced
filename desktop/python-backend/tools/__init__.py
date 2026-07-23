@@ -119,15 +119,21 @@ def _auto_register():
         except Exception as e:
             logger.warning("Failed to register %s: %s", tool_cls.__name__, e)
 
-    # Register office tools
+    # Register office tools — OfficeCLI 优先，fallback 到原生实现
+    from . import officecli_tools
     office_fn_map = {
-        "create_word": office_tools.create_word,
-        "edit_word": office_tools.edit_word,
-        "read_word": office_tools.read_word,
-        "create_ppt": office_tools.create_ppt,
-        "create_excel": office_tools.create_excel,
-        "read_excel": office_tools.read_excel,
-        "edit_excel": office_tools.edit_excel,
+        # OfficeCLI 版本（推荐）
+        "create_word": officecli_tools.create_word,
+        "read_word": officecli_tools.read_word,
+        "edit_word": officecli_tools.edit_word,
+        "create_excel": officecli_tools.create_excel,
+        "read_excel": officecli_tools.read_excel,
+        "edit_excel": officecli_tools.edit_excel,
+        "create_ppt": officecli_tools.create_ppt,
+        "add_ppt_animation": officecli_tools.add_ppt_animation,
+        "render_office": officecli_tools.render_office,
+        "get_office_info": officecli_tools.get_office_info,
+        "validate_ppt": officecli_tools.validate_ppt,
     }
     for wrapper in OFFICE_TOOL_DEFINITIONS:
         try:

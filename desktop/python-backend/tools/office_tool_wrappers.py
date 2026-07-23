@@ -9,10 +9,8 @@ from typing import Any
 
 from .base import BaseTool
 
-
 class OfficeToolWrapper(BaseTool):
     """Wraps an office function as a BaseTool for LLM calling."""
-
     def __init__(self, name: str, description: str, fn, parameters: dict, timeout: int = 120):
         self._name = name
         self._description = description
@@ -49,28 +47,42 @@ class OfficeToolWrapper(BaseTool):
 
 
 # ─── Office Tool Definitions ────────────────────────────────────────────────
+# OfficeCLI 版本 — 支持动画、渲染预览、完整OOXML
 
 OFFICE_TOOL_DEFINITIONS = [
+    # ═══════════════════════════════════════════════════════════════════════
+    # Word 工具
+    # ═══════════════════════════════════════════════════════════════════════
     OfficeToolWrapper(
         name="create_word",
-        description="创建Word文档。支持自定义标题、内容、模板、字体大小和行距。",
+        description="创建Word文档（OfficeCLI引擎）。支持自定义标题、内容、模板。",
         fn=None,  # Will be set during registration
         parameters={
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "保存路径，如 /tmp/report.docx"},
                 "title": {"type": "string", "description": "文档标题"},
-                "content": {"type": "string", "description": "文档正文内容（支持Markdown格式）"},
+                "content": {"type": "string", "description": "文档正文内容"},
                 "template": {"type": "string", "description": "模板文件路径（可选）"},
-                "font_size": {"type": "integer", "description": "字体大小，默认12", "default": 12},
-                "line_spacing": {"type": "number", "description": "行距，默认1.5", "default": 1.5},
+            },
+            "required": ["path"],
+        },
+    ),
+    OfficeToolWrapper(
+        name="read_word",
+        description="读取Word文档内容，返回文本和结构信息。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Word文件路径"},
             },
             "required": ["path"],
         },
     ),
     OfficeToolWrapper(
         name="edit_word",
-        description="编辑已有Word文档。支持插入、替换、删除段落等操作。⚠️ 批量操作（如插入10+图片）请改用execute_code写Python脚本，避免参数过大截断。",
+        description="编辑已有Word文档。支持插入、替换段落等操作。",
         fn=None,
         parameters={
             "type": "object",
@@ -82,9 +94,12 @@ OFFICE_TOOL_DEFINITIONS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "type": {"type": "string", "enum": ["insert", "replace", "delete_paragraph", "add_heading", "add_table", "add_paragraph", "add_image", "add_page_break", "set_header", "set_footer", "add_toc"], "description": "操作类型"},
+                            "type": {"type": "string", "enum": ["add_heading", "add_paragraph", "replace", "add_image"], "description": "操作类型"},
                             "text": {"type": "string", "description": "内容文本"},
                             "index": {"type": "integer", "description": "段落位置"},
+                            "level": {"type": "integer", "description": "标题级别(1-6)"},
+                            "new": {"type": "string", "description": "替换后文本"},
+                            "image_path": {"type": "string", "description": "图片路径"},
                         },
                         "required": ["type"],
                     },
@@ -93,82 +108,13 @@ OFFICE_TOOL_DEFINITIONS = [
             "required": ["path", "operations"],
         },
     ),
-    OfficeToolWrapper(
-        name="read_word",
-        description="读取Word文档内容，返回文本和表格数据。",
-        fn=None,
-        parameters={
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Word文件路径"},
-            },
-            "required": ["path"],
-        },
-    ),
-    OfficeToolWrapper(
-        name="create_ppt",
-        description="创建PPT（PptxGenJS引擎，支持页面切换/阴影/透明度/图表/表格，不支持元素动画）。坐标单位为英寸：16x9页面=10×5.625，wide页面=13.333×7.5；元素必须满足x+w不超过页面宽、y+h不超过页面高。≤5页直接传slides，>5页先write_file保存JSON再传slides_file避免截断。",
-        fn=None,
-        parameters={
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "保存路径，如 /tmp/slides.pptx"},
-                "layout": {"type": "string", "description": "幻灯片布局：16x9=10×5.625英寸，16x10=10×6.25，4x3=10×7.5，wide=13.333×7.5", "default": "16x9"},
-                "title": {"type": "string", "description": "演示文稿标题（可选）"},
-                "author": {"type": "string", "description": "作者（可选）"},
-                "slides_file": {"type": "string", "description": "slides JSON文件路径（推荐>5页PPT使用，避免截断）。先write_file保存JSON，再传此参数"},
-                "slides": {
-                    "type": "array",
-                    "description": "幻灯片列表",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "background": {"type": "object", "description": "背景，如 {\"color\": \"1E2761\"}", "properties": {"color": {"type": "string"}}},
-                            "transition": {"type": "object", "description": "过渡动画，如 {\"type\": \"fade\", \"duration\": 1}", "properties": {"type": {"type": "string"}, "duration": {"type": "number"}}},
-                            "elements": {
-                                "type": "array",
-                                "description": "页面元素列表",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {"type": "string", "enum": ["text", "shape", "image", "chart", "table"], "description": "元素类型"},
-                                        "text": {"description": "文本内容（string或富文本数组[{text,options}]）"},
-                                        "x": {"type": "number", "description": "X位置（英寸，必须>=0）"},
-                                        "y": {"type": "number", "description": "Y位置（英寸，必须>=0）"},
-                                        "w": {"type": "number", "description": "宽度（英寸；16x9时x+w必须<=10）"},
-                                        "h": {"type": "number", "description": "高度（英寸；16x9时y+h必须<=5.625）"},
-                                        "fontSize": {"type": "integer", "description": "字号"},
-                                        "fontFace": {"type": "string", "description": "字体"},
-                                        "color": {"type": "string", "description": "文字颜色（6位hex，无#）"},
-                                        "bold": {"type": "boolean", "description": "加粗"},
-                                        "italic": {"type": "boolean", "description": "斜体"},
-                                        "align": {"type": "string", "enum": ["left", "center", "right"], "description": "对齐"},
-                                        "valign": {"type": "string", "enum": ["top", "middle", "bottom"], "description": "垂直对齐"},
-                                        "bullet": {"type": "boolean", "description": "显示项目符号"},
-                                        "fill": {"type": "object", "description": "填充色，如 {\"color\": \"0D9488\"}"},
-                                        "shadow": {"type": "object", "description": "阴影，如 {\"type\":\"outer\",\"blur\":6,\"offset\":2,\"color\":\"000000\",\"opacity\":0.15}"},
-                                        "shape": {"type": "string", "enum": ["rect", "oval", "line", "rounded_rect"], "description": "形状类型"},
-                                        "chartType": {"type": "string", "enum": ["bar", "line", "pie", "doughnut", "scatter", "radar"], "description": "图表类型"},
-                                        "data": {"type": "array", "description": "图表数据 [{name,labels,values}]"},
-                                        "barDir": {"type": "string", "enum": ["col", "bar"], "description": "柱状图方向"},
-                                        "chartColors": {"type": "array", "items": {"type": "string"}, "description": "图表颜色"},
-                                        "showValue": {"type": "boolean", "description": "显示数据标签"},
-                                        "rows": {"type": "array", "description": "表格行数据"},
-                                    },
-                                    "required": ["type"],
-                                },
-                            },
-                        },
-                        "required": ["elements"],
-                    },
-                },
-            },
-            "required": ["path"],
-        },
-    ),
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # Excel 工具
+    # ═══════════════════════════════════════════════════════════════════════
     OfficeToolWrapper(
         name="create_excel",
-        description="创建Excel表格。支持多工作表、表头、数据。⚠️ 大量数据（>100行）请改用execute_code写Python脚本。",
+        description="创建Excel表格（OfficeCLI引擎）。支持多工作表、表头、数据。",
         fn=None,
         parameters={
             "type": "object",
@@ -200,14 +146,13 @@ OFFICE_TOOL_DEFINITIONS = [
             "properties": {
                 "path": {"type": "string", "description": "Excel文件路径"},
                 "sheet_name": {"type": "string", "description": "工作表名（空=读取所有）", "default": ""},
-                "max_rows": {"type": "integer", "description": "最大读取行数", "default": 1000},
             },
             "required": ["path"],
         },
     ),
     OfficeToolWrapper(
         name="edit_excel",
-        description="编辑已有Excel文件。支持设置单元格、添加公式、图表、格式化等操作。⚠️ 批量操作（>10个）请改用execute_code写Python脚本。",
+        description="编辑已有Excel文件。支持设置单元格、添加公式、工作表等。",
         fn=None,
         parameters={
             "type": "object",
@@ -219,35 +164,156 @@ OFFICE_TOOL_DEFINITIONS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "type": {
-                                "type": "string",
-                                "enum": ["set_cell", "set_range", "add_sheet", "delete_sheet", "add_chart", "add_formula", "format_cells", "auto_filter", "merge_cells"],
-                                "description": "操作类型",
-                            },
+                            "type": {"type": "string", "enum": ["set_cell", "set_range", "add_sheet", "add_formula"], "description": "操作类型"},
                             "row": {"type": "integer", "description": "行号"},
                             "col": {"type": "integer", "description": "列号"},
                             "value": {"description": "单元格值"},
+                            "formula": {"type": "string", "description": "公式"},
                             "data": {"type": "array", "description": "批量数据"},
-                            "start_row": {"type": "integer"},
-                            "start_col": {"type": "integer"},
                             "name": {"type": "string", "description": "工作表名"},
-                            "chart_type": {"type": "string", "enum": ["bar", "line", "pie"]},
-                            "data_ref": {"type": "object"},
-                            "cats_ref": {"type": "object"},
-                            "title": {"type": "string"},
-                            "formula": {"type": "string"},
-                            "range": {"type": "string"},
-                            "bold": {"type": "boolean"},
-                            "color": {"type": "string"},
-                            "bg_color": {"type": "string"},
-                            "sheet": {"type": "string"},
-                            "position": {"type": "string"},
+                            "sheet": {"type": "string", "description": "目标工作表"},
                         },
                         "required": ["type"],
                     },
                 },
             },
             "required": ["path", "operations"],
+        },
+    ),
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # PowerPoint 工具 — 支持动画！
+    # ═══════════════════════════════════════════════════════════════════════
+    OfficeToolWrapper(
+        name="create_ppt",
+        description="""创建PPT（OfficeCLI引擎，支持元素动画！）。
+坐标单位为英寸：16x9页面=10×5.625，wide页面=13.333×7.5。
+动画支持：入场(fade/fly/zoom/wipe/bounce)、退出(contract/floatOut)、强调(spin/grow)、运动路径(line/arc/circle)。
+""",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "保存路径，如 /tmp/slides.pptx"},
+                "title": {"type": "string", "description": "演示文稿标题（可选）"},
+                "author": {"type": "string", "description": "作者（可选）"},
+                "slides_file": {"type": "string", "description": "slides JSON文件路径（>5页推荐）"},
+                "slides": {
+                    "type": "array",
+                    "description": "幻灯片列表",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "background": {"type": "object", "description": "背景色"},
+                            "elements": {
+                                "type": "array",
+                                "description": "页面元素",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {"type": "string", "enum": ["text", "shape", "image", "chart", "table"], "description": "元素类型"},
+                                        "text": {"description": "文本内容"},
+                                        "x": {"type": "number", "description": "X位置（英寸）"},
+                                        "y": {"type": "number", "description": "Y位置（英寸）"},
+                                        "w": {"type": "number", "description": "宽度（英寸）"},
+                                        "h": {"type": "number", "description": "高度（英寸）"},
+                                        "fontSize": {"type": "integer", "description": "字号"},
+                                        "color": {"type": "string", "description": "文字颜色"},
+                                        "bold": {"type": "boolean", "description": "加粗"},
+                                        "fill": {"type": "object", "description": "填充色"},
+                                        "shape": {"type": "string", "enum": ["rect", "oval", "line", "rounded_rect"], "description": "形状类型"},
+                                        "chartType": {"type": "string", "enum": ["bar", "line", "pie"], "description": "图表类型"},
+                                        "rows": {"type": "array", "description": "表格数据"},
+                                    },
+                                    "required": ["type"],
+                                },
+                            },
+                            "animations": {
+                                "type": "array",
+                                "description": "动画列表（OfficeCLI支持！）",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "shape_index": {"type": "integer", "description": "目标形状索引（从0开始）"},
+                                        "effect": {"type": "string", "enum": ["appear", "fade", "fly", "zoom", "wipe", "bounce", "float", "swivel", "spin", "grow", "wave"], "description": "动画效果"},
+                                        "class": {"type": "string", "enum": ["entrance", "exit", "emphasis", "motion"], "description": "动画类别"},
+                                        "duration": {"type": "integer", "description": "持续时间（毫秒）", "default": 500},
+                                        "trigger": {"type": "string", "enum": ["onClick", "withPrevious", "afterPrevious"], "description": "触发方式"},
+                                        "direction": {"type": "string", "enum": ["in", "out", "left", "right", "up", "down"], "description": "方向"},
+                                        "delay": {"type": "integer", "description": "延迟（毫秒）"},
+                                    },
+                                    "required": ["shape_index", "effect", "class"],
+                                },
+                            },
+                        },
+                        "required": ["elements"],
+                    },
+                },
+            },
+            "required": ["path"],
+        },
+    ),
+    OfficeToolWrapper(
+        name="add_ppt_animation",
+        description="为PPT元素添加动画。支持入场/退出/强调/运动路径动画。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPT文件路径"},
+                "slide_index": {"type": "integer", "description": "幻灯片索引（从1开始）"},
+                "shape_index": {"type": "integer", "description": "形状索引（从1开始）"},
+                "effect": {"type": "string", "enum": ["appear", "fade", "fly", "zoom", "wipe", "bounce", "float", "swivel", "spin", "grow", "wave"], "description": "动画效果"},
+                "anim_class": {"type": "string", "enum": ["entrance", "exit", "emphasis", "motion"], "description": "动画类别"},
+                "duration": {"type": "integer", "description": "持续时间（毫秒）", "default": 500},
+                "trigger": {"type": "string", "enum": ["onClick", "withPrevious", "afterPrevious"], "description": "触发方式", "default": "onClick"},
+                "direction": {"type": "string", "description": "方向"},
+                "delay": {"type": "integer", "description": "延迟（毫秒）"},
+            },
+            "required": ["path", "slide_index", "shape_index", "effect", "anim_class"],
+        },
+    ),
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 渲染预览工具
+    # ═══════════════════════════════════════════════════════════════════════
+    OfficeToolWrapper(
+        name="render_office",
+        description="渲染Office文档为HTML或PNG预览图。让AI能'看到'文档效果。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Office文件路径"},
+                "output": {"type": "string", "description": "输出路径（可选）"},
+                "format": {"type": "string", "enum": ["html", "png"], "description": "输出格式", "default": "html"},
+                "slide": {"type": "integer", "description": "PPT指定幻灯片（0=全部）", "default": 0},
+            },
+            "required": ["path"],
+        },
+    ),
+    OfficeToolWrapper(
+        name="get_office_info",
+        description="获取Office文档结构信息（大纲视图）。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Office文件路径"},
+            },
+            "required": ["path"],
+        },
+    ),
+    OfficeToolWrapper(
+        name="validate_ppt",
+        description="验证PPT结构完整性。",
+        fn=None,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPT文件路径"},
+            },
+            "required": ["path"],
         },
     ),
 ]
