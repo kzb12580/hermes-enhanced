@@ -81,7 +81,7 @@ def _auto_register():
     from .ocr_tool import OCRTool  # noqa: F401
     from .office_tool_wrappers import OFFICE_TOOL_DEFINITIONS
     from . import office_tools
-    from .memory_tools import SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool
+    from .memory_tools import SaveMemoryTool, SearchMemoryTool, DeleteMemoryTool
     from .session_tools import SearchSessionTool, GetSessionHistoryTool
     from .todo_tools import TodoCreateTool, TodoUpdateTool, TodoListTool
     from .automation_tools import (
@@ -99,7 +99,7 @@ def _auto_register():
         TerminalTool,
         WebSearchTool, WebExtractTool,
         # Memory tools
-        SaveMemoryTool, SearchMemoryTool, ListMemoryTool, DeleteMemoryTool,
+        SaveMemoryTool, SearchMemoryTool, DeleteMemoryTool,
         # Session tools
         SearchSessionTool, GetSessionHistoryTool,
         # Todo tools

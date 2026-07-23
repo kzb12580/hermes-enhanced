@@ -195,19 +195,20 @@ class ExecuteCodeTool(BaseTool):
         # Escape backslashes for Windows paths
         escaped_script_path = script_path.replace("\\", "\\\\")
         
-        wrapper_content = f'''#!/usr/bin/env python3
-"""Sandbox wrapper for execute_code - validates script before execution."""
+        # Use string concatenation instead of f-strings to avoid escaping issues
+        wrapper_content = """#!/usr/bin/env python3
+\"\"\"Sandbox wrapper for execute_code - validates script before execution.\"\"\"
 import sys
 import os
-import importlib
+import builtins
 
 # ── 模块导入拦截器 ──────────────────────────────────────────────────────
-BLOCKED_MODULES = {{"subprocess", "ctypes", "cffi", "ffi", "pickle", "shelve",
+BLOCKED_MODULES = {"subprocess", "ctypes", "cffi", "ffi", "pickle", "shelve",
                     "marshal", "code", "compile", "exec", "eval", "importlib",
                     "pty", "fcntl", "signal", "multiprocessing", "threading",
                     "socket", "http", "urllib", "xmlrpc", "ftplib", "smtplib",
                     "imaplib", "poplib", "telnetlib", "ssh", "paramiko",
-                    "crypto", "hashlib", "hmac", "secrets", "ssl"}}
+                    "crypto", "hashlib", "hmac", "secrets", "ssl"}
 
 class SandboxImporter:
     def find_module(self, fullname, path=None):
@@ -216,23 +217,29 @@ class SandboxImporter:
         return None
     
     def load_module(self, fullname):
-        raise ImportError(f"Module '{{fullname}}' is blocked in sandbox mode")
+        raise ImportError("Module '" + fullname + "' is blocked in sandbox mode")
 
 # Install the importer before running the script
 sys.meta_path.insert(0, SandboxImporter())
 
 # ── 内置函数限制 ──────────────────────────────────────────────────────
-import builtins
-
 def _restricted_import(name, *args, **kwargs):
     if name in BLOCKED_MODULES or name.split(".")[0] in BLOCKED_MODULES:
-        raise ImportError(f"Module '{{name}}' is blocked in sandbox mode")
+        raise ImportError("Module '" + name + "' is blocked in sandbox mode")
     return builtins.__import__(name, *args, **kwargs)
+
+# Create restricted builtins for executed code
+_restricted_builtins = dict(builtins.__dict__)
+_restricted_builtins["__import__"] = _restricted_import
+# Remove exec and eval from restricted builtins
+_restricted_builtins.pop("exec", None)
+_restricted_builtins.pop("eval", None)
+_restricted_builtins.pop("compile", None)
 
 builtins.__import__ = _restricted_import
 
 # ── 执行目标脚本 ──────────────────────────────────────────────────────
-target_script = r"{escaped_script_path}"
+target_script = r""" + repr(escaped_script_path) + """
 try:
     with open(target_script, "r", encoding="utf-8") as f:
         code = f.read()
@@ -243,13 +250,14 @@ try:
                          "shutil.rmtree", "os.remove", "os.unlink"]
     for pattern in dangerous_patterns:
         if pattern in code:
-            print(f"Warning: Detected potentially dangerous pattern: {{pattern}}", file=sys.stderr)
+            print("Warning: Detected potentially dangerous pattern: " + pattern, file=sys.stderr)
     
-    exec(code, {{"__name__": "__main__"}})
+    # Execute with restricted namespace (no exec/eval access for executed code)
+    exec(code, {"__name__": "__main__", "__builtins__": _restricted_builtins})
 except Exception as e:
-    print(f"Error: {{type(e).__name__}}: {{e}}", file=sys.stderr)
+    print("Error: " + type(e).__name__ + ": " + str(e), file=sys.stderr)
     sys.exit(1)
-'''
+"""
         
         # Write wrapper to temp file
         with tempfile.NamedTemporaryFile(mode="w", suffix="_sandbox.py", delete=False, encoding="utf-8") as f:
