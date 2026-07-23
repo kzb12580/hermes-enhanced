@@ -197,11 +197,64 @@ def edit_word(path: str, operations: list[dict]) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def create_excel(path: str, sheets: list[dict]) -> dict:
-    """创建 Excel 表格"""
+    """创建 Excel 表格（智能引擎选择）"""
     path = _safe_path(path)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     
-    # 创建空工作簿（--force 覆盖）
+    # 计算总数据量
+    total_rows = sum(len(s.get("data", [])) for s in sheets)
+    total_cells = total_rows * max((len(s.get("headers", [])) for s in sheets), default=0)
+    
+    # 大数据量（>100行）使用 openpyxl 原生引擎
+    if total_rows > 100:
+        return _create_excel_native(path, sheets)
+    
+    # 小数据量使用 OfficeCLI
+    return _create_excel_cli(path, sheets)
+
+
+def _create_excel_native(path: str, sheets: list[dict]) -> dict:
+    """使用 openpyxl 创建 Excel（高性能）"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        wb = Workbook()
+        
+        for i, sheet_data in enumerate(sheets):
+            ws = wb.active if i == 0 else wb.create_sheet()
+            ws.title = sheet_data.get("name", f"Sheet{i+1}")
+            
+            headers = sheet_data.get("headers", [])
+            data = sheet_data.get("data", [])
+            
+            # 写入表头
+            if headers:
+                for j, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=j, value=header)
+                    cell.font = Font(color="FFFFFF", bold=True, size=11)
+                    cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                start_row = 2
+            else:
+                start_row = 1
+            
+            # 写入数据
+            for r, row_data in enumerate(data, start_row):
+                for c, value in enumerate(row_data, 1):
+                    ws.cell(row=r, column=c, value=value)
+        
+        path = _safe_path(path)
+        wb.save(path)
+        return {"path": path, "sheets": len(sheets), "engine": "openpyxl", "success": True}
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+
+def _create_excel_cli(path: str, sheets: list[dict]) -> dict:
+    """使用 OfficeCLI 创建 Excel（小数据量）"""
+    path = _safe_path(path)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    
     result = _run_officecli("create", path, "--force")
     if not result.get("success"):
         return result
@@ -211,17 +264,14 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
         headers = sheet_data.get("headers", [])
         data = sheet_data.get("data", [])
         
-        # 创建工作表
         _run_officecli("add", path, "/", "--type", "sheet", "--prop", f"name={sheet_name}")
         
-        # 写入表头
         if headers:
             for col, header in enumerate(headers):
-                col_letter = chr(65 + col)  # A, B, C, ...
+                col_letter = chr(65 + col)
                 _run_officecli("set", path, f"/{sheet_name}/{col_letter}1",
                               "--prop", f"value={header}")
         
-        # 写入数据
         for row_idx, row_data in enumerate(data):
             for col_idx, value in enumerate(row_data):
                 col_letter = chr(65 + col_idx)
@@ -229,10 +279,8 @@ def create_excel(path: str, sheets: list[dict]) -> dict:
                 _run_officecli("set", path, f"/{sheet_name}/{col_letter}{row_num}",
                               "--prop", f"value={value}")
     
-    # 保存
     _run_officecli("save", path)
-    
-    return {"path": path, "sheets": len(sheets), "success": True}
+    return {"path": path, "sheets": len(sheets), "engine": "officecli", "success": True}
 
 
 def read_excel(path: str, sheet_name: str = "", max_rows: int = 1000) -> dict:
@@ -322,46 +370,10 @@ def edit_excel(path: str, operations: list[dict]) -> dict:
 def create_ppt(path: str, slides: Optional[list[dict]] = None, 
                layout: str = "16x9", title: str = "", author: str = "",
                slides_file: str = "") -> dict:
-    """
-    创建 PPT 演示文稿（基于 OfficeCLI，支持元素动画）
-    
-    参数:
-      - path: 输出文件路径
-      - slides: 幻灯片数组
-      - layout: 布局 (16x9 / 16x10 / 4x3 / wide)
-      - title: 演示文稿标题
-      - author: 作者
-      
-    每个 slide 结构:
-      {
-        "background": {"color": "1E2761"},
-        "elements": [
-          {"type": "text", "text": "标题", "x": 1, "y": 1, "w": 8, "h": 2,
-           "fontSize": 44, "bold": true, "color": "FFFFFF"},
-          {"type": "shape", "shape": "rect", "x": 0, "y": 5, "w": 10, "h": 0.5,
-           "fill": {"color": "065A82"}},
-          {"type": "chart", "chartType": "bar",
-           "data": [{"name": "销量", "labels": ["Q1","Q2"], "values": [450,550]}],
-           "x": 0.5, "y": 1, "w": 8.5, "h": 3.8},
-          {"type": "table", "rows": [["H1","H2"],["c1","c2"]], 
-           "x": 1, "y": 1, "w": 8, "h": 2}
-        ],
-        "animations": [
-          {"shape_index": 0, "effect": "fade", "class": "entrance", "duration": 500},
-          {"shape_index": 0, "effect": "spin", "class": "emphasis", "trigger": "withPrevious"}
-        ]
-      }
-      
-    支持的动画效果:
-      - 入场: appear, fade, fly, zoom, wipe, bounce, float, swivel, split, wheel
-      - 退出: contract, floatOut, shrinkTurn, spiralOut
-      - 强调: spin, grow, wave, bold
-      - 运动路径: line, arc, circle, custom
-    """
+    """创建 PPT（batch 高性能模式）"""
     path = _safe_path(path)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     
-    # 从文件加载 slides
     if slides_file:
         sf = _safe_path(slides_file)
         if not os.path.isfile(sf):
@@ -372,122 +384,75 @@ def create_ppt(path: str, slides: Optional[list[dict]] = None,
     if not slides or not isinstance(slides, list):
         return {"error": "slides required", "success": False}
     
-    # 创建空演示文稿（--force 覆盖已存在的文件）
     result = _run_officecli("create", path, "--force")
     if not result.get("success"):
         return result
     
-    # 设置演示文稿属性
+    # 构建 batch 命令
+    batch = []
     if title:
-        _run_officecli("set", path, "/", "--prop", f"title={title}")
+        batch.append({"command": "set", "path": "/", "props": {"title": title}})
     if author:
-        _run_officecli("set", path, "/", "--prop", f"author={author}")
+        batch.append({"command": "set", "path": "/", "props": {"author": author}})
     
-    # 添加幻灯片
     for slide_idx, slide in enumerate(slides):
-        # 添加幻灯片
-        _run_officecli("add", path, "/", "--type", "slide")
         slide_path = f"/slide[{slide_idx + 1}]"
+        batch.append({"command": "add", "parent": "/", "type": "slide"})
         
-        # 设置背景
         bg = slide.get("background", {})
         if bg.get("color"):
-            _run_officecli("set", path, slide_path, "--prop", f"bgColor={bg['color']}")
+            batch.append({"command": "set", "path": slide_path, "props": {"bgColor": bg["color"]}})
         
-        # 添加元素
-        elements = slide.get("elements", [])
-        for elem_idx, elem in enumerate(elements):
+        for elem_idx, elem in enumerate(slide.get("elements", [])):
             elem_type = elem.get("type", "text")
-            
             if elem_type == "text":
-                # 添加文本框
-                cmd_args = ["add", path, slide_path, "--type", "textbox",
-                           "--prop", f"text={elem.get('text', '')}",
-                           "--prop", f"x={elem.get('x', 0)}",
-                           "--prop", f"y={elem.get('y', 0)}",
-                           "--prop", f"w={elem.get('w', 8)}",
-                           "--prop", f"h={elem.get('h', 2)}"]
-                
-                _run_officecli(*cmd_args)
-                
-                # 获取刚添加的shape路径（通过索引）
-                shape_path = f"{slide_path}/shape[{elem_idx + 1}]"
-                
-                # 设置格式
-                if elem.get("fontSize"):
-                    _run_officecli("set", path, shape_path, "--prop", f"fontSize={elem['fontSize']}")
-                if elem.get("color"):
-                    _run_officecli("set", path, shape_path, "--prop", f"color={elem['color']}")
-                if elem.get("bold"):
-                    _run_officecli("set", path, shape_path, "--prop", "bold=true")
-                    
+                props = {"text": elem.get("text", ""),
+                         "x": str(elem.get("x", 1)), "y": str(elem.get("y", 1)),
+                         "w": str(elem.get("w", 8)), "h": str(elem.get("h", 2))}
+                if elem.get("fontSize"): props["fontSize"] = str(elem["fontSize"])
+                if elem.get("color"): props["color"] = elem["color"]
+                if elem.get("bold"): props["bold"] = "true"
+                batch.append({"command": "add", "parent": slide_path, "type": "textbox", "props": props})
             elif elem_type == "shape":
-                shape_name = elem.get("shape", "rect")
-                _run_officecli("add", path, slide_path, "--type", shape_name,
-                              "--prop", f"x={elem.get('x', 0)}",
-                              "--prop", f"y={elem.get('y', 0)}",
-                              "--prop", f"w={elem.get('w', 1)}",
-                              "--prop", f"h={elem.get('h', 1)}")
-                
-                fill = elem.get("fill", {})
-                if fill.get("color"):
-                    shape_path = f"{slide_path}/shape[{elem_idx + 1}]"
-                    _run_officecli("set", path, shape_path, "--prop", f"fillColor={fill['color']}")
-                    
-            elif elem_type == "image":
-                img_path = elem.get("path", "")
-                if img_path:
-                    _run_officecli("add", path, slide_path, "--type", "picture",
-                                  "--prop", f"path={img_path}",
-                                  "--prop", f"x={elem.get('x', 0)}",
-                                  "--prop", f"y={elem.get('y', 0)}",
-                                  "--prop", f"w={elem.get('w', 4)}",
-                                  "--prop", f"h={elem.get('h', 3)}")
-                    
-            elif elem_type == "chart":
-                chart_type = elem.get("chartType", "bar")
-                _run_officecli("add", path, f"{slide_path}/chart[{elem_idx + 1}]",
-                              "--type", chart_type,
-                              "--prop", f"x={elem.get('x', 0)}",
-                              "--prop", f"y={elem.get('y', 0)}",
-                              "--prop", f"w={elem.get('w', 8)}",
-                              "--prop", f"h={elem.get('h', 5)}")
-                
-            elif elem_type == "table":
-                rows = elem.get("rows", [])
-                if rows:
-                    _run_officecli("add", path, slide_path, "--type", "table",
-                                  "--prop", f"rows={len(rows)}",
-                                  "--prop", f"cols={len(rows[0]) if rows else 1}",
-                                  "--prop", f"x={elem.get('x', 0)}",
-                                  "--prop", f"y={elem.get('y', 0)}",
-                                  "--prop", f"w={elem.get('w', 8)}",
-                                  "--prop", f"h={elem.get('h', 4)}")
+                props = {"x": str(elem.get("x", 0)), "y": str(elem.get("y", 0)),
+                         "w": str(elem.get("w", 1)), "h": str(elem.get("h", 1))}
+                if elem.get("fill", {}).get("color"): props["fillColor"] = elem["fill"]["color"]
+                batch.append({"command": "add", "parent": slide_path, "type": elem.get("shape", "rect"), "props": props})
+            elif elem_type == "image" and elem.get("path"):
+                props = {"path": elem["path"], "x": str(elem.get("x", 0)), "y": str(elem.get("y", 0)),
+                         "w": str(elem.get("w", 4)), "h": str(elem.get("h", 3))}
+                batch.append({"command": "add", "parent": slide_path, "type": "picture", "props": props})
         
-        # 添加动画（OfficeCLI的强项！）
-        animations = slide.get("animations", [])
-        for anim in animations:
-            shape_idx = anim.get("shape_index", 0) + 1
-            
-            cmd_args = ["add", path, f"{slide_path}/shape[{shape_idx}]",
-                        "--type", "animation",
-                        "--prop", f"effect={anim.get('effect', 'fade')}",
-                        "--prop", f"class={anim.get('class', 'entrance')}",
-                        "--prop", f"duration={anim.get('duration', 500)}",
-                        "--prop", f"trigger={anim.get('trigger', 'onClick')}"]
-            
-            if anim.get("direction"):
-                cmd_args.extend(["--prop", f"direction={anim['direction']}"])
-            if anim.get("delay"):
-                cmd_args.extend(["--prop", f"delay={anim['delay']}"])
-            if anim.get("repeat"):
-                cmd_args.extend(["--prop", f"repeat={anim['repeat']}"])
-                
-            _run_officecli(*cmd_args)
+        for anim in slide.get("animations", []):
+            props = {"effect": anim.get("effect", "fade"), "class": anim.get("class", "entrance"),
+                     "duration": str(anim.get("duration", 500)), "trigger": anim.get("trigger", "onClick")}
+            if anim.get("direction"): props["direction"] = anim["direction"]
+            if anim.get("delay"): props["delay"] = str(anim["delay"])
+            batch.append({"command": "add", "parent": f"{slide_path}/shape[{anim.get('shape_index', 0) + 1}]",
+                         "type": "animation", "props": props})
     
-    # 保存文件
+    # 执行 batch
+    if batch:
+        import subprocess
+        import tempfile
+        try:
+            # 写入临时文件
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, 
+                                           dir=os.path.dirname(path) or '.') as f:
+                json.dump(batch, f, ensure_ascii=False)
+                batch_file = f.name
+            
+            proc = subprocess.run(["officecli", "batch", path, "--input", batch_file],
+                                  capture_output=True, text=True, timeout=120)
+            
+            os.unlink(batch_file)
+            
+            if proc.returncode != 0:
+                return {"error": f"batch failed: {proc.stderr}", "success": False}
+        except Exception as e:
+            return {"error": str(e), "success": False}
+    
     _run_officecli("save", path)
-    
     return {"path": path, "slides": len(slides), "success": True}
 
 
