@@ -1,7 +1,8 @@
-"""Config API — read and update application settings with persistence."""
+"""Config API - read and update application settings with persistence."""
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -32,7 +33,7 @@ _config: dict = {
     "language": "en",
     "auto_save": True,
     "streaming": True,
-    "backend_port": 9876,
+    "backend_port": int(os.environ.get("HERMES_PORT", "9876")),
 }
 
 

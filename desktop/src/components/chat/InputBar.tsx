@@ -32,6 +32,7 @@ export function InputBar() {
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const thinkingPickerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false); // 中文输入法状态
 
   // 右键菜单
   const { isOpen, position, menuItems, openMenu, closeMenu } = useContextMenu();
@@ -93,6 +94,9 @@ export function InputBar() {
   }, [input, isGenerating, sendMessage, pendingAttachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 中文输入法期间不处理快捷键
+    if (isComposingRef.current) return;
+    
     if (sendShortcut === 'enter') {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -379,6 +383,8 @@ export function InputBar() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onContextMenu={handleContextMenu}
+            onCompositionStart={() => { isComposingRef.current = true; }}
+            onCompositionEnd={() => { isComposingRef.current = false; }}
             placeholder="输入消息... (Shift+Enter 换行)"
             rows={1}
             className="flex-1 bg-transparent resize-none py-3 text-sm text-text-primary placeholder-text-muted outline-none max-h-[200px]"

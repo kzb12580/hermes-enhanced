@@ -1,9 +1,8 @@
-"""Hermes Desktop — Python Backend (FastAPI).
+"""Hermes Desktop - Python Backend (FastAPI).
 
 Listens on 127.0.0.1:9876 and exposes REST + SSE endpoints consumed by the
 Electron frontend.
 """
-
 import os
 import signal
 import sys
@@ -22,6 +21,9 @@ try:
     _HAS_SLOWAPI = True
 except ImportError:
     _HAS_SLOWAPI = False
+
+# ── 统一配置 ──────────────────────────────────────────────────────────────
+from config import BACKEND_HOST, BACKEND_PORT, CORS_ORIGINS
 
 # ── 全面日志系统 ──────────────────────────────────────────────────────────
 from logger import get_logger, get_log_dir, get_log_files
@@ -106,8 +108,8 @@ def _parse_args():
 # ---------------------------------------------------------------------------
 # Defaults for module-level use (when imported, not run directly)
 # ---------------------------------------------------------------------------
-_host = os.environ.get("HERMES_HOST", "127.0.0.1")
-_port = int(os.environ.get("HERMES_PORT", "9876"))
+_host = BACKEND_HOST
+_port = BACKEND_PORT
 _start_time = time.time()
 
 
@@ -144,19 +146,12 @@ if _HAS_SLOWAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — allow only local/Electron renderer origins.
+# CORS - allow only local/Electron renderer origins.
 # Backend binds to 127.0.0.1 by default; avoid wildcard CORS so arbitrary web
 # pages cannot call local desktop APIs from the browser.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:9876",
-        "http://localhost:9876",
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "file://",
-        "null",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

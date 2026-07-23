@@ -7,8 +7,20 @@ import time
 from .base import BaseTool
 from . import register
 
-# In-memory todo list per session (reset on restart)
-_todos: list[dict] = []
+# 按会话ID存储 todo 列表，避免多会话冲突
+_todos_by_session: dict[str, list[dict]] = {}
+_current_session_id: str = "default"
+
+
+def set_session_id(session_id: str):
+    """设置当前会话ID（由 chat API 调用）"""
+    global _current_session_id
+    _current_session_id = session_id or "default"
+
+
+def _get_todos() -> list[dict]:
+    """获取当前会话的 todo 列表"""
+    return _todos_by_session.setdefault(_current_session_id, [])
 
 
 class TodoCreateTool(BaseTool):
@@ -40,7 +52,7 @@ class TodoCreateTool(BaseTool):
     }
 
     async def execute(self, tasks: list[dict] = None, **kwargs) -> str:
-        global _todos
+        todos = _get_todos()
         # Accept both 'tasks' and 'todos' as parameter name (LLM sometimes uses 'todos')
         task_list = tasks or kwargs.get("todos", [])
         # LLM may pass tasks as a JSON string instead of a list
@@ -51,9 +63,10 @@ class TodoCreateTool(BaseTool):
                 return json.dumps({"ok": False, "error": "tasks must be a list of objects, got invalid JSON string"}, ensure_ascii=False)
         if not task_list:
             return json.dumps({"ok": False, "error": "No tasks provided"}, ensure_ascii=False)
-        _todos = task_list
+        todos.clear()
+        todos.extend(task_list)
         return json.dumps(
-            {"ok": True, "total": len(_todos), "tasks": _todos},
+            {"ok": True, "total": len(todos), "tasks": todos},
             ensure_ascii=False,
         )
 
@@ -78,7 +91,8 @@ class TodoUpdateTool(BaseTool):
     }
 
     async def execute(self, task_id: str, status: str, **kwargs) -> str:
-        for t in _todos:
+        todos = _get_todos()
+        for t in todos:
             if t["id"] == task_id:
                 t["status"] = status
                 return json.dumps(
@@ -97,12 +111,11 @@ class TodoListTool(BaseTool):
     parameters = {"type": "object", "properties": {}}
 
     async def execute(self, **kwargs) -> str:
-        if not _todos:
+        todos = _get_todos()
+        if not todos:
             return json.dumps({"total": 0, "tasks": []}, ensure_ascii=False)
-        completed = sum(1 for t in _todos if t.get("status") == "completed")
+        completed = sum(1 for t in todos if t.get("status") == "completed")
         return json.dumps(
-            {"total": len(_todos), "completed": completed, "tasks": _todos},
+            {"total": len(todos), "completed": completed, "tasks": todos},
             ensure_ascii=False,
         )
-
-
