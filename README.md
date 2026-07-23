@@ -48,10 +48,12 @@ Hermes Desktop 兼容所有 OpenAI 格式的 API：
 - **文件读写** — 读取、写入、搜索文件
 - **代码执行** — 运行 Python 脚本
 
-### Office 文档
-- **Word** — 创建 `.docx` 文档
-- **Excel** — 创建 `.xlsx`，支持多 Sheet、编辑、读取
-- **PPT** — 创建 `.pptx` 演示文稿（6 种幻灯片类型）
+### Office 文档（OfficeCLI 引擎）
+- **Word** — 创建、读取、编辑 .docx 文档
+- **Excel** — 创建、读取、编辑 .xlsx 表格
+- **PowerPoint** — 创建、读取、编辑 .pptx 演示文稿
+- **动画支持** — 入场/退出/强调/运动路径动画（原生 OOXML）
+- **渲染预览** — 生成 HTML/PNG 预览，AI 可以"看到"文档效果
 
 ### 网络 & 搜索
 - **Web 搜索** — DuckDuckGo + Bing 多源搜索
