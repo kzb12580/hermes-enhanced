@@ -1,10 +1,23 @@
-"""Memory tools — allow the AI to save, search, and manage persistent memories."""
+"""Memory tools — allow the AI to save, search, and manage persistent memories (thread-safe)."""
 
 from __future__ import annotations
 
 import json
+import threading
 from .base import BaseTool
 from . import register
+
+# Import the lock from memory module
+_memory_lock = None
+
+
+def _get_memory_lock():
+    """Lazy import of memory lock to avoid circular imports."""
+    global _memory_lock
+    if _memory_lock is None:
+        from api.memory import _memory_lock as lock
+        _memory_lock = lock
+    return _memory_lock
 
 
 class SaveMemoryTool(BaseTool):
@@ -48,15 +61,18 @@ class SaveMemoryTool(BaseTool):
             "source": "ai",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        _memories[mid] = memory
+        
+        lock = _get_memory_lock()
+        with lock:
+            _memories[mid] = memory
 
-        # Evict oldest if over limit
-        if len(_memories) > MAX_MEMORIES:
-            sorted_ids = sorted(_memories, key=lambda k: _memories[k].get("created_at", ""))
-            for old_id in sorted_ids[: len(_memories) - MAX_MEMORIES]:
-                del _memories[old_id]
+            # Evict oldest if over limit
+            if len(_memories) > MAX_MEMORIES:
+                sorted_ids = sorted(_memories, key=lambda k: _memories[k].get("created_at", ""))
+                for old_id in sorted_ids[: len(_memories) - MAX_MEMORIES]:
+                    del _memories[old_id]
 
-        _save_memories(_memories)
+            _save_memories(_memories)
         return json.dumps({"ok": True, "id": mid, "message": f"已保存到持久记忆: {content[:100]}"}, ensure_ascii=False)
 
 
@@ -78,58 +94,28 @@ class SearchMemoryTool(BaseTool):
     async def execute(self, keyword: str, **kwargs) -> str:
         from api.memory import _memories
 
-        keyword_lower = keyword.lower()
-        results = []
-        for mem in _memories.values():
-            content = mem.get("content", "")
-            tags = " ".join(mem.get("tags", []))
-            if keyword_lower in content.lower() or keyword_lower in tags.lower():
-                results.append({
-                    "id": mem["id"],
-                    "content": content,
-                    "tags": mem.get("tags", []),
-                    "created_at": mem.get("created_at", ""),
-                })
-
-        if not results:
-            return json.dumps({"found": 0, "results": []}, ensure_ascii=False)
-
-        # Sort by most recent first
-        results.sort(key=lambda m: m.get("created_at", ""), reverse=True)
-        return json.dumps({"found": len(results), "results": results[:20]}, ensure_ascii=False)
-
-
-class ListMemoryTool(BaseTool):
-    name = "list_memories"
-    description = "列出所有已保存的长期记忆，用于查看已经记住的用户信息。"
-    timeout = 10
-    parameters = {
-        "type": "object",
-        "properties": {},
-    }
-
-    async def execute(self, **kwargs) -> str:
-        from api.memory import _memories
-
-        if not _memories:
-            return json.dumps({"total": 0, "memories": []}, ensure_ascii=False)
-
-        sorted_mems = sorted(_memories.values(), key=lambda m: m.get("created_at", ""), reverse=True)
-        result = []
-        for mem in sorted_mems[:30]:
-            result.append({
-                "id": mem["id"],
-                "content": mem.get("content", ""),
-                "tags": mem.get("tags", []),
-                "created_at": mem.get("created_at", ""),
-            })
-
-        return json.dumps({"total": len(_memories), "memories": result}, ensure_ascii=False)
+        lock = _get_memory_lock()
+        with lock:
+            results = []
+            keyword_lower = keyword.lower()
+            for mid, mem in _memories.items():
+                content = mem.get("content", "").lower()
+                tags = [t.lower() for t in mem.get("tags", [])]
+                if keyword_lower in content or any(keyword_lower in t for t in tags):
+                    results.append({
+                        "id": mid,
+                        "content": mem.get("content", ""),
+                        "tags": mem.get("tags", []),
+                        "created_at": mem.get("created_at", ""),
+                    })
+        
+        results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return json.dumps({"results": results[:20], "total": len(results)}, ensure_ascii=False)
 
 
 class DeleteMemoryTool(BaseTool):
     name = "delete_memory"
-    description = "按 ID 删除指定记忆。"
+    description = "删除指定的长期记忆条目。"
     timeout = 10
     parameters = {
         "type": "object",
@@ -145,11 +131,11 @@ class DeleteMemoryTool(BaseTool):
     async def execute(self, memory_id: str, **kwargs) -> str:
         from api.memory import _memories, _save_memories
 
-        if memory_id not in _memories:
-            return json.dumps({"ok": False, "error": f"Memory {memory_id} not found"}, ensure_ascii=False)
-
-        del _memories[memory_id]
-        _save_memories(_memories)
-        return json.dumps({"ok": True, "deleted": memory_id}, ensure_ascii=False)
-
-
+        lock = _get_memory_lock()
+        with lock:
+            if memory_id in _memories:
+                del _memories[memory_id]
+                _save_memories(_memories)
+                return json.dumps({"ok": True, "message": f"已删除记忆 {memory_id}"}, ensure_ascii=False)
+            else:
+                return json.dumps({"ok": False, "error": f"记忆 {memory_id} 不存在"}, ensure_ascii=False)

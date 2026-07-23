@@ -1,8 +1,9 @@
-"""Memory API — persistent memory store, injected into every conversation."""
+"""Memory API — persistent memory store, injected into every conversation (thread-safe)."""
 
 import json
 import uuid
 import logging
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,9 @@ _MEMORY_DIR = Path.home() / ".hermes" / "desktop"
 _MEMORY_FILE = _MEMORY_DIR / "memories.json"
 
 MAX_MEMORIES = 500
+
+# Thread lock for memory operations
+_memory_lock = threading.Lock()
 
 
 def _load_memories() -> dict:
@@ -51,26 +55,27 @@ logger.info("Loaded %d memories from %s", len(_memories), _MEMORY_FILE)
 
 
 def get_memory_context(max_chars: int = 3000) -> str:
-    """Get memory context string to inject into system prompt."""
-    if not _memories:
-        return ""
-    
-    # Sort by created_at descending, take recent entries
-    sorted_mems = sorted(_memories.values(), key=lambda m: m.get("created_at", ""), reverse=True)
-    
-    lines = []
-    total = 0
-    for mem in sorted_mems:
-        content = mem.get("content", "")
-        if total + len(content) > max_chars:
-            break
-        lines.append(f"- {content}")
-        total += len(content)
-    
-    if not lines:
-        return ""
-    
-    return "\n\n## User Context (from memory)\n" + "\n".join(lines)
+    """Get memory context string to inject into system prompt (thread-safe)."""
+    with _memory_lock:
+        if not _memories:
+            return ""
+        
+        # Sort by created_at descending, take recent entries
+        sorted_mems = sorted(_memories.values(), key=lambda m: m.get("created_at", ""), reverse=True)
+        
+        lines = []
+        total = 0
+        for mem in sorted_mems:
+            content = mem.get("content", "")
+            if total + len(content) > max_chars:
+                break
+            lines.append(f"- {content}")
+            total += len(content)
+        
+        if not lines:
+            return ""
+        
+        return "\n\n## User Context (from memory)\n" + "\n".join(lines)
 
 
 class MemoryCreate(BaseModel):
@@ -81,11 +86,14 @@ class MemoryCreate(BaseModel):
 
 @router.get("/api/memories")
 async def list_memories():
-    return list(_memories.values())
+    """List all memories (thread-safe)."""
+    with _memory_lock:
+        return list(_memories.values())
 
 
 @router.post("/api/memories")
 async def save_memory(body: MemoryCreate):
+    """Save a memory (thread-safe)."""
     mid = str(uuid.uuid4())
     memory = {
         "id": mid,
@@ -94,26 +102,11 @@ async def save_memory(body: MemoryCreate):
         "source": body.source,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    _memories[mid] = memory
-    if len(_memories) > MAX_MEMORIES:
-        sorted_ids = sorted(_memories, key=lambda k: _memories[k].get("created_at", ""))
-        for old_id in sorted_ids[: len(_memories) - MAX_MEMORIES]:
-            del _memories[old_id]
-    _save_memories(_memories)
-    return memory
-
-
-@router.delete("/api/memories/{memory_id}")
-async def delete_memory(memory_id: str):
-    if memory_id not in _memories:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    del _memories[memory_id]
-    _save_memories(_memories)
-    return {"deleted": memory_id}
-
-
-@router.delete("/api/memories")
-async def clear_memories():
-    _memories.clear()
-    _save_memories(_memories)
-    return {"cleared": True}
+    with _memory_lock:
+        _memories[mid] = memory
+        if len(_memories) > MAX_MEMORIES:
+            sorted_ids = sorted(_memories, key=lambda k: _memories[k].get("created_at", ""))
+            for old_id in sorted_ids[: len(_memories) - MAX_MEMORIES]:
+                _memories.pop(old_id, None)
+        _save_memories(_memories)
+    return {"id": mid, "success": True}

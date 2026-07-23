@@ -1,10 +1,11 @@
-"""Session Manager — manages chat sessions with persistence."""
+"""Session Manager — manages chat sessions with persistence (thread-safe)."""
 
 import json
 import logging
 import time
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -16,10 +17,11 @@ _SESSIONS_FILE = _SESSIONS_DIR / "sessions.json"
 
 
 class SessionManager:
-    """Manages chat sessions with JSON persistence."""
+    """Manages chat sessions with JSON persistence (thread-safe)."""
 
     def __init__(self):
         self._sessions: dict[str, dict] = {}
+        self._lock = threading.Lock()
         self._load()
 
     def _load(self):
@@ -34,7 +36,7 @@ class SessionManager:
                 self._sessions = {}
 
     def _save(self):
-        """Save sessions to disk (atomic write)."""
+        """Save sessions to disk (atomic write, thread-safe)."""
         try:
             _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
             data = json.dumps(self._sessions, indent=2, ensure_ascii=False)
@@ -51,43 +53,48 @@ class SessionManager:
             logger.error("Failed to save sessions: %s", e)
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        """Get a session by ID."""
-        return self._sessions.get(session_id)
+        """Get a session by ID (thread-safe)."""
+        with self._lock:
+            return self._sessions.get(session_id)
 
     def create_session(self, session_id: str, name: Optional[str] = None) -> dict:
-        """Create a new session."""
+        """Create a new session (thread-safe)."""
         session = {
             "id": session_id,
             "name": name or f"Session {session_id[:8]}",
             "messages": [],
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
         }
-        self._sessions[session_id] = session
-        self._save()
+        with self._lock:
+            self._sessions[session_id] = session
+            self._save()
         return session
 
     def list_sessions(self) -> list[dict]:
-        """List all sessions."""
-        return [
-            {
-                "id": s["id"],
-                "name": s["name"],
-                "message_count": len(s.get("messages", [])),
-                "created_at": s.get("created_at", ""),
-            }
-            for s in self._sessions.values()
-        ]
+        """List all sessions (thread-safe)."""
+        with self._lock:
+            return [
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "message_count": len(s.get("messages", [])),
+                    "created_at": s.get("created_at", ""),
+                }
+                for s in self._sessions.values()
+            ]
 
     def delete_session(self, session_id: str) -> bool:
-        """Delete a session."""
-        if session_id in self._sessions:
-            del self._sessions[session_id]
-            self._save()
-            return True
-        return False
+        """Delete a session (thread-safe)."""
+        with self._lock:
+            if session_id in self._sessions:
+                del self._sessions[session_id]
+                self._save()
+                return True
+            return False
 
     def add_message(self, session_id: str, message: dict):
-        """Add a message to a session."""
-        if session_id in self._sessions:
-            self._sessions[session_id]["messages"].append(message)
-            self._save()
+        """Add a message to a session (thread-safe)."""
+        with self._lock:
+            if session_id in self._sessions:
+                self._sessions[session_id]["messages"].append(message)
+                self._save()
