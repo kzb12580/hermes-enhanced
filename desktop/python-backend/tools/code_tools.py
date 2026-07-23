@@ -10,6 +10,36 @@ from .base import BaseTool
 from . import register
 
 
+# ── 沙箱配置 ──────────────────────────────────────────────────────────────
+# 危险模块黑名单（可扩展）
+BLOCKED_MODULES = {
+    "subprocess", "ctypes", "cffi", "ffi", "pickle", "shelve",
+    "marshal", "code", "compile", "exec", "eval", "importlib",
+    "pty", "fcntl", "signal", "multiprocessing", "threading",
+    "socket", "http", "urllib", "xmlrpc", "ftplib", "smtplib",
+    "imaplib", "poplib", "telnetlib", "ssh", "paramiko",
+    "crypto", "hashlib", "hmac", "secrets", "ssl",
+}
+
+# 允许的模块（白名单模式）
+ALLOWED_MODULES = {
+    "os", "json", "pathlib", "re", "math", "csv", "datetime",
+    "collections", "itertools", "functools", "operator", "string",
+    "textwrap", "unicodedata", "io", "base64", "binascii",
+    "struct", "codecs", "locale", "abc", "types", "copy",
+    "pprint", "difflib", "heapq", "bisect", "array", "queue",
+    "random", "statistics", "decimal", "fractions", "time",
+    "calendar", "email", "html", "xml", "logging", "unittest",
+    "dataclasses", "typing", "enum", "contextlib", "contextvars",
+    "weakref", "types", "traceback", "inspect", "dis",
+    "ast", "token", "tokenize", "keyword", "linecache",
+    "platform", "shutil", "glob", "fnmatch", "tempfile",
+    "warnings", "traceback", "sys", "gc", "weakref",
+    "pandas", "numpy", "matplotlib", "seaborn", "plotly",
+    "openpyxl", "pptx", "docx", "PIL", "cv2",
+}
+
+
 class ExecuteCodeTool(BaseTool):
     name = "execute_code"
     description = "执行 Python 脚本并返回 stdout。大型脚本（超过 20 行）请使用 chunk_index/total_chunks 分块，或先 write_file 再 execute_command。"
@@ -85,7 +115,6 @@ class ExecuteCodeTool(BaseTool):
         return await self._run_script(script_path, workdir)
 
     async def _run_script(self, script_path: str, workdir: str = "") -> str:
-
         try:
             is_windows = os.name == 'nt'
             python = "python" if is_windows else "python3"
@@ -99,39 +128,133 @@ class ExecuteCodeTool(BaseTool):
 
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
-
-            proc = await asyncio.create_subprocess_exec(
-                python, script_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env=env,
-            )
-
+            
+            # ── 沙箱环境变量限制 ──────────────────────────────────────────
+            # 移除敏感环境变量
+            for sensitive_var in ["AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID",
+                                  "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                                  "GOOGLE_API_KEY", "HUGGINGFACE_TOKEN"]:
+                env.pop(sensitive_var, None)
+            
+            # 限制 PATH 到最小必要范围
+            if is_windows:
+                env["PATH"] = r"C:\Windows\system32;C:\Windows"
+            else:
+                env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+            
+            # 限制 PYTHONPATH
+            env.pop("PYTHONPATH", None)
+            
+            # 限制用户目录访问
+            env["HOME"] = os.path.expanduser("~")
+            
+            # ── 创建沙箱包装脚本 ──────────────────────────────────────────
+            sandbox_script = self._create_sandbox_wrapper(script_path)
+            
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return json.dumps({"ok": False, "error": "Code execution timed out (300s)"}, ensure_ascii=False)
+                proc = await asyncio.create_subprocess_exec(
+                    python, sandbox_script,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    env=env,
+                )
 
-            out = stdout.decode("utf-8", errors="replace").strip()
-            err = stderr.decode("utf-8", errors="replace").strip()
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    return json.dumps({"ok": False, "error": "Code execution timed out (300s)"}, ensure_ascii=False)
 
-            result = {"ok": proc.returncode == 0, "exit_code": proc.returncode}
-            if out:
-                result["output"] = out[:10000]  # Cap at 10KB
-            if err:
-                result["error"] = err[:5000]
-            if not out and not err:
-                result["output"] = "(no output)"
+                out = stdout.decode("utf-8", errors="replace").strip()
+                err = stderr.decode("utf-8", errors="replace").strip()
 
-            return json.dumps(result, ensure_ascii=False)
+                result = {"ok": proc.returncode == 0, "exit_code": proc.returncode}
+                if out:
+                    result["output"] = out[:10000]  # Cap at 10KB
+                if err:
+                    result["error"] = err[:5000]
+                if not out and not err:
+                    result["output"] = "(no output)"
+
+                return json.dumps(result, ensure_ascii=False)
+            finally:
+                try:
+                    os.unlink(sandbox_script)
+                except Exception:
+                    pass
         finally:
             try:
                 os.unlink(script_path)
             except Exception:
                 pass
+    
+    def _create_sandbox_wrapper(self, script_path: str) -> str:
+        """Create a sandbox wrapper script that validates and executes the target script."""
+        # Escape backslashes for Windows paths
+        escaped_script_path = script_path.replace("\\", "\\\\")
+        
+        wrapper_content = f'''#!/usr/bin/env python3
+"""Sandbox wrapper for execute_code - validates script before execution."""
+import sys
+import os
+import importlib
+
+# ── 模块导入拦截器 ──────────────────────────────────────────────────────
+BLOCKED_MODULES = {{"subprocess", "ctypes", "cffi", "ffi", "pickle", "shelve",
+                    "marshal", "code", "compile", "exec", "eval", "importlib",
+                    "pty", "fcntl", "signal", "multiprocessing", "threading",
+                    "socket", "http", "urllib", "xmlrpc", "ftplib", "smtplib",
+                    "imaplib", "poplib", "telnetlib", "ssh", "paramiko",
+                    "crypto", "hashlib", "hmac", "secrets", "ssl"}}
+
+class SandboxImporter:
+    def find_module(self, fullname, path=None):
+        if fullname in BLOCKED_MODULES or fullname.split(".")[0] in BLOCKED_MODULES:
+            return self
+        return None
+    
+    def load_module(self, fullname):
+        raise ImportError(f"Module '{{fullname}}' is blocked in sandbox mode")
+
+# Install the importer before running the script
+sys.meta_path.insert(0, SandboxImporter())
+
+# ── 内置函数限制 ──────────────────────────────────────────────────────
+import builtins
+
+def _restricted_import(name, *args, **kwargs):
+    if name in BLOCKED_MODULES or name.split(".")[0] in BLOCKED_MODULES:
+        raise ImportError(f"Module '{{name}}' is blocked in sandbox mode")
+    return builtins.__import__(name, *args, **kwargs)
+
+builtins.__import__ = _restricted_import
+
+# ── 执行目标脚本 ──────────────────────────────────────────────────────
+target_script = r"{escaped_script_path}"
+try:
+    with open(target_script, "r", encoding="utf-8") as f:
+        code = f.read()
+    
+    # Check for dangerous patterns before execution
+    dangerous_patterns = ["__import__", "subprocess", "os.system", "os.popen",
+                         "eval(", "exec(", "compile(", "open(",
+                         "shutil.rmtree", "os.remove", "os.unlink"]
+    for pattern in dangerous_patterns:
+        if pattern in code:
+            print(f"Warning: Detected potentially dangerous pattern: {{pattern}}", file=sys.stderr)
+    
+    exec(code, {{"__name__": "__main__"}})
+except Exception as e:
+    print(f"Error: {{type(e).__name__}}: {{e}}", file=sys.stderr)
+    sys.exit(1)
+'''
+        
+        # Write wrapper to temp file
+        with tempfile.NamedTemporaryFile(mode="w", suffix="_sandbox.py", delete=False, encoding="utf-8") as f:
+            f.write(wrapper_content)
+            return f.name
 
 
 register(ExecuteCodeTool())

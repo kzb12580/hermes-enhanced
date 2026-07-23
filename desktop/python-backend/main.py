@@ -4,6 +4,7 @@ Listens on 127.0.0.1:9876 and exposes REST + SSE endpoints consumed by the
 Electron frontend.
 """
 import os
+import secrets
 import signal
 import sys
 import time
@@ -12,6 +13,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -26,6 +28,24 @@ from logger import get_logger, get_log_dir, get_log_files
 logger = get_logger("hermes-backend")
 api_logger = get_logger("hermes-backend.api")
 _api_request_throttle = {}
+
+# ── Bearer Token 认证 ─────────────────────────────────────────────────────
+# 敏感路由需要 Bearer Token 认证，防止外部页面调用本地 API
+AUTH_TOKEN = os.environ.get("HERMES_AUTH_TOKEN", "")
+if not AUTH_TOKEN:
+    # 自动生成随机 token（256 位，64 字符）
+    AUTH_TOKEN = secrets.token_hex(32)
+    logger.info("Auto-generated AUTH_TOKEN for this session")
+
+# Sensitive routes that require Bearer token authentication
+SENSITIVE_ROUTES = {
+    "POST:/api/chat",
+    "POST:/api/tools/reload",
+    "DELETE:/api/chat/sessions",
+    "POST:/api/chat/sessions",
+    "POST:/api/memory",
+    "DELETE:/api/memory",
+}
 
 from api.chat import router as chat_router
 from api.config import router as config_router
@@ -152,6 +172,69 @@ app.add_middleware(
 )
 
 
+# ── 敏感路由认证中间件 ─────────────────────────────────────────────────────
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """检查敏感路由的 Bearer Token 认证"""
+    # Skip auth for health check and OPTIONS requests
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    
+    path = request.url.path
+    method = request.method
+    route_key = f"{method}:{path}"
+    
+    # Only check sensitive routes
+    if route_key in SENSITIVE_ROUTES:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Missing Authorization header"}
+            )
+        token = auth_header[7:]  # Remove "Bearer " prefix
+        if token != AUTH_TOKEN:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Invalid token"}
+            )
+    
+    return await call_next(request)
+
+
+# ── CSP 安全头中间件 ─────────────────────────────────────────────────────
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """添加安全响应头"""
+    response = await call_next(request)
+    
+    # Content-Security-Policy: 限制资源加载来源
+    # 默认策略：仅允许同源，禁止内联脚本
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "  # Electron 需要 unsafe-eval
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https: wss:; "
+        "frame-src 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    
+    # 其他安全头
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    
+    return response
+
+
 # ── API 请求日志中间件 ────────────────────────────────────────────────────
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -264,6 +347,19 @@ app.include_router(memory_router)
 app.include_router(config_router)
 app.include_router(models_router)
 app.include_router(workflow_router)
+
+
+# ── Auth Token 端点（仅本地访问）────────────────────────────────────────────
+@app.get("/api/auth/token")
+async def get_auth_token(request: Request):
+    """Get auth token for frontend (only accessible from localhost)."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Only accessible from localhost"}
+        )
+    return {"token": AUTH_TOKEN}
 
 # ---------------------------------------------------------------------------
 # Graceful shutdown via signal

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from typing import Optional
 
@@ -255,6 +256,9 @@ class SessionCreate(BaseModel):
 # ─── Managers ──────────────────────────────────────────────────────────────
 
 session_manager = SessionManager()
+
+# Lock for protecting session message list modifications during chat
+_session_lock = threading.Lock()
 
 
 # ─── Helper Functions ──────────────────────────────────────────────────────
@@ -1311,6 +1315,8 @@ async def chat(message: ChatMessage):
         "role": "user",
         "content": user_content,
     })
+    # Persist after adding user message (lock held by caller)
+    session_manager._save()
 
     # Build API messages — use message-specific skills if provided
     skills_override = message.skills if message.skills is not None else None
@@ -1355,6 +1361,9 @@ async def chat(message: ChatMessage):
 
     async def generate_stream():
         """Generate SSE stream for chat response with tool execution loop."""
+        stream_start = time.time()
+        STREAM_TIMEOUT = 600  # 10 minutes max stream duration
+        
         try:
             current_messages = list(api_messages)
             raw_tool_calls = []  # 初始化，防止循环未执行时未绑定
@@ -1365,6 +1374,13 @@ async def chat(message: ChatMessage):
             has_warned = False  # 是否已经警告过模型换方向
             MAX_STREAM_RETRIES = 1  # 单次迭代内允许的流式断线重试次数
             for iteration in range(MAX_TOOL_ITERATIONS + 1):
+                # Check stream timeout
+                elapsed = time.time() - stream_start
+                if elapsed > STREAM_TIMEOUT:
+                    yield f"event: error\ndata: Stream timeout after {STREAM_TIMEOUT}s\n\n"
+                    logger.warning("SSE stream timeout after %.1fs", elapsed)
+                    break
+                
                 iter_start = time.time()
                 # Call LLM with streaming
                 full_response = ""
@@ -1501,7 +1517,8 @@ async def chat(message: ChatMessage):
                     assistant_msg["reasoning_content"] = reasoning_text
                     logger.info("Captured reasoning_content: %d chars", len(reasoning_text))
                 current_messages.append(assistant_msg)
-                session["messages"].append(assistant_msg)
+                with _session_lock:
+                    session["messages"].append(assistant_msg)
                 
                 # Execute tools
                 tool_results = await execute_tools(complete_tool_calls, model=model)
@@ -1510,7 +1527,8 @@ async def chat(message: ChatMessage):
                 for result in tool_results:
                     yield f"event: tool_result\ndata: {json.dumps({'id': result['tool_call_id'], 'result': result['content']})}\n\n"
                     current_messages.append(result)
-                    session["messages"].append(result)
+                    with _session_lock:
+                        session["messages"].append(result)
                 
                 # Track consecutive failures — per-tool tracking
                 # Only count if the SAME tool keeps failing (different tools failing is OK)
@@ -1537,7 +1555,8 @@ async def chat(message: ChatMessage):
                                            f"请换一种完全不同的方案，或者告知用户这个操作在当前环境下不可行并建议手动操作。"
                             }
                             current_messages.append(warning_msg)
-                            session["messages"].append(warning_msg)
+                            with _session_lock:
+                                session["messages"].append(warning_msg)
                             # Reset counter and mark warned
                             consecutive_failures = 0
                             has_warned = True
@@ -1607,10 +1626,12 @@ async def chat(message: ChatMessage):
                     if final_reasoning:
                         final_msg["reasoning_content"] = final_reasoning
                     current_messages.append(final_msg)
-                    session["messages"].append(final_msg)
+                    with _session_lock:
+                        session["messages"].append(final_msg)
             
             # Save session
-            session_manager._save()
+            with _session_lock:
+                session_manager._save()
 
             # ── 使用 ContextCompressorV2 智能压缩会话 ──
             _smart_compress_session(session, locals().get('context_window', 128000))
