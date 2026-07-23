@@ -223,10 +223,13 @@ class SandboxImporter:
 sys.meta_path.insert(0, SandboxImporter())
 
 # ── 内置函数限制 ──────────────────────────────────────────────────────
+# Save original __import__ BEFORE modifying it
+_original_import = builtins.__import__
+
 def _restricted_import(name, *args, **kwargs):
     if name in BLOCKED_MODULES or name.split(".")[0] in BLOCKED_MODULES:
         raise ImportError("Module '" + name + "' is blocked in sandbox mode")
-    return builtins.__import__(name, *args, **kwargs)
+    return _original_import(name, *args, **kwargs)
 
 # Create restricted builtins for executed code
 _restricted_builtins = dict(builtins.__dict__)
