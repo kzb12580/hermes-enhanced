@@ -6,6 +6,17 @@ import json
 from .base import BaseTool
 from . import register
 
+# 缓存 SessionManager 实例，避免重复创建
+_session_manager_cache = None
+
+def _get_session_manager():
+    """获取缓存的 SessionManager 单例"""
+    global _session_manager_cache
+    if _session_manager_cache is None:
+        from api.session_manager import SessionManager
+        _session_manager_cache = SessionManager()
+    return _session_manager_cache
+
 
 class SearchSessionTool(BaseTool):
     name = "search_session"
@@ -22,8 +33,7 @@ class SearchSessionTool(BaseTool):
 
     async def execute(self, query: str, limit: int = 5, **kwargs) -> str:
         try:
-            from api.session_manager import SessionManager
-            sm = SessionManager()
+            sm = _get_session_manager()
             sessions_list = sm.list_sessions()
 
             results = []
@@ -82,8 +92,7 @@ class GetSessionHistoryTool(BaseTool):
 
     async def execute(self, count: int = 10, **kwargs) -> str:
         try:
-            from api.session_manager import SessionManager
-            sm = SessionManager()
+            sm = _get_session_manager()
             sessions_list = sm.list_sessions()
 
             if not sessions_list:
@@ -110,5 +119,3 @@ class GetSessionHistoryTool(BaseTool):
             return json.dumps({"session_name": session.get("name", ""), "total": len(messages), "returned": len(result), "messages": result}, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": str(e)}, ensure_ascii=False)
-
-

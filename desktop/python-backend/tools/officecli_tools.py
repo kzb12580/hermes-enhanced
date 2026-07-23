@@ -98,10 +98,13 @@ def _run_officecli(*args: str, timeout: int = 120) -> dict:
 
 
 def _safe_path(p: str) -> str:
-    """路径净化"""
-    from tools.safe_file_ops import atomic_save, backup_file
-    resolved = Path(p).expanduser().resolve()
-    return str(resolved)
+    """路径净化 — 复用 file_tools 的白名单机制"""
+    from tools.file_tools import _resolve_safe_path
+    result = _resolve_safe_path(p)
+    if isinstance(result, str):
+        # 返回的是错误信息
+        raise ValueError(result)
+    return str(result)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
