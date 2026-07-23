@@ -100,7 +100,7 @@ async def get_inbox(limit: int = Query(default=20, ge=1, le=100), unread: bool =
 
 
 @router.get("/api/email/detail/{uid}")
-async def get_email_detail(uid: str, folder: str = "INBOX"):
+async def get_email_detail(uid: str, folder: str = Query(default="INBOX", pattern=r'^[a-zA-Z0-9_\-\. ]+$')):
     """获取邮件详情"""
     try:
         from email_tools import read_email_detail

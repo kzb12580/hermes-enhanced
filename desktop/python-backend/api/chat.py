@@ -1214,12 +1214,10 @@ async def delete_session(session_id: str):
 
 @router.post("/api/chat/sessions/{session_id}/clear")
 async def clear_session(session_id: str):
-    """Clear session history."""
-    session = session_manager.get_session(session_id)
-    if not session:
+    """Clear session history (thread-safe)."""
+    if not session_manager.get_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
-    session["messages"] = []
-    session_manager._save()
+    session_manager.clear_session(session_id)
     return {"status": "cleared"}
 
 
@@ -1622,7 +1620,8 @@ async def chat(message: ChatMessage):
 
         except Exception as e:
             logger.error("Streaming error: %s", e, exc_info=True)
-            yield f"event: error\ndata: {str(e)}\n\n"
+            # 不泄露原始异常信息给客户端（可能包含内部路径、库版本等）
+            yield "event: error\ndata: 内部错误，请查看日志了解详情。\n\n"
 
     return StreamingResponse(
         generate_stream(),

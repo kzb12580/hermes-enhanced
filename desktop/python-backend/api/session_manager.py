@@ -98,3 +98,12 @@ class SessionManager:
             if session_id in self._sessions:
                 self._sessions[session_id]["messages"].append(message)
                 self._save()
+
+    def clear_session(self, session_id: str) -> bool:
+        """Clear all messages in a session (thread-safe)."""
+        with self._lock:
+            if session_id in self._sessions:
+                self._sessions[session_id]["messages"] = []
+                self._save()
+                return True
+            return False
