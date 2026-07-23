@@ -175,12 +175,13 @@ export const useSettingsStore = create<SettingsState>()(
         autoScroll: state.autoScroll,
         thinkingMode: state.thinkingMode,
         thinkingBudget: state.thinkingBudget,
-        providers: state.providers,
+        // 排除 apiKey — 不持久化到 localStorage（安全考虑）
+        providers: state.providers.map(p => ({ ...p, apiKey: '' })),
         systemPrompt: state.systemPrompt,
         temperature: state.temperature,
         maxTokens: state.maxTokens,
         backendUrl: state.backendUrl,
-        apiKey: state.apiKey,
+        // apiKey: '' — 不持久化
         openLinksInExternalBrowser: state.openLinksInExternalBrowser,
       }),
     }
