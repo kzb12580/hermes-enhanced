@@ -1,4 +1,4 @@
-/**
+/** 
  * Hermes Desktop - 主进程入口
  * 负责应用生命周期、窗口管理、Python 后端管理、IPC 处理
  */
@@ -10,6 +10,28 @@ import { initUpdater, checkForUpdates, downloadUpdate, installUpdate } from './u
 import { settingsStore } from './store'
 import { IPC_CHANNELS, IPCResponse } from '../shared/types'
 import type { AppSettings } from '../shared/types'
+
+// ─── IPC 频率限制器 ───
+const ipcRateLimiter = new Map<string, { count: number; resetTime: number }>()
+const IPC_RATE_LIMIT = 100  // 每分钟最大调用次数
+const IPC_RATE_WINDOW = 60 * 1000  // 1分钟窗口
+
+function checkIpcRateLimit(channel: string): boolean {
+  const now = Date.now()
+  const limiter = ipcRateLimiter.get(channel)
+  
+  if (!limiter || now > limiter.resetTime) {
+    ipcRateLimiter.set(channel, { count: 1, resetTime: now + IPC_RATE_WINDOW })
+    return true
+  }
+  
+  if (limiter.count >= IPC_RATE_LIMIT) {
+    return false  // 超过限制
+  }
+  
+  limiter.count++
+  return true
+}
 
 // ─── 顶层进程信号处理 (P0: 防止僵尸进程/孤儿进程) ───
 process.on('SIGTERM', () => {
@@ -155,11 +177,27 @@ app.on('activate', () => {
 /**
  * Validate a URL before opening externally.
  * Only allows http: and https: protocols to prevent arbitrary command execution.
+ * Also blocks URLs with wildcards, special characters, or suspicious patterns.
  */
 function isAllowedUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    // 只允许 http 和 https 协议
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false
+    }
+    // 阻止通配符和特殊字符
+    const hostname = parsed.hostname || ''
+    if (hostname.includes('*') || hostname.includes('..') || hostname.includes(' ')) {
+      return false
+    }
+    // 阻止 IP 地址（除 localhost/127.0.0.1）
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      if (!hostname.startsWith('127.') && hostname !== '0.0.0.0') {
+        return false
+      }
+    }
+    return true
   } catch {
     return false
   }
@@ -170,7 +208,11 @@ function isAllowedUrl(url: string): boolean {
  */
 function registerIPCHandlers(): void {
   // ---------- 窗口控制 ----------
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, (_event) => {
+    // 频率限制检查
+    if (!checkIpcRateLimit(IPC_CHANNELS.WINDOW_MINIMIZE)) {
+      return { success: false, error: 'Rate limit exceeded' }
+    }
     getMainWindow()?.minimize()
   })
 
@@ -300,6 +342,30 @@ function registerIPCHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_event, key: keyof AppSettings, value: AppSettings[typeof key]) => {
+    // 类型校验：确保 key 是有效的设置键
+    const validKeys: (keyof AppSettings)[] = [
+      'theme', 'language', 'startMinimized', 'closeToTray', 'autoStart',
+      'workspacePath', 'pythonPort', 'pythonAutoStart', 'pythonMaxRestarts',
+      'logLevel', 'proxyUrl', 'openLinksInExternalBrowser'
+    ]
+    if (!validKeys.includes(key)) {
+      return { success: false, error: `Invalid settings key: ${key}` }
+    }
+    
+    // 值类型校验
+    if (key === 'theme' && !['light', 'dark', 'system'].includes(value as string)) {
+      return { success: false, error: `Invalid theme value: ${value}` }
+    }
+    if (key === 'language' && !['zh-CN', 'en-US'].includes(value as string)) {
+      return { success: false, error: `Invalid language value: ${value}` }
+    }
+    if (key === 'logLevel' && !['debug', 'info', 'warn', 'error'].includes(value as string)) {
+      return { success: false, error: `Invalid logLevel value: ${value}` }
+    }
+    if (key === 'pythonPort' && (typeof value !== 'number' || value < 1 || value > 65535)) {
+      return { success: false, error: `Invalid pythonPort value: ${value}` }
+    }
+    
     settingsStore.set(key, value)
     return { success: true }
   })
