@@ -13,8 +13,7 @@ CORS_ORIGINS = [
     f"http://localhost:{BACKEND_PORT}",
     "http://127.0.0.1:5173",  # Vite dev server
     "http://localhost:5173",
-    "file://",
-    "null",
+    # "file://" 和 "null" 已移除 — 不安全
 ]
 
 # ─── 性能限制 ────────────────────────────────────────────────────────────

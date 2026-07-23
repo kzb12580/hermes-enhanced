@@ -46,3 +46,8 @@ __pycache__/
 *.psm1
 Microsoft.PowerShell_profile.ps1
 node_modules/
+
+# Build outputs
+dist/
+build/
+*.egg-info/

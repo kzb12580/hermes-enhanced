@@ -14,6 +14,9 @@ on:
       - '.github/workflows/desktop-build.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -21,6 +24,7 @@ jobs:
   build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30  # 防止构建无限挂起
     strategy:
       fail-fast: false
       matrix:

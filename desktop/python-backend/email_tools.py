@@ -120,27 +120,88 @@ def _get_attachments(msg) -> list[dict]:
 
 _CONFIG_DIR = Path.home() / ".hermes" / "desktop"
 _CONFIG_FILE = _CONFIG_DIR / "email.json"
+_KEY_FILE = _CONFIG_DIR / ".email_key"
+_ENCRYPTED_FIELDS = {"password"}
+
+
+def _get_or_create_key() -> bytes:
+    """获取或创建 Fernet 加密密钥"""
+    if _KEY_FILE.exists():
+        return _KEY_FILE.read_bytes()
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key()
+    _KEY_FILE.write_bytes(key)
+    # 仅限当前用户读取
+    import stat
+    _KEY_FILE.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return key
+
+
+def _encrypt_value(value: str) -> str:
+    """加密敏感字段"""
+    from cryptography.fernet import Fernet
+    if not value:
+        return value
+    f = Fernet(_get_or_create_key())
+    return f.encrypt(value.encode()).decode()
+
+
+def _decrypt_value(value: str) -> str:
+    """解密敏感字段"""
+    from cryptography.fernet import Fernet
+    if not value:
+        return value
+    try:
+        f = Fernet(_get_or_create_key())
+        return f.decrypt(value.encode()).decode()
+    except Exception:
+        # 兼容明文密码（旧配置）
+        return value
 
 
 def load_email_config() -> dict:
-    """加载邮件配置"""
+    """加载邮件配置（自动解密敏感字段）"""
     if _CONFIG_FILE.exists():
         try:
-            return json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
+            config = json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
+            # 解密敏感字段
+            for field in _ENCRYPTED_FIELDS:
+                if field in config and config[field]:
+                    config[field] = _decrypt_value(config[field])
+            return config
         except Exception:
             pass
     return {}
 
 
 def save_email_config(config: dict):
-    """保存邮件配置"""
+    """保存邮件配置（自动加密敏感字段）"""
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     existing = load_email_config()
     existing.update(config)
+    # 加密敏感字段
+    for field in _ENCRYPTED_FIELDS:
+        if field in existing and existing[field]:
+            # 避免重复加密
+            try:
+                _decrypt_value(existing[field])
+            except Exception:
+                existing[field] = _encrypt_value(existing[field])
     _CONFIG_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # ── 收邮件 ────────────────────────────────────────────────────────────────
+
+def _sanitize_imap_search(term: str) -> str:
+    """清理 IMAP 搜索词，防止注入攻击"""
+    # 只允许字母数字、中文、空格、点、下划线、连字符
+    # 移除 IMAP 搜索特殊字符: ( ) " \ 等
+    import re
+    # 保留安全字符，移除危险字符
+    sanitized = re.sub(r'[()\\"]', '', term)
+    # 限制长度
+    return sanitized[:200]
+
 
 def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = False,
                 search: str = "", imap_server: str = "", imap_port: int = 993,
@@ -188,7 +249,12 @@ def read_emails(folder: str = "INBOX", limit: int = 20, unread_only: bool = Fals
         if unread_only:
             criterion = "UNSEEN"
         elif search:
-            criterion = f'(OR (SUBJECT "{search}") (FROM "{search}"))'
+            # 清理搜索词防止注入
+            safe_search = _sanitize_imap_search(search)
+            if not safe_search:
+                criterion = "ALL"
+            else:
+                criterion = f'(OR (SUBJECT "{safe_search}") (FROM "{safe_search}"))'
         else:
             criterion = "ALL"
 

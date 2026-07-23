@@ -218,8 +218,12 @@ async def global_exception_handler(request, exc):
 
 
 @app.post("/api/tools/reload")
-async def reload_tools():
-    """热重载工具模块 — 修改代码后调用此接口生效"""
+async def reload_tools(request: Request):
+    """热重载工具模块 — 修改代码后调用此接口生效（仅限本地访问）"""
+    # 仅允许本地访问
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        return {"success": False, "error": "仅允许本地访问"}
     try:
         from tools import _auto_register
         import tools as tools_module

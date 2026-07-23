@@ -485,8 +485,10 @@ async def repair_vision_deps():
             try:
                 cmd = r["fix_cmd"]
                 logger.info("Auto-fixing: %s", cmd)
+                import shlex
+                cmd_parts = shlex.split(cmd)
                 proc = subprocess.run(
-                    cmd.split(), capture_output=True, text=True, timeout=300
+                    cmd_parts, capture_output=True, text=True, timeout=300
                 )
                 if proc.returncode == 0:
                     r["status"] = "fixed"

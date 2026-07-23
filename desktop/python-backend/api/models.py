@@ -141,11 +141,5 @@ async def list_models_post(request: ModelsRequest):
     return await _fetch_models(request.base_url, request.api_key, request.proxy_url)
 
 
-@router.get("/api/models", response_model=ModelsResponse)
-async def list_models(
-    base_url: str = Query(..., description="Provider base URL (e.g. https://api.openai.com/v1)"),
-    api_key: str = Query("", description="API key for authentication"),
-    proxy_url: str = Query("", description="Optional proxy URL (e.g. http://127.0.0.1:7890)"),
-):
-    """Fetch available models from an OpenAI-compatible /v1/models endpoint."""
-    return await _fetch_models(base_url, api_key, proxy_url)
+# GET /api/models 已移除 — api_key 不应通过查询字符串传递（会暴露在日志/URL历史）
+# 请使用 POST /api/models 代替
