@@ -30,9 +30,8 @@ export function createMainWindow(): BrowserWindow {
     icon: iconPath, // 设置窗口图标（任务栏/标题栏）
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      // sandbox must be false for preload to use Node/Electron APIs
-      // (contextIsolation still protects the renderer world)
-      sandbox: false,
+      // sandbox: true 提供更好的安全隔离（preload 只使用 contextBridge/ipcRenderer，不需要 Node）
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true

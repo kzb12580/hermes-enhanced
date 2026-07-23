@@ -623,6 +623,7 @@ def _salvage_truncated_execute_code(raw_args: str) -> str | None:
         return None
     
     # Write partial code to temp file
+    tmp = None
     try:
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8')
         tmp.write(raw_code)
@@ -634,6 +635,12 @@ def _salvage_truncated_execute_code(raw_args: str) -> str | None:
             "_salvaged_from_execute_code": tmp.name,
         }, ensure_ascii=False)
     except Exception:
+        # 清理临时文件
+        if tmp and hasattr(tmp, 'name') and os.path.exists(tmp.name):
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
         return None
 
 
@@ -876,7 +883,9 @@ async def call_llm_streaming(
             if response.status_code != 200:
                 error_text = await response.aread()
                 logger.error("API error %d: %s", response.status_code, error_text[:500])
-                raise HTTPException(status_code=response.status_code, detail=error_text.decode(errors="replace"))
+                # 不泄露完整错误信息给客户端（可能包含 API key）
+                safe_error = f"LLM API 调用失败 (HTTP {response.status_code})"
+                raise HTTPException(status_code=response.status_code, detail=safe_error)
 
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
@@ -956,7 +965,9 @@ async def call_llm(
         if response.status_code != 200:
             error_text = response.text
             logger.error("API error %d: %s", response.status_code, error_text[:500])
-            raise HTTPException(status_code=response.status_code, detail=error_text)
+            # 不泄露完整错误信息给客户端（可能包含 API key）
+            safe_error = f"LLM API 调用失败 (HTTP {response.status_code})"
+            raise HTTPException(status_code=response.status_code, detail=safe_error)
 
         return response.json()
 
@@ -1230,15 +1241,18 @@ async def upload_file(file: UploadFile = FastAPIFile(...)):
     unique_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
     file_path = os.path.join(upload_dir, unique_name)
 
-    # 分块读取，检查大小限制
+    # 分块读取，检查大小限制 — 每次 read 后立即检查，避免内存累积
     contents = b""
+    total_size = 0
     while True:
         chunk = await file.read(8192)
         if not chunk:
             break
-        contents += chunk
-        if len(contents) > MAX_UPLOAD_SIZE:
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE:
+            await file.close()
             return {"error": f"File too large: max {MAX_UPLOAD_SIZE // 1024 // 1024}MB", "success": False}
+        contents += chunk
 
     # Atomic write
     import tempfile
@@ -1515,7 +1529,7 @@ async def chat(message: ChatMessage):
                         if not has_warned:
                             # First time: warn the model and inject guidance as system message
                             error_hint = f"⚠️ 工具 {current_fail_tool} 已连续失败{consecutive_failures}次。请立即停止使用此工具，换一种完全不同的方案。不要再重复相同思路。"
-                            yield f"event: token\\ndata: {error_hint}\\n\\n"
+                            yield f"event: token\ndata: {error_hint}\n\n"
                             logger.warning("Warning: tool %s failed %d times, injecting guidance", current_fail_tool, consecutive_failures)
                             # Inject system message so the model sees the warning
                             warning_msg = {
@@ -1532,7 +1546,7 @@ async def chat(message: ChatMessage):
                         else:
                             # Second time: model was warned but still stuck — hard stop
                             error_hint = f"工具 {current_fail_tool} 换方案后仍然失败，自动停止。请告知用户手动操作。"
-                            yield f"event: token\\ndata: {error_hint}\\n\\n"
+                            yield f"event: token\ndata: {error_hint}\n\n"
                             logger.warning("Auto-stopping: tool %s still failing after warning", current_fail_tool)
                             break
                 else:

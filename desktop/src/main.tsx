@@ -12,12 +12,21 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 function showFatalError(title: string, detail: string) {
   const root = document.getElementById('root');
   if (root) {
+    // 转义 HTML 特殊字符，防止 XSS 注入
+    const escapeHtml = (str: string) => str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    const safeTitle = escapeHtml(title);
+    const safeDetail = escapeHtml(detail);
     root.innerHTML = `
       <div style="min-height:100vh;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:32px">
         <div style="max-width:700px;text-align:center">
           <div style="font-size:48px;margin-bottom:16px">⚠️</div>
-          <h1 style="font-size:22px;font-weight:700;color:#ff6b6b;margin-bottom:12px">${title}</h1>
-          <pre style="background:#16213e;padding:16px;border-radius:8px;font-size:12px;color:#e2e8f0;text-align:left;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;border:1px solid #334155">${detail}</pre>
+          <h1 style="font-size:22px;font-weight:700;color:#ff6b6b;margin-bottom:12px">${safeTitle}</h1>
+          <pre style="background:#16213e;padding:16px;border-radius:8px;font-size:12px;color:#e2e8f0;text-align:left;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;border:1px solid #334155">${safeDetail}</pre>
           <button onclick="location.reload()" style="margin-top:20px;padding:10px 24px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:14px;cursor:pointer">重新加载</button>
           <button onclick="localStorage.clear();location.reload()" style="margin-top:20px;margin-left:8px;padding:10px 24px;border-radius:8px;border:none;background:#374151;color:#d1d5db;font-size:14px;cursor:pointer">清除数据并重置</button>
         </div>

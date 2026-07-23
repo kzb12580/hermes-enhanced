@@ -10,6 +10,7 @@ import email
 import imaplib
 import smtplib
 import logging
+import tempfile
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -419,9 +420,21 @@ def send_email(to: str, subject: str, body: str,
         content_type = "html" if html else "plain"
         msg.attach(MIMEText(body, content_type, "utf-8"))
 
-        # 附件（fix #3: 25MB 大小限制）
+        # 附件（fix #3: 25MB 大小限制 + 路径安全检查）
         if attachments:
             for filepath in attachments:
+                # 路径安全检查：防止路径遍历攻击
+                real_path = os.path.realpath(filepath)
+                # 只允许访问 uploads 目录、临时目录、工作目录
+                allowed_dirs = [
+                    os.path.realpath(os.path.join(os.path.dirname(__file__), "uploads")),
+                    os.path.realpath(tempfile.gettempdir()),
+                    os.getcwd(),
+                ]
+                path_allowed = any(real_path.startswith(d) for d in allowed_dirs)
+                if not path_allowed:
+                    _log.warning(f"附件路径不允许: {filepath}")
+                    return {"error": f"附件路径不允许访问: {os.path.basename(filepath)}", "success": False}
                 if not os.path.isfile(filepath):
                     _log.warning(f"附件不存在: {filepath}")
                     continue

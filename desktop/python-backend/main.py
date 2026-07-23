@@ -13,14 +13,9 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
-    _HAS_SLOWAPI = True
-except ImportError:
-    _HAS_SLOWAPI = False
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # ── 统一配置 ──────────────────────────────────────────────────────────────
 from config import BACKEND_HOST, BACKEND_PORT, CORS_ORIGINS
@@ -140,11 +135,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting: 60 requests per minute (optional dependency)
-if _HAS_SLOWAPI:
-    limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Rate limiting: 60 requests per minute
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS - allow only local/Electron renderer origins.
 # Backend binds to 127.0.0.1 by default; avoid wildcard CORS so arbitrary web
