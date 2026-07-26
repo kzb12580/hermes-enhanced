@@ -93,11 +93,12 @@ def _auto_register():
     from .verify_tools import VerifyFileTool, VerifyCommandTool
     from .code_tools import ExecuteCodeTool  # noqa: F401
     from .skill_tools import SaveSkillTool, ListSkillsTool, LoadSkillTool, DeleteSkillTool
+    from .page_agent_tool import PageAgentTool
 
     for tool_cls in [
         ReadFileTool, WriteFileTool, SearchFilesTool, ListFilesTool,
         TerminalTool,
-        WebSearchTool, WebExtractTool,
+        WebSearchTool, WebExtractTool, PageAgentTool,
         # Memory tools
         SaveMemoryTool, SearchMemoryTool, DeleteMemoryTool,
         # Session tools
