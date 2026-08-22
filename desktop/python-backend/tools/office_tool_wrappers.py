@@ -128,7 +128,15 @@ OFFICE_TOOL_DEFINITIONS = [
                         "properties": {
                             "name": {"type": "string", "description": "工作表名称"},
                             "headers": {"type": "array", "items": {"type": "string"}, "description": "表头"},
-                            "data": {"type": "array", "items": {"type": "array"}, "description": "数据行"},
+                            "data": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "行单元格数据"
+                                },
+                                "description": "数据行"
+                            },
                         },
                         "required": ["name", "data"],
                     },
@@ -169,7 +177,15 @@ OFFICE_TOOL_DEFINITIONS = [
                             "col": {"type": "integer", "description": "列号"},
                             "value": {"description": "单元格值"},
                             "formula": {"type": "string", "description": "公式"},
-                            "data": {"type": "array", "description": "批量数据"},
+                            "data": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "行单元格数据"
+                                },
+                                "description": "批量数据"
+                            },
                             "name": {"type": "string", "description": "工作表名"},
                             "sheet": {"type": "string", "description": "目标工作表"},
                         },
@@ -223,7 +239,15 @@ OFFICE_TOOL_DEFINITIONS = [
                                         "fill": {"type": "object", "description": "填充色"},
                                         "shape": {"type": "string", "enum": ["rect", "oval", "line", "rounded_rect"], "description": "形状类型"},
                                         "chartType": {"type": "string", "enum": ["bar", "line", "pie"], "description": "图表类型"},
-                                        "rows": {"type": "array", "description": "表格数据"},
+                                        "rows": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                                "description": "表格行数据"
+                                            },
+                                            "description": "表格数据"
+                                        },
                                     },
                                     "required": ["type"],
                                 },
