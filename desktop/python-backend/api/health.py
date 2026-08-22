@@ -6,7 +6,7 @@ from fastapi import APIRouter
 router = APIRouter()
 
 _start_time = time.time()
-VERSION = "1.1.3"
+VERSION = "1.1.5"
 
 
 @router.get("/api/health")
