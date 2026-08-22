@@ -13,7 +13,11 @@ CORS_ORIGINS = [
     f"http://localhost:{BACKEND_PORT}",
     "http://127.0.0.1:5173",  # Vite dev server
     "http://localhost:5173",
-    # "file://" 和 "null" 已移除 — 不安全
+    "http://localhost",
+    "http://127.0.0.1",
+    "app://.",
+    "null",
+    "*",  # 本地 127.0.0.1 服务允许 Electron file:// 协议渲染进程跨域
 ]
 
 # ─── 性能限制 ────────────────────────────────────────────────────────────
