@@ -72,6 +72,23 @@ class ApiClient {
   constructor(config: ApiConfig = {}) {
     this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
     this.apiKey = config.apiKey || '';
+    this.fetchSessionAuthToken().catch(() => {});
+  }
+
+  async fetchSessionAuthToken(): Promise<string> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/auth/token`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          this.apiKey = data.token;
+          return data.token;
+        }
+      }
+    } catch {
+      // Backend not running yet
+    }
+    return this.apiKey;
   }
 
   updateConfig(config: ApiConfig) {
@@ -225,6 +242,9 @@ class ApiClient {
     request: ChatCompletionRequest,
     signal?: AbortSignal
   ): AsyncGenerator<string> {
+    if (!this.apiKey) {
+      await this.fetchSessionAuthToken();
+    }
     // FIX #1 (CRITICAL): Pass the user's signal directly to fetch() so that
     // reader.read() in the generator is also abortable. We still use
     // fetchWithRetry for the initial connection (with its own timeout), but

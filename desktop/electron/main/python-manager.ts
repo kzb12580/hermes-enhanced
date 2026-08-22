@@ -10,10 +10,9 @@ import { ChildProcess, spawn, exec as execCb } from 'child_process'
 import { promisify } from 'util'
 
 const execAsync = promisify(execCb)
-import { app, BrowserWindow } from 'electron'
-import { net } from 'electron'
+import { app, BrowserWindow, net } from 'electron'
 import { join } from 'path'
-import { existsSync, mkdirSync, appendFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, appendFileSync } from 'fs'
 import { createServer } from 'net'
 import treeKill from 'tree-kill'
 import { IPC_CHANNELS, PythonState, PythonHealthResponse, PythonStatus } from '../shared/types'
@@ -33,11 +32,14 @@ const RESTART_WINDOW_MS = 5 * 60 * 1000
 /** Environment variable whitelist for spawned Python processes */
 const ENV_WHITELIST_KEYS = [
   'PATH', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR',
-  'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM',
+  'SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'COMSPEC', 'PATHEXT',
+  'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMMONPROGRAMFILES', 'PUBLIC', 'ALLUSERSPROFILE',
+  'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM',
   'SHELL', 'USER', 'LOGNAME',
   'XDG_RUNTIME_DIR', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME',
   'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
   'http_proxy', 'https_proxy', 'no_proxy',
+  'PYTHONPATH', 'PYTHONHOME',
 ]
 
 /** Build a sanitized env object with only whitelisted keys plus Hermes overrides */
@@ -54,7 +56,7 @@ function buildSafeEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv
 type BackendMode = 'sidecar' | 'system-python' | 'none'
 
 export class PythonManager {
-  private process: ChildProcess | null = null
+  private childProcess: ChildProcess | null = null
   private state: PythonState
   private healthCheckTimer: ReturnType<typeof setInterval> | null = null
   private restartTimer: ReturnType<typeof setTimeout> | null = null
@@ -71,7 +73,7 @@ export class PythonManager {
   private destroyed = false
   private healthCheckInProgress = false
   private restartTimestamps: number[] = []
-  private operationLock = false  // 防止并发操作
+  private operationLock = false // 防止并发操作
 
   // 缓存：避免重复检测
   private cachedPythonPath: string | null = null
@@ -133,11 +135,21 @@ export class PythonManager {
     try {
       appendFileSync(this.logFilePath, entry + '\n')
     } catch { /* ignore */ }
-    this.mainWindow?.webContents.send(IPC_CHANNELS.PYTHON_LOG_STREAM, line)
+    
+    // 发送结构化日志给渲染进程
+    const isErr = line.includes('[错误]') || line.includes('❌') || line.includes('STDERR')
+    this.mainWindow?.webContents.send(IPC_CHANNELS.PYTHON_LOG_STREAM, {
+      type: isErr ? 'error' : 'info',
+      message: line
+    })
   }
 
   getLogs(): string[] {
     return [...this.logBuffer]
+  }
+
+  getLogFilePath(): string {
+    return this.logFilePath
   }
 
   // ─── 端口检测 ───
@@ -225,9 +237,11 @@ export class PythonManager {
   }
 
   private getBackendSourceDir(): string {
+    if (app.isPackaged) {
+      return join(process.resourcesPath, 'python-backend-source')
+    }
     // 源码模式：从 electron 目录向上找到 desktop/python-backend
-    const electronDir = __dirname
-    return join(electronDir, '..', 'python-backend')
+    return join(__dirname, '../../python-backend')
   }
 
   private detectDllLoadFailure(): boolean {
@@ -266,12 +280,13 @@ export class PythonManager {
   private async ensureVCppRuntime(): Promise<void> {
     if (process.platform !== 'win32') return
     try {
-      const sourceDir = this.getBackendSourceDir()
-      const vcredistPath = join(sourceDir, 'buildResources', 'vcredist', 'vc_redist.x64.exe')
+      const vcredistPath = app.isPackaged
+        ? join(process.resourcesPath, 'vcredist', 'vc_redist.x64.exe')
+        : join(__dirname, '../../buildResources', 'vcredist', 'vc_redist.x64.exe')
       if (existsSync(vcredistPath)) {
-        this.addLog('[Windows] 安装 VC++ Runtime...')
+        this.addLog('[Windows] 检查/安装 VC++ Runtime...')
         await execAsync(`"${vcredistPath}" /install /quiet /norestart`, { timeout: 60000 })
-        this.addLog('[Windows] VC++ Runtime 安装完成')
+        this.addLog('[Windows] VC++ Runtime 检查完成')
       }
     } catch (e: any) {
       this.addLog(`[Windows] VC++ Runtime 安装失败（可忽略）: ${e.message}`)
@@ -280,7 +295,7 @@ export class PythonManager {
 
   // ─── 启动后端（带 fallback） ───
   async start(): Promise<void> {
-    if (this.process) {
+    if (this.childProcess) {
       this.addLog('[管理器] Python 后端已在运行中')
       return
     }
@@ -340,7 +355,7 @@ export class PythonManager {
           this.addLog('[启动] 💡 请从 https://aka.ms/vs/17/release/vc_redist.x64.exe 下载并安装后重试')
           this.addLog('[启动] 🔄 当前尝试 fallback 到系统 Python...')
         } else {
-          this.addLog('[启动] ❌ sidecar 失败，尝试 fallback 到系统 Python...')
+          this.addLog('[启动] ❌ sidecar 启动失败，尝试 fallback 到系统 Python...')
         }
         this.cachedBackendMode = null
         this.cachedPythonPath = null
@@ -404,7 +419,7 @@ export class PythonManager {
 
   // ─── 停止后端 ───
   async stop(): Promise<void> {
-    if (!this.process) {
+    if (!this.childProcess) {
       this.updateStatus('stopped')
       return
     }
@@ -423,7 +438,7 @@ export class PythonManager {
       this.clearRestartTimer()
 
       await new Promise<void>((resolve) => {
-        const proc = this.process
+        const proc = this.childProcess
         if (!proc) {
           this.updateStatus('stopped')
           resolve()
@@ -433,7 +448,7 @@ export class PythonManager {
         const timeout = setTimeout(async () => {
           this.addLog('[管理器] SIGTERM 超时，强制终止进程树')
           await this.killProcessTree(proc, 'SIGKILL')
-          this.process = null
+          this.childProcess = null
           this.state.pid = null
           this.startTime = null
           this.updateStatus('stopped')
@@ -442,7 +457,7 @@ export class PythonManager {
 
         proc.on('exit', () => {
           clearTimeout(timeout)
-          this.process = null
+          this.childProcess = null
           this.state.pid = null
           this.startTime = null
           this.updateStatus('stopped')
@@ -450,7 +465,7 @@ export class PythonManager {
           resolve()
         })
 
-        // P1: 用 tree-kill 杀掉整个进程树
+        // 用 tree-kill 杀掉整个进程树
         this.killProcessTree(proc, 'SIGTERM').catch(() => {
           try { proc.kill('SIGTERM') } catch { /* already dead */ }
         })
@@ -520,7 +535,7 @@ export class PythonManager {
 
       try {
         const health = await this.checkHealth()
-        if (health && health.status === 'ok') {
+        if (health && (health.status === 'ok' || health.status === 'healthy')) {
           this.consecutiveHealthFailures = 0
         } else {
           this.consecutiveHealthFailures++
@@ -575,15 +590,26 @@ export class PythonManager {
       return { mode: this.cachedBackendMode, pythonPath: this.cachedPythonPath }
     }
 
-    // 尝试 sidecar
-    const sourceDir = this.getBackendSourceDir()
     const sidecarName = process.platform === 'win32' ? 'hermes-backend.exe' : 'hermes-backend'
-    const sidecarPath = join(sourceDir, '..', 'dist-backend', sidecarName)
+    
+    // 候选 sidecar 路径（打包环境与开发环境全覆盖）
+    const sidecarCandidates = app.isPackaged
+      ? [
+          join(process.resourcesPath, 'python-backend', sidecarName),
+          join(process.resourcesPath, 'python-backend', 'hermes-backend', sidecarName),
+        ]
+      : [
+          join(__dirname, '../../dist-backend/hermes-backend', sidecarName),
+          join(__dirname, '../../dist-backend', sidecarName),
+        ]
 
-    if (existsSync(sidecarPath)) {
-      this.cachedBackendMode = 'sidecar'
-      this.cachedPythonPath = sidecarPath
-      return { mode: 'sidecar', pythonPath: sidecarPath }
+    for (const sidecarPath of sidecarCandidates) {
+      if (existsSync(sidecarPath)) {
+        this.cachedBackendMode = 'sidecar'
+        this.cachedPythonPath = sidecarPath
+        this.addLog(`[检测] 找到 sidecar 二进制: ${sidecarPath}`)
+        return { mode: 'sidecar', pythonPath: sidecarPath }
+      }
     }
 
     // 尝试系统 Python
@@ -618,7 +644,7 @@ export class PythonManager {
           detached: false,
         })
 
-        this.process = proc
+        this.childProcess = proc
         this.startTime = Date.now()
         this.state.pid = proc.pid || null
         this.lineBuffer = ''
@@ -652,7 +678,7 @@ export class PythonManager {
 
         proc.on('error', (err) => {
           this.addLog(`[管理器] 进程错误: ${err.message}`)
-          this.process = null
+          this.childProcess = null
           this.state.pid = null
           this.updateStatus('error')
           resolve(false)
@@ -661,7 +687,7 @@ export class PythonManager {
         proc.on('exit', (code, signal) => {
           this.addLog(`[管理器] 进程退出: code=${code}, signal=${signal}`)
           if (this.state.status === 'running' || this.state.status === 'starting') {
-            this.process = null
+            this.childProcess = null
             this.state.pid = null
             this.updateStatus('error')
             this.state.lastError = `进程异常退出 (code=${code})`
@@ -670,7 +696,7 @@ export class PythonManager {
 
         // 等待一小段时间，检查进程是否立即退出
         setTimeout(() => {
-          if (this.process && !this.process.killed) {
+          if (this.childProcess && !this.childProcess.killed) {
             this.addLog(`[管理器] 进程已启动 (PID: ${proc.pid})`)
             resolve(true)
           } else {
@@ -689,9 +715,9 @@ export class PythonManager {
     this.destroyed = true
     this.stopHealthCheck()
     this.clearRestartTimer()
-    if (this.process) {
-      await this.killProcessTree(this.process, 'SIGKILL')
-      this.process = null
+    if (this.childProcess) {
+      await this.killProcessTree(this.childProcess, 'SIGKILL')
+      this.childProcess = null
     }
   }
 }

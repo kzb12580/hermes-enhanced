@@ -6,7 +6,7 @@ from fastapi import APIRouter
 router = APIRouter()
 
 _start_time = time.time()
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 
 
 @router.get("/api/health")
@@ -14,7 +14,8 @@ async def health_check():
     """Return backend health status, uptime, and version."""
     uptime_seconds = time.time() - _start_time
     return {
-        "status": "healthy",
+        "status": "ok",
+        "healthy": True,
         "version": VERSION,
         "uptime_seconds": round(uptime_seconds, 2),
     }

@@ -71,7 +71,7 @@ export default function App() {
       case 'email':
         return <EmailPanel />;
       case 'skills':
-        return <SkillsPanel open={true} onClose={() => setCurrentView('chat')} activeSkills={activeSkills} onToggleActive={toggleActiveSkill} />;
+        return <SkillsPanel open={true} onClose={() => {}} activeSkills={activeSkills} onToggleActive={toggleActiveSkill} />;
       case 'settings':
         return <SettingsPanel />;
       default:

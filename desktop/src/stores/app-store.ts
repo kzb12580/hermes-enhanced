@@ -99,8 +99,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Listen for Python log stream
     if (api.python?.onLogStream) {
       cleanups.push(
-        api.python.onLogStream((log: { type: string; message: string }) => {
-          get().addLog(`[${log.type}] ${log.message}`);
+        api.python.onLogStream((log: any) => {
+          if (typeof log === 'string') {
+            get().addLog(log);
+          } else if (log && typeof log === 'object') {
+            get().addLog(log.message ? (log.type ? `[${log.type}] ${log.message}` : log.message) : JSON.stringify(log));
+          }
         })
       );
     }

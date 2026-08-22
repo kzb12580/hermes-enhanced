@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { InputBar } from './InputBar';
 import { useChatStore } from '../../stores/chatStore';
+import { useAppStore } from '../../stores/app-store';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWindowControls } from '../../hooks/useIpc';
-import { Bot, PanelLeftClose, PanelLeft, AlertCircle, Settings, Minus, Square, X } from 'lucide-react';
+import { Bot, PanelLeftClose, PanelLeft, AlertCircle, Settings, Minus, Square, X, RefreshCw } from 'lucide-react';
 
 export function ChatView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -13,6 +14,7 @@ export function ChatView() {
   const userScrolledUpRef = useRef(false);
   const lastScrollTimeRef = useRef(0);
   const { currentMessages, currentSession, isGenerating, error } = useChatStore();
+  const { pythonState } = useAppStore();
   const { sidebarCollapsed, toggleSidebar, toggleSettings, isBackendOnline, setSettingsOpen } = useSystemStore();
   const { autoScroll } = useSettingsStore();
   const { minimize, maximize, close, isElectron } = useWindowControls();
@@ -133,8 +135,17 @@ export function ChatView() {
               }`}
             />
             <span className="text-text-muted">
-              {isBackendOnline ? '已连接' : '未连接'}
+              {isBackendOnline ? '后端正常 (:9876)' : (pythonState?.lastError ? `后端异常: ${pythonState.lastError}` : '后端未连接')}
             </span>
+            {!isBackendOnline && (
+              <button
+                onClick={() => (window as any).api?.python?.restart?.()}
+                className="ml-1 p-1 hover:bg-[var(--bg-tertiary)] rounded text-text-muted hover:text-text-primary transition-colors flex items-center gap-1 text-[11px]"
+                title="尝试重启后端"
+              >
+                <RefreshCw size={11} /> 重启后端
+              </button>
+            )}
           </div>
 
           {/* Window control buttons (Electron only) */}

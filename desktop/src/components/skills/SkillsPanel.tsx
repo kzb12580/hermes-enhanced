@@ -145,35 +145,26 @@ export function SkillsPanel({ open, onClose, activeSkills, onToggleActive }: Ski
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 fade-in" onClick={onClose}>
-      <div
-        className="relative w-[860px] max-w-[90vw] h-[620px] max-h-[85vh] flex flex-col
-          bg-[var(--bg-primary)] border border-[var(--hermes-border)] rounded-2xl shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--hermes-border)] bg-[var(--bg-secondary)]">
-          <div className="flex items-center gap-2">
-            <Sparkles size={18} className="text-[var(--hermes-accent)]" />
-            <h2 className="text-sm font-semibold text-text-primary">技能管理</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--hermes-border)] bg-[var(--bg-secondary)]">
+          <div className="flex items-center gap-3">
+            <Sparkles size={20} className="text-[var(--hermes-accent)]" />
+            <h1 className="text-lg font-semibold text-text-primary">技能管理</h1>
             <span className="text-xs text-text-muted">
               {activeSkills.length} 已激活 · 技能是工作流提示，不是工具开关
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleReload}
               disabled={reloading}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-text-secondary hover:text-text-primary hover:bg-[var(--bg-tertiary)] transition-colors border border-[var(--hermes-border)] disabled:opacity-50"
               title="重新加载技能"
             >
-              <RefreshCw size={14} className={reloading ? 'animate-spin' : ''} />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-[var(--bg-tertiary)] transition-colors"
-            >
-              <X size={16} />
+              <RefreshCw size={13} className={reloading ? 'animate-spin' : ''} />
+              刷新
             </button>
           </div>
         </div>

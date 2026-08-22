@@ -1,19 +1,19 @@
 # Hermes Desktop
 
 > AI 桌面助手 — 终端、文件、Office、Web、GUI 全能操作
-> **v1.1.5** — 正式定板
+> **v1.1.6** — 正式定板
 
 ## 📥 下载
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
-| 🪟 Windows | `hermes-desktop-1.1.5-setup.exe` | 安装版 |
-| 🪟 Windows | `Hermes-Desktop-1.1.5-win.zip` | 便携版（解压即用） |
-| 🍎 macOS Intel | `Hermes-Desktop-1.1.5-mac.zip` | Intel 芯片 |
-| 🍎 macOS ARM | `Hermes-Desktop-1.1.5-arm64-mac.zip` | M1/M2/M3/M4 |
-| 🐧 Linux | `hermes-desktop-1.1.5.AppImage` | 通用版 |
+| 🪟 Windows | `hermes-desktop-1.1.6-setup.exe` | 安装版 |
+| 🪟 Windows | `Hermes-Desktop-1.1.6-win.zip` | 便携版（解压即用） |
+| 🍎 macOS Intel | `Hermes-Desktop-1.1.6-mac.zip` | Intel 芯片 |
+| 🍎 macOS ARM | `Hermes-Desktop-1.1.6-arm64-mac.zip` | M1/M2/M3/M4 |
+| 🐧 Linux | `hermes-desktop-1.1.6.AppImage` | 通用版 |
 
-**下载地址：** [GitHub Releases](https://github.com/kzb12580/hermes-enhanced/releases/tag/v1.1.5)
+**下载地址：** [GitHub Releases](https://github.com/kzb12580/hermes-enhanced/releases/tag/v1.1.6)
 
 ### Windows 用户
 

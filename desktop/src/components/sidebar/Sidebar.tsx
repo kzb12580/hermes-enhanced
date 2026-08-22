@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'email' | 'skills' | 'models' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'settings';
+type View = 'chat' | 'sessions' | 'email' | 'skills' | 'models' | 'memory' | 'tools' | 'settings';
 
 interface NavItem {
   view: View;
@@ -35,9 +35,6 @@ const NAV_ITEMS: NavItem[] = [
   // 主要功能
   { view: 'chat', icon: MessageSquare, label: '对话', group: 'main' },
   { view: 'sessions', icon: Clock, label: '历史会话', group: 'main' },
-  { view: 'discover', icon: Compass, label: '发现', group: 'main' },
-  { view: 'office', icon: Building, label: '办公', group: 'main' },
-  { view: 'kanban', icon: Kanban, label: '看板', group: 'main' },
   { view: 'email', icon: Mail, label: '邮件', group: 'main' },
   { view: 'skills', icon: Zap, label: '技能', group: 'main' },
   // 数据管理
@@ -45,8 +42,6 @@ const NAV_ITEMS: NavItem[] = [
   { view: 'memory', icon: Brain, label: '记忆', group: 'data' },
   { view: 'tools', icon: Wrench, label: '工具', group: 'data' },
   // 系统功能
-  { view: 'schedules', icon: Timer, label: '定时任务', group: 'system' },
-  { view: 'gateway', icon: Signal, label: '网关', group: 'system' },
   { view: 'settings', icon: Settings, label: '设置', group: 'system' },
 ];
 
