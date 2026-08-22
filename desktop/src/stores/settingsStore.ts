@@ -43,6 +43,12 @@ export interface AppSettings {
   backendUrl: string;
   /** API key for backend auth */
   apiKey: string;
+  /** Backend connection mode: 'local' (spawn python) | 'remote' (connect to VPS Gateway) */
+  connectionMode: 'local' | 'remote';
+  /** Remote Gateway URL */
+  remoteGatewayUrl: string;
+  /** Remote Gateway Auth Token / Bearer Key */
+  remoteGatewayToken: string;
   /** Open links in external browser */
   openLinksInExternalBrowser: boolean;
 }
@@ -104,6 +110,9 @@ const defaultSettings: AppSettings = {
   maxTokens: null,  // null = 后端按模型自适应
   backendUrl: 'http://127.0.0.1:9876',
   apiKey: '',
+  connectionMode: 'local',
+  remoteGatewayUrl: 'http://129.153.107.120:5533',
+  remoteGatewayToken: '',
   openLinksInExternalBrowser: true,
 };
 
@@ -114,11 +123,19 @@ export const useSettingsStore = create<SettingsState>()(
 
       updateSettings: (settings) => {
         set(settings);
-        if (settings.backendUrl || settings.apiKey !== undefined) {
-          const s = get();
+        const s = get();
+        if (
+          settings.backendUrl ||
+          settings.apiKey !== undefined ||
+          settings.connectionMode ||
+          settings.remoteGatewayUrl ||
+          settings.remoteGatewayToken !== undefined
+        ) {
+          const effectiveUrl = s.connectionMode === 'remote' ? s.remoteGatewayUrl : s.backendUrl;
+          const effectiveToken = s.connectionMode === 'remote' ? s.remoteGatewayToken : s.apiKey;
           apiClient.updateConfig({
-            baseUrl: s.backendUrl,
-            apiKey: s.apiKey,
+            baseUrl: effectiveUrl,
+            apiKey: effectiveToken,
           });
         }
       },
@@ -151,9 +168,11 @@ export const useSettingsStore = create<SettingsState>()(
 
       initApiClient: () => {
         const s = get();
+        const effectiveUrl = s.connectionMode === 'remote' ? s.remoteGatewayUrl : s.backendUrl;
+        const effectiveToken = s.connectionMode === 'remote' ? s.remoteGatewayToken : s.apiKey;
         apiClient.updateConfig({
-          baseUrl: s.backendUrl,
-          apiKey: s.apiKey,
+          baseUrl: effectiveUrl,
+          apiKey: effectiveToken,
         });
       },
     }),

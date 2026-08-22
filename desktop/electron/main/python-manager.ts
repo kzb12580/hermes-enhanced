@@ -293,6 +293,11 @@ export class PythonManager {
     }
   }
 
+  // 获取日志文件路径
+  public getLogFilePath(): string | null {
+    return this.logFilePath
+  }
+
   // ─── 启动后端（带 fallback） ───
   async start(): Promise<void> {
     if (this.childProcess) {
@@ -338,7 +343,7 @@ export class PythonManager {
           await this.ensureVCppRuntime()
         }
         this.addLog(`[启动] 尝试 sidecar 模式: ${detection.pythonPath}`)
-        const sidecarOk = await this.tryStart(detection.pythonPath, null, 'sidecar')
+        const sidecarOk = await this.tryStart(detection.pythonPath!, '', 'sidecar')
         if (sidecarOk) {
           this.updateStatus('running')
           this.state.lastError = null

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { InputBar } from './InputBar';
+import { StatusBar } from './StatusBar';
+import { SessionTabBar } from './SessionTabBar';
 import { useChatStore } from '../../stores/chatStore';
 import { useAppStore } from '../../stores/app-store';
 import { useSystemStore } from '../../stores/systemStore';
@@ -177,6 +179,9 @@ export function ChatView() {
         </div>
       </header>
 
+      {/* Session Tab Bar (Browser style multi-tab) */}
+      <SessionTabBar />
+
       {/* Messages area */}
       <div
         ref={scrollContainerRef}
@@ -261,6 +266,9 @@ export function ChatView() {
 
       {/* Input */}
       <InputBar />
+
+      {/* Status Bar */}
+      <StatusBar />
     </div>
   );
 }

@@ -26,6 +26,7 @@ function GeneralSettings() {
   const {
     language, fontSize, sendShortcut,
     temperature, maxTokens, systemPrompt, backendUrl,
+    connectionMode, remoteGatewayUrl, remoteGatewayToken,
     openLinksInExternalBrowser, thinkingMode, thinkingBudget, updateSettings,
   } = useSettingsStore();
 
@@ -61,18 +62,71 @@ function GeneralSettings() {
         通用设置
       </h3>
 
-      {/* Backend URL */}
+      {/* Connection Mode (Local vs Remote Gateway) */}
       <div>
         <label className="flex items-center gap-1.5 text-sm font-medium text-text-secondary mb-2">
           <Globe size={14} />
-          后端地址
+          连接模式 (Gateway Mode)
         </label>
-        <input
-          type="text"
-          value={backendUrl}
-          onChange={(e) => updateSettings({ backendUrl: e.target.value })}
-          className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
-        />
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => updateSettings({ connectionMode: 'local' })}
+            className={`px-3 py-2.5 rounded-lg text-sm border font-medium transition-all ${
+              connectionMode === 'local'
+                ? 'border-[var(--hermes-accent)] bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)]'
+                : 'border-[var(--hermes-border)] bg-[var(--bg-secondary)] text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            🖥️ 本地独立运行
+          </button>
+          <button
+            type="button"
+            onClick={() => updateSettings({ connectionMode: 'remote' })}
+            className={`px-3 py-2.5 rounded-lg text-sm border font-medium transition-all ${
+              connectionMode === 'remote'
+                ? 'border-[var(--hermes-accent)] bg-[var(--hermes-accent)]/10 text-[var(--hermes-accent)]'
+                : 'border-[var(--hermes-border)] bg-[var(--bg-secondary)] text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            🌐 远程 Gateway (VPS)
+          </button>
+        </div>
+
+        {connectionMode === 'local' ? (
+          <div>
+            <label className="text-xs text-text-muted mb-1 block">本地 Python 后端地址</label>
+            <input
+              type="text"
+              value={backendUrl}
+              onChange={(e) => updateSettings({ backendUrl: e.target.value })}
+              className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
+            />
+          </div>
+        ) : (
+          <div className="space-y-3 p-3 rounded-lg border border-[var(--hermes-border)] bg-[var(--bg-secondary)]/50">
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">远程 Gateway 地址 (例如: http://129.153.107.120:5533 或云端实例)</label>
+              <input
+                type="text"
+                value={remoteGatewayUrl}
+                onChange={(e) => updateSettings({ remoteGatewayUrl: e.target.value })}
+                placeholder="http://your-vps-ip:5533"
+                className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">Gateway 访问秘钥 (Bearer Token / 可选)</label>
+              <input
+                type="password"
+                value={remoteGatewayToken}
+                onChange={(e) => updateSettings({ remoteGatewayToken: e.target.value })}
+                placeholder="若未设置鉴权可留空"
+                className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Workspace Path */}
