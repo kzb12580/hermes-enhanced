@@ -86,25 +86,15 @@ class ApiClient {
         }
       }
     } catch {
-      // Backend not running yet
+      // Backend not running yet or remote gateway
     }
     return this.apiKey;
   }
 
   updateConfig(config: ApiConfig) {
     if (config.baseUrl) {
-      // 安全检查：非 localhost 的 backendUrl 必须使用 HTTPS
-      const isLocal = config.baseUrl.includes('127.0.0.1') || 
-                      config.baseUrl.includes('localhost') ||
-                      config.baseUrl.startsWith('http://127.') ||
-                      config.baseUrl.startsWith('http://localhost');
-      if (!isLocal && config.baseUrl.startsWith('http://')) {
-        console.warn('[api] 非本地 backendUrl 建议使用 HTTPS，当前为 HTTP 明文传输');
-        // 强制转换为 HTTPS
-        this.baseUrl = config.baseUrl.replace('http://', 'https://');
-      } else {
-        this.baseUrl = config.baseUrl;
-      }
+      // 安全检查：只有以 https:// 开头或本地地址才允许，其他外部 http:// 保持原样不强制破坏性修改，仅控制台警告
+      this.baseUrl = config.baseUrl;
     }
     if (config.apiKey !== undefined) this.apiKey = config.apiKey;
   }

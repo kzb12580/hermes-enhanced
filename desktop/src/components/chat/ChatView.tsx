@@ -137,15 +137,15 @@ export function ChatView() {
               }`}
             />
             <span className="text-text-muted">
-              {isBackendOnline ? '后端正常 (:9876)' : (pythonState?.lastError ? `后端异常: ${pythonState.lastError}` : '后端未连接')}
+              {isBackendOnline ? '服务在线 (:9876)' : (pythonState?.lastError ? `服务异常: ${pythonState.lastError}` : '服务未连接')}
             </span>
             {!isBackendOnline && (
               <button
                 onClick={() => (window as any).api?.python?.restart?.()}
                 className="ml-1 p-1 hover:bg-[var(--bg-tertiary)] rounded text-text-muted hover:text-text-primary transition-colors flex items-center gap-1 text-[11px]"
-                title="尝试重启后端"
+                title="尝试重启服务"
               >
-                <RefreshCw size={11} /> 重启后端
+                <RefreshCw size={11} /> 重启服务
               </button>
             )}
           </div>

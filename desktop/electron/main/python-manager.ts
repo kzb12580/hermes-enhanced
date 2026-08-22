@@ -686,6 +686,10 @@ export class PythonManager {
 
         proc.on('exit', (code, signal) => {
           this.addLog(`[管理器] 进程退出: code=${code}, signal=${signal}`)
+          // 如果当前退出的不是我们最终持有的子进程（例如 sidecar 退出但已经转入 system-python），则忽略
+          if (this.childProcess && this.childProcess !== proc) {
+            return
+          }
           if (this.state.status === 'running' || this.state.status === 'starting') {
             this.childProcess = null
             this.state.pid = null

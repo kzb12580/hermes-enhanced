@@ -111,7 +111,7 @@ const defaultSettings: AppSettings = {
   backendUrl: 'http://127.0.0.1:9876',
   apiKey: '',
   connectionMode: 'local',
-  remoteGatewayUrl: 'http://129.153.107.120:5533',
+  remoteGatewayUrl: 'http://127.0.0.1:9876',
   remoteGatewayToken: '',
   openLinksInExternalBrowser: true,
 };
