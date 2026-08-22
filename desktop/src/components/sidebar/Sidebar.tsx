@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-type View = 'chat' | 'sessions' | 'email' | 'skills' | 'models' | 'memory' | 'tools' | 'settings';
+export type View = 'chat' | 'sessions' | 'email' | 'skills' | 'models' | 'memory' | 'tools' | 'settings';
 
 interface NavItem {
   view: View;

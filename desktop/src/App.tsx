@@ -3,17 +3,12 @@
  * Layout: collapsible Sidebar with navigation + content area
  */
 import React, { useEffect, useState } from 'react';
-import { Sidebar } from './components/sidebar/Sidebar';
+import { Sidebar, type View } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { MemoryPanel } from './components/memory/MemoryPanel';
-import { ToolsPanel } from './components/tools/ToolsPanel';
 import { ModelsPanel } from './components/models/ModelsPanel';
-import { SchedulesPanel } from './components/schedules/SchedulesPanel';
-import { GatewayPanel } from './components/gateway/GatewayPanel';
-import { KanbanPanel } from './components/kanban/KanbanPanel';
-import { DiscoverPanel } from './components/discover/DiscoverPanel';
-import { OfficePanel } from './components/office/OfficePanel';
+import { ToolsPanel } from './components/tools/ToolsPanel';
 import { SessionsPanel } from './components/sessions/SessionsPanel';
 import { EmailPanel } from './components/email/EmailPanel';
 import { SkillsPanel } from './components/skills/SkillsPanel';
@@ -21,8 +16,6 @@ import { useAppStore } from './stores/app-store';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSystemStore } from './stores/systemStore';
 import { useChatStore } from './stores/chatStore';
-
-type View = 'chat' | 'sessions' | 'discover' | 'office' | 'kanban' | 'models' | 'memory' | 'tools' | 'schedules' | 'gateway' | 'email' | 'skills' | 'settings';
 
 export default function App() {
   const { sidebarCollapsed } = useSystemStore();
@@ -52,22 +45,12 @@ export default function App() {
         return <ChatView />;
       case 'sessions':
         return <SessionsPanel />;
-      case 'discover':
-        return <DiscoverPanel />;
-      case 'office':
-        return <OfficePanel />;
-      case 'kanban':
-        return <KanbanPanel />;
       case 'models':
         return <ModelsPanel />;
       case 'memory':
         return <MemoryPanel />;
       case 'tools':
         return <ToolsPanel />;
-      case 'schedules':
-        return <SchedulesPanel />;
-      case 'gateway':
-        return <GatewayPanel />;
       case 'email':
         return <EmailPanel />;
       case 'skills':

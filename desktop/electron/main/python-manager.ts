@@ -293,11 +293,6 @@ export class PythonManager {
     }
   }
 
-  // 获取日志文件路径
-  public getLogFilePath(): string | null {
-    return this.logFilePath
-  }
-
   // ─── 启动后端（带 fallback） ───
   async start(): Promise<void> {
     if (this.childProcess) {
