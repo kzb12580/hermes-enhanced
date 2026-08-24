@@ -332,7 +332,7 @@ export class PythonManager {
       }
 
       // ── 策略1: 尝试 sidecar ──
-      if (detection.mode === 'sidecar') {
+      if (detection.mode === 'sidecar' && detection.pythonPath) {
         // Windows: 确保 VC++ Runtime 已安装（sidecar DLL 依赖）
         if (process.platform === 'win32') {
           await this.ensureVCppRuntime()
