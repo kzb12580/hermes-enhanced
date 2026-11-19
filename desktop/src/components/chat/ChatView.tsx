@@ -253,11 +253,21 @@ export function ChatView() {
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 px-4 py-2 bg-error/10 border-t border-error/30 text-sm text-error">
-          <AlertCircle size={14} />
-          <span className="flex-1">{error}</span>
+          <AlertCircle size={14} className="shrink-0" />
+          <span className="flex-1 text-xs break-all leading-relaxed">{error}</span>
+          <button
+            onClick={() => {
+              // 触发底部日志弹窗快速排查
+              const logBtn = document.querySelector('button[title*=\"查看实时运行日志\"]') as HTMLButtonElement;
+              logBtn?.click();
+            }}
+            className="text-xs px-2 py-0.5 rounded border border-error/40 hover:bg-error/20 transition-colors shrink-0 cursor-pointer"
+          >
+            查看日志
+          </button>
           <button
             onClick={() => useChatStore.getState().clearError()}
-            className="text-xs hover:underline"
+            className="text-xs hover:underline text-text-muted hover:text-text-primary px-1 shrink-0"
           >
             关闭
           </button>

@@ -473,10 +473,44 @@ def _smart_compress_session(session: dict, context_window: int) -> None:
 import re as _re
 
 
+def _format_stream_error(e: Exception) -> str:
+    """将流式过程中的异常转换为对用户友好的清晰提示，同时严格过滤敏感信息。"""
+    if isinstance(e, HTTPException):
+        code = e.status_code
+        detail = str(e.detail) if e.detail else ""
+        code_hints = {
+            400: "请求参数错误 (HTTP 400 Bad Request)，请检查模型名称或参数设置",
+            401: "API 密钥无效或未配置 (HTTP 401 鉴权失败)，请在【模型管理】中检查 API Key",
+            403: "服务商拒绝访问 (HTTP 403 权限不足或账号受限)",
+            404: "请求的模型不存在或已下线 (HTTP 404 Not Found)，请在【模型管理】切换其他可用模型",
+            429: "上游模型配额耗尽或请求过于频繁 (HTTP 429 速率限制)，请稍后重试或切换备用模型",
+            500: "服务商内部故障 (HTTP 500)，请稍后重试或切换备用模型",
+            502: "网关错误 (HTTP 502 Bad Gateway)，无法连接到目标服务商，请检查网络或代理",
+            503: "服务商过载或正在维护 (HTTP 503 Service Unavailable)",
+            504: "请求超时 (HTTP 504 Gateway Timeout)，上游响应过慢",
+        }
+        hint = code_hints.get(code, f"上游 API 返回异常 (HTTP {code})")
+        if detail and detail != f"LLM API 调用失败 (HTTP {code})":
+            clean_detail = _re.sub(r'sk-[a-zA-Z0-9_-]{8,}', 'sk-***', detail)
+            clean_detail = _re.sub(r'Bearer\s+[^\s"]+', 'Bearer ***', clean_detail)
+            return f"{hint}：{clean_detail[:120]}"
+        return hint
+
+    if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return "无法连接到模型服务商 Base URL，请检查网络连接、本地代理或网关地址是否正确"
+    if isinstance(e, httpx.ReadTimeout):
+        return "模型响应超时 (Read Timeout)，上游服务未在规定时间内返回数据"
+    if isinstance(e, (httpx.RemoteProtocolError, httpx.ReadError)):
+        return "与模型服务商的网络连接意外中断，请检查代理或网络稳定性"
+
+    raw_msg = str(e) or "未知运行时异常"
+    clean_msg = _re.sub(r'sk-[a-zA-Z0-9_-]{8,}', 'sk-***', raw_msg)
+    clean_msg = _re.sub(r'Bearer\s+[^\s"]+', 'Bearer ***', clean_msg)
+    return f"模型请求失败：{clean_msg[:120]} (可查看底部运行日志)"
+
+
 def _try_repair_json(raw: str) -> str | None:
     """Attempt to repair truncated/malformed JSON from LLM output.
-    
-    Common truncation patterns:
     - Unterminated string: {"key": "value with no closing quote
     - Missing closing braces: {"key": "value", "list": [1, 2
     - Truncated after colon: {"script":
@@ -885,10 +919,23 @@ async def call_llm_streaming(
             json=payload,
         ) as response:
             if response.status_code != 200:
-                error_text = await response.aread()
-                logger.error("API error %d: %s", response.status_code, error_text[:500])
-                # 不泄露完整错误信息给客户端（可能包含 API key）
-                safe_error = f"LLM API 调用失败 (HTTP {response.status_code})"
+                error_bytes = await response.aread()
+                logger.error("API error %d: %s", response.status_code, error_bytes[:500])
+                # 解析上游返回的错误详情（如 404/429 的 message）
+                safe_detail = ""
+                try:
+                    err_json = json.loads(error_bytes.decode("utf-8", errors="ignore"))
+                    if isinstance(err_json, dict):
+                        e_obj = err_json.get("error")
+                        if isinstance(e_obj, dict) and e_obj.get("message"):
+                            safe_detail = str(e_obj["message"]).strip()
+                        elif isinstance(e_obj, str):
+                            safe_detail = e_obj.strip()
+                        elif err_json.get("detail"):
+                            safe_detail = str(err_json["detail"]).strip()
+                except Exception:
+                    pass
+                safe_error = safe_detail if safe_detail else f"LLM API 调用失败 (HTTP {response.status_code})"
                 raise HTTPException(status_code=response.status_code, detail=safe_error)
 
             async for line in response.aiter_lines():
@@ -967,10 +1014,22 @@ async def call_llm(
         )
 
         if response.status_code != 200:
-            error_text = response.text
-            logger.error("API error %d: %s", response.status_code, error_text[:500])
-            # 不泄露完整错误信息给客户端（可能包含 API key）
-            safe_error = f"LLM API 调用失败 (HTTP {response.status_code})"
+            error_bytes = response.content
+            logger.error("API error %d: %s", response.status_code, error_bytes[:500])
+            safe_detail = ""
+            try:
+                err_json = json.loads(error_bytes.decode("utf-8", errors="ignore"))
+                if isinstance(err_json, dict):
+                    e_obj = err_json.get("error")
+                    if isinstance(e_obj, dict) and e_obj.get("message"):
+                        safe_detail = str(e_obj["message"]).strip()
+                    elif isinstance(e_obj, str):
+                        safe_detail = e_obj.strip()
+                    elif err_json.get("detail"):
+                        safe_detail = str(err_json["detail"]).strip()
+            except Exception:
+                pass
+            safe_error = safe_detail if safe_detail else f"LLM API 调用失败 (HTTP {response.status_code})"
             raise HTTPException(status_code=response.status_code, detail=safe_error)
 
         return response.json()
@@ -1386,6 +1445,7 @@ async def chat(message: ChatMessage):
                 full_response = ""
                 raw_tool_calls = []  # Accumulate streaming tool call deltas
                 reasoning_text = ""  # Accumulate reasoning_content for MIMO
+                stream_interrupted = False
 
                 # Sanitize before each LLM call — drop broken tool_calls from previous iteration
                 current_messages = _sanitize_messages(current_messages)
@@ -1641,8 +1701,8 @@ async def chat(message: ChatMessage):
 
         except Exception as e:
             logger.error("Streaming error: %s", e, exc_info=True)
-            # 不泄露原始异常信息给客户端（可能包含内部路径、库版本等）
-            yield "event: error\ndata: 内部错误，请查看日志了解详情。\n\n"
+            user_facing_error = _format_stream_error(e)
+            yield f"event: error\ndata: {user_facing_error}\n\n"
 
     return StreamingResponse(
         generate_stream(),

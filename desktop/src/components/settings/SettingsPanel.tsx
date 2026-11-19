@@ -106,12 +106,12 @@ function GeneralSettings() {
         ) : (
           <div className="space-y-3 p-3 rounded-lg border border-[var(--hermes-border)] bg-[var(--bg-secondary)]/50">
             <div>
-              <label className="text-xs text-text-muted mb-1 block">远程 Gateway 地址 (例如: http://129.153.107.120:5533 或云端实例)</label>
+              <label className="text-xs text-text-muted mb-1 block">远程 Gateway 地址 (例如: http://192.168.1.100:5533 或云端实例)</label>
               <input
                 type="text"
                 value={remoteGatewayUrl}
                 onChange={(e) => updateSettings({ remoteGatewayUrl: e.target.value })}
-                placeholder="http://your-vps-ip:5533"
+                placeholder="http://your-server-ip:5533"
                 className="w-full bg-[var(--bg-secondary)] text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-[var(--hermes-border)] focus:border-[var(--hermes-accent)] transition-colors font-mono"
               />
             </div>

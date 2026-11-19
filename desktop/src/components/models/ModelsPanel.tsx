@@ -83,7 +83,7 @@ const PRESET_PROVIDERS: PresetProvider[] = [
     name: 'CLIProxyAPI (代理网关)',
     type: 'openai',
     baseUrl: 'http://127.0.0.1:8317/v1',
-    models: ['gemini-3.7-flash-high', 'claude-3-7-sonnet', 'deepseek-r1'],
+    models: ['gemini-2.5-flash', 'claude-3-7-sonnet', 'deepseek-r1'],
   },
   {
     name: 'Google Gemini (OpenAI兼容)',
