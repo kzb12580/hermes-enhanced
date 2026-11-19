@@ -137,7 +137,6 @@ jobs:
             desktop/dist/*.dmg
             desktop/dist/*.AppImage
             desktop/dist/*.deb
-            desktop/dist/*.rpm
             desktop/dist/*.exe
             desktop/dist/*.blockmap
             desktop/dist/*.zip
@@ -168,7 +167,6 @@ jobs:
           files: |
             artifacts/**/*.AppImage
             artifacts/**/*.deb
-            artifacts/**/*.rpm
             artifacts/**/*.exe
             artifacts/**/*.blockmap
             artifacts/**/*.dmg
